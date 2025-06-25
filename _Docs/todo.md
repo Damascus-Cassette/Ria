@@ -53,12 +53,13 @@ Add io for exposing the manager and client relation and distributing tasks
 
 # Daily
 
-## 2025-06-24
+## 2025-06-25
 
 - [x]{~1hr}{@1hr}{main} Setup repo, add TD and some landmarks
-- [x]{~.25hr}{@0hr}{main} copy over diagrams
-- [ ]{~2hr}{@0hr}{f_mgmt} Add fundimental managment utils (sqlite, recur file/folder hashing)
+- [x]{~.25hr}{@.1hr}{main} copy over diagrams
 
+## 2025-06-25
+- [ ]{~2hr}{@0hr}{f_mgmt} Add fundimental managment utils (sqlite, recur file/folder hashing)
 
 # Backlog:
 - [ ]{~2hr}{@0hr}{f_mgmt} Add Secondary interface to mgmt utils (putting sqlite to the file hashing, storing and retrieving spaces-files)
