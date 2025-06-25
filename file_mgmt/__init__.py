@@ -1,3 +1,95 @@
+import hashlib
+import os
+from typing import Self
+from __future__ import annotations
+
+import uuid
+import random
+
+class _utils:
+  r = random('Random_Key')
+  
+  @classmethod
+  def get_uid_stable(cls,value)->str:
+    return uuid.UUID(value,random = cls.r)
+      
+
+class fm_file:
+  ''' Acts as a structured dict '''
+  __slots__ = ['sha256','name']
+  uuid   : str
+  name     : str
+
+  def __init__(self,fp):
+    if os.path.is_symlink(fp):
+      fp = os.path.realpath(fp)
+
+    with open(fp,'rb') as f:
+      self.uuid = hashlib.file_digest(f,'sha256').hexdigest()
+
+class fm_space:
+  ''' Acts as a structured dict '''
+  __slots__ = ['uuid','spaces','files']
+  uuid : str
+  name   : str
+  spaces : list[fm_space]
+  files  : list[fm_file]
+
+  def __init__(self, dp):
+    self.files  = []
+    self.spaces = []
+
+    for item in os.listdir(dp):
+      self.name = os.path.split(dp)[1]
+      
+      if os.path.isfile(item):
+        self.files.append(fm_file(item))
+      
+      else:
+        self.spaces.append(self.__class__(dp))
+
+      self.sort()
+      self.sumhash()
+    
+    def sort(self):
+      self.spaces = sorted(self.spaces,lambda i: i.name)
+      self.files  = sorted(self.files, lambda i: i.name)
+
+    def sumhash(self):
+      res = ''
+
+      for item in self.spaces:
+        res.append(item.uuid)
+      for item in self.files:
+        res.append(item.uuid)
+
+      self.uuid = _utils.get_uid_stable(res)
+
+      return self.uuid
+
+def dp_as_struct(fp):
+  #form forward, hash backwards
+  ...
+
+# class file_manager_base:
+#   @classmethod
+#   def sha256_file(cls,fp):
+#     ''' find files/symlinks hashsum '''
+
+
+
+#     return x 
+  
+#   @classmethod
+#   def sha256_sum_folder(cls,dp):
+#     ''' find folder/junction's hashsum '''
+
+#     if os.path.is_junction(dp):
+#       dp = os.path.realpath(dp)
+
+#     os.walk()
+
+  
 class file_manager_io():
   root : str 
 
