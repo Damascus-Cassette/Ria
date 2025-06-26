@@ -1,10 +1,12 @@
 import hashlib
-import os
-from typing import Self
-from __future__ import annotations
-
-import uuid
 import random
+import uuid
+import os
+
+from __future__ import annotations
+from typing     import Self
+from os         import path as osp
+
 
 class _utils:
   r = random('Random_Key')
@@ -21,8 +23,8 @@ class fm_file:
   name     : str
 
   def __init__(self,fp):
-    if os.path.is_symlink(fp):
-      fp = os.path.realpath(fp)
+    if osp.is_symlink(fp):
+      fp = osp.realpath(fp)
 
     with open(fp,'rb') as f:
       self.uuid = hashlib.file_digest(f,'sha256').hexdigest()
@@ -40,9 +42,9 @@ class fm_space:
     self.spaces = []
 
     for item in os.listdir(dp):
-      self.name = os.path.split(dp)[1]
+      self.name = osp.split(dp)[1]
       
-      if os.path.isfile(item):
+      if osp.isfile(item):
         self.files.append(fm_file(item))
       
       else:
@@ -51,43 +53,42 @@ class fm_space:
       self.sort()
       self.sumhash()
     
-    def sort(self):
-      self.spaces = sorted(self.spaces,lambda i: i.name)
-      self.files  = sorted(self.files, lambda i: i.name)
+  def sort(self):
+    self.spaces = sorted(self.spaces,lambda i: i.name)
+    self.files  = sorted(self.files, lambda i: i.name)
 
-    def sumhash(self):
-      res = ''
+  def sumhash(self):
+    res = ''
 
-      for item in self.spaces:
-        res.append(item.uuid)
-      for item in self.files:
-        res.append(item.uuid)
+    for item in self.spaces:
+      res.append(item.uuid)
+    for item in self.files:
+      res.append(item.uuid)
 
-      self.uuid = _utils.get_uid_stable(res)
+    self.uuid = _utils.get_uid_stable(res)
 
-      return self.uuid
-
-def dp_as_struct(fp):
-  #form forward, hash backwards
-  ...
-
-# class file_manager_base:
-#   @classmethod
-#   def sha256_file(cls,fp):
-#     ''' find files/symlinks hashsum '''
-
-
-
-#     return x 
+    return self.uuid
   
-#   @classmethod
-#   def sha256_sum_folder(cls,dp):
-#     ''' find folder/junction's hashsum '''
+  def yield_spaces(self,recur=True,incl_self=True):
+    ''' Yield spaces recursivly, deepest should be returned first '''
+    for space in self.spaces:
+      if recur:
+        for e in [x for x in space.yield_spaces(recur=True,incl_self=False)]:
+          yield e
+      yield space
 
-#     if os.path.is_junction(dp):
-#       dp = os.path.realpath(dp)
+    if incl_self:
+      yield self
 
-#     os.walk()
+  def yield_items(self,recur=True):
+    ''' Yield file items recursivly, deepest should be returned first '''
+    for space in self.spaces:
+      if recur:
+        for f in [x for x in space.yield_items(recur=True)]:
+          yield f
+
+    for f in self.files:
+      return f
 
   
 class file_manager_io():
