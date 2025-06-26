@@ -17,7 +17,7 @@ class _utils:
       
 
 class fm_file:
-  ''' Acts as a structured dict '''
+  ''' Local dataclass, provides formatting '''
   __slots__ = ['sha256','name']
   uuid   : str
   name     : str
@@ -30,7 +30,7 @@ class fm_file:
       self.uuid = hashlib.file_digest(f,'sha256').hexdigest()
 
 class fm_space:
-  ''' Acts as a structured dict '''
+  ''' Local dataclass, provides formatting '''
   __slots__ = ['uuid','spaces','files']
   uuid : str
   name   : str
@@ -90,8 +90,16 @@ class fm_space:
     for f in self.files:
       return f
 
+class fm_collection:
+  ''' Local dataclass, provides formatting and interpretation of fm_space-fm_file '''
+  #TODO: decide if valid/needed?
   
+
 class file_manager_io():
+  ''' Direct interface class, 
+  w/ manager-client, used by the manager 
+  the client has a near identical interface (converted to curl request, parsed by manager)'''
+  
   root : str 
 
   def __init__(self,
@@ -102,17 +110,6 @@ class file_manager_io():
     self.root = storage_loc
     self.create_db(space_attrs=space_attrs,file_attrs=file_attrs)
   
-  def path_hash(self,path):
-    ''' get via sha256 of all files's origins *and* subspaces junctions hashes (their folder name)'''
-    
-  def get_sha256(self,path):
-    assert osp.exists(path)
-    if osp.isdir(path):
-      assert self.files_are_uploaded()
-      assert self.folders_are_uploaded()
-      return 's_'+self.dir_hash(path)
-    else:
-      return 'f_'+hashlib(path)
 
   def store_file (self,fp):
     ''' Stores a file, replaces the original with a symlink. Returns UID ''' 
