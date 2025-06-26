@@ -5,9 +5,9 @@ class fm_db_file():
   def _declare_table(db,metadata):
     db.Table('files',metadata,
              db.Column('id', db.String(256), primary_key=True),
-             db.Column('spaces', db.ref_list ), #Cross-Table ref, What spaces use this object
-             db.Column('users',  db.ref_list ), #Cross-Table ref, What external entities use this object
-             db.Column('tags',   db.ref_list ), #Generic Tags on this object
+             db.Column('spaces', db.ForeignKey('file_spaces.id')),#ref_list ), #Cross-Table ref, What spaces use this object
+             db.Column('users',  db.ForeignKey('file_users.id')),#ref_list ), #Cross-Table ref, What external entities use this object
+             db.Column('tags',   db.ForeignKey('file_tags.id')),#ref_list ), #Generic Tags on this object
              db.Column('store',  db.String   ), #Storeage location
              db.Column('exts',   db.str_list ), #Valid Extensions
              db.Column('names',  db.str_list ), #List of names this object has been submitted as
@@ -20,10 +20,10 @@ class fm_db_space():
   def _declare_table(db,metadata):
     db.Table('spaces',metadata,
              db.Column('id', db.String(256), primary_key=True),
-             db.Column('spaces', db.ref_list  ), #Cross-Table ref, What spaces are in this object
-             db.Column('files' , db.ref_list  ), #Cross-Table ref, What Files  are in this object
-             db.Column('users',  db.ref_list  ), #Cross-Table ref, What external entities use this object
-             db.Column('tags',   db.ref_list  ), #Generic Tags on this object
+             db.Column('spaces', db.ForeignKey('spaces_spaces.id')),#ref_list ), #Cross-Table ref, What spaces use this object
+             db.Column('files',  db.ForeignKey('files_spaces.id')),#ref_list ), #Cross-Table ref, What spaces use this object
+             db.Column('users',  db.ForeignKey('file_users.id')),#ref_list ), #Cross-Table ref, What external entities use this object
+             db.Column('tags',   db.ForeignKey('file_tags.id')),#ref_list ), #Generic Tags on this object
              db.Column('store',  db.String    ), #Storeage location
              db.Column('names',  db.str_list  ), #List of names this object has been submitted as
              )
