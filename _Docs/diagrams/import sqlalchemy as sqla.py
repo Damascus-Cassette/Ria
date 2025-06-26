@@ -25,13 +25,14 @@ class fm_db_space(sqlbase):
     id     = sqla.Column(sqla.String, primary_key = True) #Hash of object
 
     spaces = sqla.relationship('namedspace', secondary=space_space, backref='pSpace')
-    files  = sqla.relationship('namedfile' , secondary=space_file,  backref='pSpace')
+    files  = sqla.relationship('namedfile' , secondary=space_file,  backref='pSpaces')
 
-    #asNames is backref?
     inSpaces = sqla.relationship('spaces', sqla.ForeignKey('asNames.parentSpaceId') , uselist=True) 
 
-    #inExports
-    #inSessions
+    #backref : asNames 
+    #backref : inViews
+    #backref : inExports
+    #backref : inSessions
 
 
 class fm_db_file(sqlbase):
@@ -39,9 +40,10 @@ class fm_db_file(sqlbase):
     __tablename__ = 'files'
     id     = sqla.Column(sqla.String, primary_key = True) #Hash of object
     
-    #asNames is backref?
     inSpaces = sqla.relationship('spaces', sqla.ForeignKey('asNames.parentSpaceId') , uselist=True) 
 
+    #backref : asNames
+    #backref : pSpaces
 
 class export(sqlbase):
     __tablename__ = 'exports'
@@ -83,19 +85,19 @@ class view(sqlbase):
 class session(sqlbase):
     __tablename__ = 'sessions'
     id     = sqla.Column(sqla.String, primary_key = True)
-    hid    = sqla.Column()
+    hid    = sqla.Column(sqla.String)
 
-    isOpen
+    isOpen = sqla.Column(sqla.Boolean, default=True)
 
-    views   
-    exports 
+    # backref : hasViews
+    # backref : hasExports
 
-    perm
-
-    # spaceId   = sqla.relationship('spaces',   sqla.ForeignKey('spaces.id'),  backref='inExports')
 
 class user(sqlbase):
     __tablename__ = 'users'
 
+    id     = sqla.Column(sqla.String, primary_key = True)
+    hid    = sqla.Column(sqla.String)
+    # backref : hasExports
 
 # class fm_db_interface
