@@ -1,5 +1,6 @@
+from __future__ import annotations
 from sqlalchemy import (Column, Boolean, ForeignKey, Integer, String, create_engine, Table)
-from sqlalchemy.orm import declarative_base, relationship, sessionmaker
+from sqlalchemy.orm import declarative_base, relationship, sessionmaker, Mapped, mapped_column
 
 
 if __name__ == '__main__':
@@ -11,30 +12,30 @@ if __name__ == '__main__':
 Base = declarative_base()
 
 
-class rel_SpaceFile(Base):
-    __tablename__ = 'rel_spacefile'
-    id  = Column(Integer, primary_key=True)
+class rel_Space_NamedFile(Base):
+    __tablename__ = 'rel_space_namedfile'
 
-    pSpaceId = Column(String, ForeignKey('spaces.id')) 
-    cFileId  = Column(String, ForeignKey('files.id') )
+    pSpaceId = mapped_column(String, ForeignKey('spaces.id'), primary_key=True) 
+    cName    = mapped_column(String                         , primary_key=True)
+    cFileId  = mapped_column(String, ForeignKey('files.id')                   )
+        # The same file can exist multiple times in the same space, but only under different names
+        # But multiple files cannot exist in the space space with the same name. 
+        # TODO: Consider/Research how to enforce a unique key constraint for space-> file:name via sqla
 
+    pSpace : Mapped[Space] = relationship(back_populates='myFiles')
+    cFile  : Mapped[File ] = relationship(back_populates='inSpaces')
 
 class Space(Base):
     __tablename__ = 'spaces'
     id  = Column(String, primary_key=True)
     hid = Column(String)    
-
-    myFiles = relationship("File", secondary='rel_spacefile', back_populates="inSpaces")
-        #First arg is the class name
-        #secondary means routing via a relationship table, allowing for many<->many relationships
-        #backpopulates refers to an explicit value to update on the target obj in the table
+    myFiles : Mapped[list[rel_Space_NamedFile]] = relationship(back_populates="pSpace")
 
 class File(Base):
     __tablename__ = 'files'
     id  = Column(String, primary_key=True)
     hid = Column(String)
-
-    inSpaces = relationship("Space", secondary='rel_spacefile', back_populates="myFiles")
+    inSpaces : Mapped[list[rel_Space_NamedFile]] = relationship(back_populates="cFile")
 
 
 Base.metadata.create_all(engine)
@@ -44,10 +45,12 @@ if __name__ == '__main__':
     _file  = File( id = 'Random_File_UUID' , hid = 'A_Unique_File' )
     _space = Space(id = 'Random_Space_UUID', hid = 'A_Unique_Space')
 
-    # _rel_SpaceFile = rel_SpaceFile(pSpaceId =_space, cFileId=_file) 
-    _file.inSpaces.append(_space)
+    # _rel_Space_NamedFile = rel_Space_NamedFile(pSpaceId =_space, cFileId=_file,cName = 'filename.txt') 
+    _rel_Space_NamedFile = rel_Space_NamedFile(cName = 'filename.txt') 
+    _rel_Space_NamedFile.pSpace = _space
+    _rel_Space_NamedFile.cFile  = _file
 
     print(_space.myFiles)
 
-    session.add_all([_file,_space])
+    session.add_all([_file,_space,_rel_Space_NamedFile])
     session.commit()
