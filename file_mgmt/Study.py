@@ -25,6 +25,9 @@ class asc_Space_NamedFile(Base):
     pSpace : Mapped[Space] = relationship(back_populates='myFiles')
     cFile  : Mapped[File ] = relationship(back_populates='inSpaces')
 
+    def __repr__(self):
+        return f"< NamedSpace Object : {self.cName} from file '{self.cFile.id}' >"
+
 class asc_Space_NamedSpace(Base):
     __tablename__ = 'asc_space_namedspace'
 
@@ -36,6 +39,9 @@ class asc_Space_NamedSpace(Base):
     cSpace : Mapped[Space] = relationship(back_populates='inSpaces',foreign_keys=[cSpaceId])
 
     #Untested assumption: via primary_merge pSpaceId & pSpace are asociated and are left_column, and via secondary_merge cSpaceId & cSpace are asc and right_column
+
+    def __repr__(self):
+        return f"< NamedSpace Object : {self.cName} from space '{self.cSpace.id}' >"
 
 class Space(Base):
     __tablename__ = 'spaces'
@@ -50,7 +56,7 @@ class Space(Base):
         #this is since there are multiple keys asociated with the same relationship class target
 
     # TODO: AsociationProxy Objects for myFiles and mySpaces, replace current with myNamedSpaces and myNamedFiles
-
+    inExports : Mapped[list[Export]]             = relationship(back_populates="mySpace")
 
 class File(Base):
     __tablename__ = 'files'
@@ -59,6 +65,18 @@ class File(Base):
     inSpaces : Mapped[list[asc_Space_NamedFile]] = relationship(back_populates="cFile")
     # TODO: AsociationProxy Object
 
+
+class Export(Base):
+    __tablename__ = 'exports'
+    id  = Column(Integer, primary_key=True)
+    hid = Column(String)    
+    
+    mySpaceId : Mapped[String]  = mapped_column(ForeignKey('spaces.id'))
+    mySpace   : Mapped[Space]   = relationship(back_populates='inExports')
+
+    location  : Mapped[String]  = mapped_column()
+
+    #TODO: Consider better primary_key s being spaceId & location?
 
 Base.metadata.create_all(engine)
 
@@ -73,6 +91,9 @@ if __name__ == '__main__':
     _asc_Space_NamedFile.cFile  = _file
 
     print(_space.myFiles)
+
+    _export = Export(hid = 'MyFirst_Export')
+    _export.mySpace = _space
 
     session.add_all([_file,_space,_asc_Space_NamedFile])
     session.commit()
