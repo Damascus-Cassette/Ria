@@ -1,73 +1,107 @@
-import sqlalchemy
+from sqlalchemy import (Column, ForeignKey, Integer, String, create_engine, Table)
+from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
-class fm_db_file():
-  @staticmethod
-  def _declare_table(db,metadata):
-    db.Table('files',metadata,
-             db.Column('id', db.String(256), primary_key=True),
-             db.Column('spaces', db.ForeignKey('file_spaces.id')),#ref_list ), #Cross-Table ref, What spaces use this object
-             db.Column('users',  db.ForeignKey('file_users.id')),#ref_list ), #Cross-Table ref, What external entities use this object
-             db.Column('tags',   db.ForeignKey('file_tags.id')),#ref_list ), #Generic Tags on this object
-             db.Column('store',  db.String   ), #Storeage location
-             db.Column('exts',   db.str_list ), #Valid Extensions
-             db.Column('names',  db.str_list ), #List of names this object has been submitted as
-             )
-  def __init__(self,row:dict):    
-    ...
 
-class fm_db_space():
-  @staticmethod
-  def _declare_table(db,metadata):
-    db.Table('spaces',metadata,
-             db.Column('id', db.String(256), primary_key=True),
-             db.Column('spaces', db.ForeignKey('spaces_spaces.id')),#ref_list ), #Cross-Table ref, What spaces use this object
-             db.Column('files',  db.ForeignKey('files_spaces.id')),#ref_list ), #Cross-Table ref, What spaces use this object
-             db.Column('users',  db.ForeignKey('file_users.id')),#ref_list ), #Cross-Table ref, What external entities use this object
-             db.Column('tags',   db.ForeignKey('file_tags.id')),#ref_list ), #Generic Tags on this object
-             db.Column('store',  db.String    ), #Storeage location
-             db.Column('names',  db.str_list  ), #List of names this object has been submitted as
-             )
-  def __init__(self,row:dict):
-    ...
+if __name__ == '__main__':
+    db_url = 'sqlite:////database.db'
+    engine = create_engine(db_url)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+
+Base = declarative_base()
+
+
+space_file = Table('SpaceFile',
+    Column('id'            , Integer, primary_key=True), #Make UUID?
+    Column('itemName'      , String),
+    Column('parentSpaceId' , String, ForeignKey('spaces.id')),
+    Column('fileId'        , String, ForeignKey('files.id') ,backref='asNames'),
+)
+
+space_space = Table('SpaceSpace',
+    Column('id'            , Integer, primary_key=True), #Make UUID?
+    Column('itemName'      , String),
+    Column('parentSpaceId' , String, ForeignKey('spaces.id')),
+    Column('childSpaceId'  , String, ForeignKey('spaces.id'),backref='asNames'),
+)
+
+class fm_db_space(Base):
+    ''' Container of named files and named sub-spaces '''
+    __tablename__ = 'spaces'
+    id     = Column(String, primary_key = True) #Hash of object
+
+    spaces = relationship('namedspace', secondary=space_space, backref='pSpace')
+    files  = relationship('namedfile' , secondary=space_file,  backref='pSpaces')
+
+    inSpaces = relationship('spaces', ForeignKey('asNames.parentSpaceId') , uselist=True) 
+
+    #backref : asNames 
+    #backref : inViews
+    #backref : inExports
+    #backref : inSessions
+
+
+class fm_db_file(Base):
+    ''' Hash as UUID based file entry '''
+    __tablename__ = 'files'
+    id     = Column(String, primary_key = True) #Hash of object
     
-class fm_db_user():
-  @staticmethod
-  def _declare_table(db,metadata):
-    db.Table('users',metadata,
-             db.Column('id',  db.String(256)   , primary_key=True),
-             db.Column('hid', db.String(256))  ,
-             db.Column('last_use', db.Datetime),
-            )
-  def __init__(self,row:dict):
-    ...
+    inSpaces = relationship('spaces', ForeignKey('asNames.parentSpaceId') , uselist=True) 
 
-class fm_db_tag():
-  @staticmethod
-  def _declare_table(db,metadata):
-    db.Table('users',metadata,
-             db.Column('id',    db.String(256) , primary_key=True),
-             db.Column('value', db.String(256)),
-            )
-  def __init__(self,row:dict):
-    ...
-  
-class fm_db_struct_file():
-  #Defines storage locations & version.
-  export_loc : str
-  ... #TODO: Define the rest
+    #backref : asNames
+    #backref : pSpaces
+
+class export(Base):
+    __tablename__ = 'exports'
+    ''' Holder for exported items, 
+    - kept after a session closes 
+    - resulting spaces strictly tracked.
+    '''
+
+    id        = Column(String, primary_key = True)
+    hid       = Column(String)
+
+    userId    = relationship('users',    ForeignKey('users.id')     ,backref='hasExports')
+    sessionId = relationship('sessions', ForeignKey('session.id')   ,backref='hasExports')
+    spaceId   = relationship('spaces',   ForeignKey('spaces.id')    ,backref='inExports')
+
+    location  = Column(String)
+    data      = Column(String)
+
+class view(Base):
+    __tablename__ = 'views'
+    ''' near export duplicate, 
+    - used for temporary work spaces           
+    - always removed after a session completes 
+        - Removes this object, and thus the temp users on the spaces
+    - Resulting spaces are not strictly tracked
+    '''
+
+    id        = Column(String, primary_key = True)
+    hid       = Column(String)
+
+    userId    = relationship('users',    ForeignKey('users.id'))  #,backref='hasViews')
+    sessionId = relationship('sessions', ForeignKey('session.id')  ,backref='hasViews')
+    spaceId   = relationship('spaces',   ForeignKey('spaces.id')   ,backref='inViews' )
+
+    location  = Column(String)
+    data      = Column(String)
 
 
-class fm_db_interface():
-  ''' Exists within the host, '''
-  file  : fm_db_file
-  space : fm_db_space
-  coll  : fm_db_collection
+class session(Base):
+    __tablename__ = 'sessions'
+    id     = Column(String, primary_key = True)
+    hid    = Column(String)
 
-  def __init__(db_loc,file_loc):
-    # Intialize, provide root file w/ cached data?
-    # Cached file is defines storage struct
-    ...
+    isOpen = Column(Boolean, default=True)
 
-  def ensure_table():
-    ...
-  
+    # backref : hasViews
+    # backref : hasExports
+
+
+class user(Base):
+    __tablename__ = 'users'
+
+    id     = Column(String, primary_key = True)
+    hid    = Column(String)
+    # backref : hasExports
