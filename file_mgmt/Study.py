@@ -43,6 +43,13 @@ class asc_Space_NamedSpace(Base):
     def __repr__(self):
         return f"< NamedSpace Object : {self.cName} from space '{self.cSpace.id}' >"
 
+class File(Base):
+    __tablename__ = 'files'
+    id  = Column(String, primary_key=True)
+    hid = Column(String)
+    inSpaces : Mapped[list[asc_Space_NamedFile]] = relationship(back_populates="cFile")
+    # TODO: AsociationProxy Object
+
 class Space(Base):
     __tablename__ = 'spaces'
     id  = Column(String, primary_key=True)
@@ -58,12 +65,6 @@ class Space(Base):
     # TODO: AsociationProxy Objects for myFiles and mySpaces, replace current with myNamedSpaces and myNamedFiles
     inExports : Mapped[list[Export]]             = relationship(back_populates="mySpace")
 
-class File(Base):
-    __tablename__ = 'files'
-    id  = Column(String, primary_key=True)
-    hid = Column(String)
-    inSpaces : Mapped[list[asc_Space_NamedFile]] = relationship(back_populates="cFile")
-    # TODO: AsociationProxy Object
 
 
 class Export(Base):
