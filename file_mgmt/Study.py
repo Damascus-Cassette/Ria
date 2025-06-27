@@ -79,6 +79,9 @@ class Export(Base):
     mySessionId : Mapped[int]     = mapped_column(ForeignKey('sessions.id'))
     mySession   : Mapped[Session] = relationship(back_populates = 'myExports') 
 
+    myUserId : Mapped[str|None]  = mapped_column(ForeignKey('users.id'))
+    myUser   : Mapped[User|None] = relationship(back_populates='myExports')
+
     #TODO: Consider better primary_key s being spaceId & location?
     #TODO: Consider tracking same Exports resulting from multiple sessions? Edge case
 
@@ -91,8 +94,18 @@ class Session(Base):
 
     myExports: Mapped[list[Export]] = relationship(back_populates='mySession')
     
+    myUserId : Mapped[str]  = mapped_column(ForeignKey('users.id'))
+    myUser   : Mapped[User] = relationship(back_populates='mySessions')
 
-    
+class User(Base):
+    __tablename__ = 'users'
+    id  = Column(String, primary_key=True)
+    hid = Column(String)    
+    mySessions: Mapped[list[Session]] = relationship(back_populates='myUser')
+    myExports : Mapped[list[Export]]  = relationship(back_populates='myUser')
+
+
+
 
 Base.metadata.create_all(engine)
 
@@ -114,6 +127,11 @@ if __name__ == '__main__':
     _session = Session(hid='Session1')
     _session.myExports.append(_export)
     # _export.mySession = _session
+
+    _user = User(id = 'Job_Boal', hid='Job_Boal')
+    _user.mySessions.append(_session)
+
+
 
 
     session.add_all([_file,_space,_asc_Space_NamedFile])
