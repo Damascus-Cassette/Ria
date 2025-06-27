@@ -1,4 +1,4 @@
-from sqlalchemy import (Column, ForeignKey, Integer, String, create_engine, Table)
+from sqlalchemy import (Column, Boolean, ForeignKey, Integer, String, create_engine, Table)
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
 
@@ -33,7 +33,7 @@ class fm_db_space(Base):
     spaces = relationship('namedspace', secondary=space_space, backref='pSpace')
     files  = relationship('namedfile' , secondary=space_file,  backref='pSpaces')
 
-    inSpaces = relationship('spaces', ForeignKey('asNames.parentSpaceId') , uselist=True) 
+    inSpaces = relationship('spaces', ForeignKey('asNames.parentSpaceId') , uselist=True)  #TODO: Check Validitiy?
 
     #backref : asNames 
     #backref : inViews
@@ -60,6 +60,7 @@ class export(Base):
 
     id        = Column(String, primary_key = True)
     hid       = Column(String)
+    desc      = Column(String)
 
     userId    = relationship('users',    ForeignKey('users.id')     ,backref='hasExports')
     sessionId = relationship('sessions', ForeignKey('session.id')   ,backref='hasExports')
@@ -79,6 +80,7 @@ class view(Base):
 
     id        = Column(String, primary_key = True)
     hid       = Column(String)
+    desc      = Column(String)
 
     userId    = relationship('users',    ForeignKey('users.id'))  #,backref='hasViews')
     sessionId = relationship('sessions', ForeignKey('session.id')  ,backref='hasViews')
@@ -88,7 +90,7 @@ class view(Base):
     data      = Column(String)
 
 
-class session(Base):
+class IoSession(Base):
     __tablename__ = 'sessions'
     id     = Column(String, primary_key = True)
     hid    = Column(String)
@@ -104,4 +106,25 @@ class user(Base):
 
     id     = Column(String, primary_key = True)
     hid    = Column(String)
+
     # backref : hasExports
+
+Base.metadata.create_all(engine)
+
+if __name__ == '__main__':
+
+    _file    = fm_db_file()
+    _space_a = fm_db_space()
+    _space   = fm_db_space()
+
+    _space.inSpaces.append(_space_a)
+    _file.inSpaces.append(_space)
+
+    _IoSession   = IoSession(hid = 'Temporary_Connection', )
+    
+    _user   = user(hid = 'Joe')
+    _view   = view(hid = 'MyView',spaceId=_space,sessionId=_IoSession,userId=_user)
+    _export = view(hid = 'MyExport',spaceId=_space,sessionId=_IoSession,userId=_user)
+
+    session.add_all([ _file, _space_a, _space, _space, _file, _IoSession, _user, _view, _export])
+    session.commit()

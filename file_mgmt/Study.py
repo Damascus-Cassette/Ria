@@ -1,49 +1,53 @@
-from sqlalchemy import (Column, ForeignKey, Integer, String, create_engine, Table)
+from sqlalchemy import (Column, Boolean, ForeignKey, Integer, String, create_engine, Table)
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
-db_url  = 'sqlite:///database.db'
-engine  = create_engine(db_url)
-Session = sessionmaker(bind=engine)
-session = Session()
+
+if __name__ == '__main__':
+    db_url = 'sqlite:///database.db'
+    engine  = create_engine(db_url)
+    Session = sessionmaker(bind=engine)
+    session = Session()
 
 Base = declarative_base()
 
-class student_course_link(Base):
-    __tablename__ = 'student_course'     #Can also be displayed as a class inheriting from base so as to hold more functions
-    id         = Column('id', Integer, primary_key = True)
-    student_id = Column('student_id', Integer, ForeignKey('students.id'))
-    course_id  = Column('course_id',  Integer, ForeignKey('courses.id'))
 
-class Student(Base):
-    __tablename__ = 'students'
-    id      = Column(Integer, primary_key = True)
-    name    = Column(String)
-    courses = relationship("Course", secondary = 'student_course', back_populates='students')
+class rel_SpaceFile(Base):
+    __tablename__ = 'rel_spacefile'
+    id  = Column(Integer, primary_key=True)
 
-class Course(Base):
-    __tablename__ = 'courses'
-    id       = Column(Integer, primary_key = True)
-    title    = Column(String)
-    students = relationship("Student",secondary = 'student_course',back_populates='courses')
+    pSpaceId = Column(String, ForeignKey('spaces.id')) 
+    cFileId  = Column(String, ForeignKey('files.id') )
+
+
+class Space(Base):
+    __tablename__ = 'spaces'
+    id  = Column(String, primary_key=True)
+    hid = Column(String)    
+
+    myFiles = relationship("File", secondary='rel_spacefile', back_populates="inSpaces")
+        #First arg is the class name
+        #secondary means routing via a relationship table, allowing for many<->many relationships
+        #backpopulates refers to an explicit value to update on the target obj in the table
+
+class File(Base):
+    __tablename__ = 'files'
+    id  = Column(String, primary_key=True)
+    hid = Column(String)
+
+    inSpaces = relationship("Space", secondary='rel_spacefile', back_populates="myFiles")
+
 
 Base.metadata.create_all(engine)
 
-# math    = Course(title='math')
-# physics = Course(title='physx')
-# Bill = Student(name='Bill', courses=[math,physics]) 
-# Rob  = Student(name='Rob',  courses=[math])
+if __name__ == '__main__':
 
-# session.add_all([math,physics,Bill,Rob])
-# session.commit()
+    _file  = File( id = 'Random_File_UUID' , hid = 'A_Unique_File' )
+    _space = Space(id = 'Random_Space_UUID', hid = 'A_Unique_Space')
 
-rob = session.query(Student).filter_by(name='Bill').first()
+    # _rel_SpaceFile = rel_SpaceFile(pSpaceId =_space, cFileId=_file) 
+    _file.inSpaces.append(_space)
 
+    print(_space.myFiles)
 
-physx = session.query(Course).filter_by(title='physx').first()
-
-rob.courses.append(physx)
-rob.courses.append(physx)
-rob.courses.append(physx)
-
-for c in rob.courses:
-    print(rob.name, 'is in course', c.title)
+    session.add_all([_file,_space])
+    session.commit()
