@@ -71,13 +71,13 @@ class Export(Base):
     id  = Column(Integer, primary_key=True)
     hid = Column(String)    
     
-    mySpaceId : Mapped[String]  = mapped_column(ForeignKey('spaces.id'))
+    mySpaceId : Mapped[str]  = mapped_column(ForeignKey('spaces.id'))
     mySpace   : Mapped[Space]   = relationship(back_populates='inExports')
 
-    location  : Mapped[String]  = mapped_column()
+    location  : Mapped[str]  = mapped_column()
 
     mySessionId : Mapped[int]     = mapped_column(ForeignKey('sessions.id'))
-    mySession   : Mapped[Session] = relationship(back_populate = 'myExports') 
+    mySession   : Mapped[Session] = relationship(back_populates = 'myExports') 
 
     #TODO: Consider better primary_key s being spaceId & location?
     #TODO: Consider tracking same Exports resulting from multiple sessions? Edge case
@@ -87,10 +87,10 @@ class Session(Base):
     id  = Column(Integer, primary_key=True)
     hid = Column(String)    
 
-    isOpen : Mapped[bool] = mapped_column()
+    isOpen : Mapped[bool] = mapped_column(default=True)
 
     myExports: Mapped[list[Export]] = relationship(back_populates='mySession')
-
+    
 
     
 
@@ -108,13 +108,13 @@ if __name__ == '__main__':
 
     print(_space.myFiles)
 
-    _export = Export(hid = 'MyFirst_Export')
+    _export = Export(hid = 'MyFirst_Export',location = 'N/a')
     _export.mySpace = _space
 
     _session = Session(hid='Session1')
     _session.myExports.append(_export)
-
     # _export.mySession = _session
+
 
     session.add_all([_file,_space,_asc_Space_NamedFile])
     session.commit()
