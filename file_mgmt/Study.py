@@ -11,7 +11,6 @@ if __name__ == '__main__':
 
 Base = declarative_base()
 
-
 class asc_Space_NamedFile(Base):
     __tablename__ = 'asc_space_namedfile'
 
@@ -105,8 +104,6 @@ class User(Base):
     myExports : Mapped[list[Export]]  = relationship(back_populates='myUser')
 
 
-
-
 Base.metadata.create_all(engine)
 
 if __name__ == '__main__':
@@ -130,7 +127,7 @@ if __name__ == '__main__':
 
     _user = User(id = 'Job_Boal', hid='Job_Boal')
     _user.mySessions.append(_session)
-
+    
 
 
 
