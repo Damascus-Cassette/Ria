@@ -12,8 +12,8 @@ if __name__ == '__main__':
 Base = declarative_base()
 
 
-class rel_Space_NamedFile(Base):
-    __tablename__ = 'rel_space_namedfile'
+class asc_Space_NamedFile(Base):
+    __tablename__ = 'asc_space_namedfile'
 
     pSpaceId = mapped_column(String, ForeignKey('spaces.id'), primary_key=True) 
     cName    = mapped_column(String                         , primary_key=True)
@@ -25,17 +25,39 @@ class rel_Space_NamedFile(Base):
     pSpace : Mapped[Space] = relationship(back_populates='myFiles')
     cFile  : Mapped[File ] = relationship(back_populates='inSpaces')
 
+class asc_Space_NamedSpace(Base):
+    __tablename__ = 'asc_space_namedspace'
+
+    pSpaceId = mapped_column(String, ForeignKey('spaces.id'), primary_key=True)  
+    cName    = mapped_column(String                         , primary_key=True)
+    cSpaceId = mapped_column(String, ForeignKey('spaces.id')                  )
+    
+    pSpace : Mapped[Space] = relationship(back_populates='mySpaces',foreign_keys=[pSpaceId])
+    cSpace : Mapped[Space] = relationship(back_populates='inSpaces',foreign_keys=[cSpaceId])
+
+    #Untested assumption: via primary_merge pSpaceId & pSpace are asociated and are left_column, and via secondary_merge cSpaceId & cSpace are asc and right_column
+
 class Space(Base):
     __tablename__ = 'spaces'
     id  = Column(String, primary_key=True)
     hid = Column(String)    
-    myFiles : Mapped[list[rel_Space_NamedFile]] = relationship(back_populates="pSpace")
+    
+    myFiles  : Mapped[list[asc_Space_NamedFile]] = relationship(back_populates="pSpace")
+    
+    mySpaces : Mapped[list[asc_Space_NamedSpace]] = relationship(back_populates="pSpace", foreign_keys=[asc_Space_NamedSpace.pSpaceId])
+    inSpaces : Mapped[list[asc_Space_NamedSpace]] = relationship(back_populates="cSpace", foreign_keys=[asc_Space_NamedSpace.cSpaceId]) 
+        #foreign keys also available as str, but since it's eval it must include list, ie foreign_keys='[asc_Space_NamedSpace.cSpaceId]'
+        #this is since there are multiple keys asociated with the same relationship class target
+
+    # TODO: AsociationProxy Objects for myFiles and mySpaces, replace current with myNamedSpaces and myNamedFiles
+
 
 class File(Base):
     __tablename__ = 'files'
     id  = Column(String, primary_key=True)
     hid = Column(String)
-    inSpaces : Mapped[list[rel_Space_NamedFile]] = relationship(back_populates="cFile")
+    inSpaces : Mapped[list[asc_Space_NamedFile]] = relationship(back_populates="cFile")
+    # TODO: AsociationProxy Object
 
 
 Base.metadata.create_all(engine)
@@ -45,12 +67,12 @@ if __name__ == '__main__':
     _file  = File( id = 'Random_File_UUID' , hid = 'A_Unique_File' )
     _space = Space(id = 'Random_Space_UUID', hid = 'A_Unique_Space')
 
-    # _rel_Space_NamedFile = rel_Space_NamedFile(pSpaceId =_space, cFileId=_file,cName = 'filename.txt') 
-    _rel_Space_NamedFile = rel_Space_NamedFile(cName = 'filename.txt') 
-    _rel_Space_NamedFile.pSpace = _space
-    _rel_Space_NamedFile.cFile  = _file
+    # _asc_Space_NamedFile = asc_Space_NamedFile(pSpaceId =_space, cFileId=_file,cName = 'filename.txt') 
+    _asc_Space_NamedFile = asc_Space_NamedFile(cName = 'filename.txt') 
+    _asc_Space_NamedFile.pSpace = _space
+    _asc_Space_NamedFile.cFile  = _file
 
     print(_space.myFiles)
 
-    session.add_all([_file,_space,_rel_Space_NamedFile])
+    session.add_all([_file,_space,_asc_Space_NamedFile])
     session.commit()
