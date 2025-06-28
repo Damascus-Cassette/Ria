@@ -1,5 +1,6 @@
 from .db_struct import (asc_Space_NamedFile, asc_Space_NamedSpace, File, Space, target, Export, Session, User)
 import atexit
+from sqlalchemy import create_engine
 
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -46,10 +47,6 @@ class repo_baseclass():
         self.db_interface = db_interface
         _transaction.init_transactions(self)
     
-    # def __init_subclass__(cls):
-    #     #could use this to update the input and return annotations of create,update,delete and other base methods
-    #     base : TypeAlias = cls.base
-
     @transaction
     def create(self,data=None,**kwargs)->base:
         if not data:
@@ -58,7 +55,10 @@ class repo_baseclass():
         
         inst = self.base()
 
-        for k,v in data.values(): setattr(inst,k,v)
+        for k,v in data.values():
+            assert hasattr(inst,k)
+            setattr(inst,k,v)
+            #TODO: Raise custom exceptions!
 
         self.session.add(inst)
 
@@ -70,7 +70,10 @@ class repo_baseclass():
             data = {}
         data = data|kwargs
 
-        for k,v in data.values(): setattr(obj,k,v)
+        for k,v in data.values(): 
+            assert hasattr(obj,k)
+            setattr(obj,k,v)
+            #TODO: Raise custom exceptions!
 
         # self.session.flush()
         return obj
@@ -79,14 +82,12 @@ class repo_baseclass():
     def delete(self,obj)->None:
         self.session.delete(obj)
     
-
     @property
     def session(self):
-        c_session.get()
+        return c_session.get()
     @property
     def engine(self):
-        c_engine.get()
-
+        return c_engine.get()
 
 
 class db_interface():
@@ -111,25 +112,50 @@ class db_interface():
     session = None
 
     def ensure_c_engine(self):
-        ''' Get root engine '''
+        ''' ensure root engine exists and is assigned to contextVar c_engine '''
         if not self.engine:
-            ... #Create engine w/ settings (ie loc and the like)
-        
-        c_engine = self.engine
+            self.engine = create_engine(self.settings.database_fp)        
+        c_engine.set(self.engine)
+        return c_engine.get()
 
     def ensure_c_session(self):
         ''' create root session if it doesnt and set to self.session. If it does exist create nested session. return current session obj '''
+        #Much of this is similar to transaction in examples of: https://ryan-zheng.medium.com/simplifying-database-interactions-in-python-with-the-repository-pattern-and-sqlalchemy-22baecae8d84
+
         if not self.engine:
             self.engine = self.ensure_c_engine()
-        
-        if not c_session:
-            c_session = self.engine.Session(bind = ???, keep_post_commit = True)
-            ... #Create session with args, Return.
-        elif c_session.in_transaction():
-            return c_session.nested_transaction()
-        else:
-            return c_session
 
+        if not c_session.get():
+            if self.session:
+                c_session.set(self.session)
+            else:
+                c_session.set(self.engine.Session(bind=self.engine, keep_post_commit = True))
+
+        session        = c_session.get()
+        in_transaction = session.in_transaction()
+        try: 
+            #Yield session object(even if nested), then commit and close
+            if in_transaction:
+                _session = c_session.get().begin_nested()
+                yield _session
+                _session.commit()
+                c_session.set(None)
+            else:
+                yield session
+                session.commit()
+                session.close()     
+                #if not nested, close session
+
+        except:
+            #Undo and do not commit changes
+            if in_transaction:
+                _session.rollback() 
+                c_session.set(None)
+            else:
+                session.rollback()  
+                session.close()
+            raise
+     
     def db_lock_check(self):
         #Check if lock file, throw error if so
         self.settings.lock_location
