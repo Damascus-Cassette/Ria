@@ -105,7 +105,7 @@ class db_interface():
         self.db_lock_check()
         self.db_lock_register()
 
-        self.
+        self.repo_baseclass = repo_baseclass(self)
     
     engine  = None
     session = None
