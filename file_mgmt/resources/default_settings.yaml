@@ -1,4 +1,7 @@
 cache_dir: ./cache/
 database_fp: <! MISSING REQUIRED VALUE !>
+facing_dir:
+  linux: ./face_linux/
+  windows: ./face_win/
 lock_location: ./
 logging_dir: ./logs/

@@ -11,6 +11,7 @@ class _settings_base:
 
     imported_keys : list[str] = []#keys corrisponding to values that have been imported
     __anno_resolved__ : dict[str,Any]
+    strict = True
 
     def __init__(self):
         ...
@@ -25,11 +26,13 @@ class _settings_base:
             v = getattr(self,k,_empty)
             if v is _empty and not export_defaults:
                 continue
-            elif v is _empty and export_defaults:
+            elif v is _empty and export_defaults and self.strict:
                 res[k] = missing_flag
+            elif v is _empty and export_defaults and not self.strict:
+                continue
             elif k not in self.imported_keys and not export_defaults:
                 continue
-            elif func := getattr(v,'export_dict_recur',_empty) != _empty:
+            elif (func := getattr(v,'export_dict_recur',_empty)) != _empty:
                 res[k] = func(export_defaults)
             else:
                 res[k] = v
@@ -78,8 +81,10 @@ class _settings_base:
         unapplied_keys = [k for k in self.__anno_resolved__.keys() if (k not in applied_keys) and (not getattr(self,k,None))]
         defaulted_keys = [k for k in self.__anno_resolved__.keys() if (k not in applied_keys) and (getattr(self,k,None))]
 
-        if unapplied_keys:
+        if unapplied_keys and self.strict:
             raise Exception(f'Following values were not imported and are required: /n {unapplied_keys}')
+        elif unapplied_keys and not self.strict:
+            print(f'Warning! Following values were not imported: /n {unapplied_keys}')
 
         if defaulted_keys:
             print('Following keys were not imported and resolved to default values:')
@@ -95,6 +100,7 @@ class _settings_base:
 class _context_variable_base(_settings_base):
     ''' Platform Context Variable '''
     #Consider complex version as a grid matrix?
+    strict = False
     def __init__(self, values:str|dict):
         if isinstance(values,str):
             for k in self._keys:
@@ -104,7 +110,7 @@ class _context_variable_base(_settings_base):
             
     def get_value(self,context:str):
         class _empty:...
-        if v := self.getattr(self,context.lower(),_empty) != _empty:
+        if v := self.getattr(self,context,_empty) != _empty:
             return v
         elif getattr(self,'default',_empty) != _empty:
             return self.default
@@ -141,7 +147,7 @@ class settings_interface(_settings_base):
     cache_dir     : str = './cache/'
     logging_dir   : str = './logs/'
     lock_location : str = './'
-    facing_dir    : pcv = pcv({'Windows':'./face_win/','Linux':'./face_linux/'})    #converted on import
+    facing_dir    : pcv = pcv({'windows':'./face_win/','linux':'./face_linux/'})    #converted on import
 
 
 if __name__ == '__main__':
