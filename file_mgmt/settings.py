@@ -141,7 +141,7 @@ class settings_interface(_settings_base):
     cache_dir     : str = './cache/'
     logging_dir   : str = './logs/'
     lock_location : str = './'
-    # facing_dir    : pcv = pcv({'Windows':'./face_win/','Linux':'./face_linux/'})    #converted on import
+    facing_dir    : pcv = pcv({'Windows':'./face_win/','Linux':'./face_linux/'})    #converted on import
 
 
 if __name__ == '__main__':
