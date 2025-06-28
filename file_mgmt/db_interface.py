@@ -1,141 +1,92 @@
 from .db_struct import (asc_Space_NamedFile, asc_Space_NamedSpace, File, Space, target, Export, Session, User)
-from   typing import Any
-import typing
-import yaml
-import os
 import atexit
 
-class _settings_base:
-    ''' dataclass that interprets a settings_object or custom start kwargs '''
+from contextlib import contextmanager
+from contextvars import ContextVar
+from functools import wraps
+from .settings import settings_interface
 
-    imported_keys : list[str] #keys corrisponding to values that have been imported
-    __anno_resolved__ : dict[str,Any]
+from typing import TypeAlias
 
-    def __init__(self):
-        ...
+c_session = ContextVar('session' , default=None)
+c_engine  = ContextVar('engine'  , default=None)
+
+
+@contextmanager
+def _transaction_context_manager(db_interface):
+    ''' Temporarly set session & engine within context of execution'''
+    c_engine.set (db_interface.get_engine())
+    c_session.set(db_interface.get_session()) 
+
+def transaction[F](func:F)->F:
+    return _transaction(func)
+
+class _transaction():
+    def __init__[F](self, func:F)->F:
+        self.func         = func
+        self.container = None
+
+    def __call__(self,*args,**kwargs):
+        with _transaction_context_manager(self.container.db_interface):
+            self.container.db_interface.ensure_c_engine()
+            self.container.db_interface.ensure_c_session()
+
+            return self.func(*args,**kwargs)
+
+    @classmethod
+    def init_transactions(cls,repo_inst):
+        for k,v in repo_inst.__dict__().items():
+            if isinstance(v,cls):
+                v.container = repo_inst
+
+class repo_baseclass():
+    base : TypeAlias = None
+
+    def __init__(self, db_interface):
+        self.db_interface = db_interface
+        _transaction.init_transactions(self)
     
-    def export_yaml_recur(self,export_defaults=False)->dict:
-        ''' Export yaml recursivly w/a based on hasattr(self,k,export_yaml_recur). Otherwise record straight (Non strict) '''
-        self.ensure_type_hints()
-        class _empty: ...
-        res = {}
+    # def __init_subclass__(cls):
+    #     #could use this to update the input and return annotations of create,update,delete and other base methods
+    #     base : TypeAlias = cls.base
+
+    @transaction
+    def create(self,data=None,**kwargs)->base:
+        if not data:
+            data = {}
+        data = data|kwargs
         
-        for k,ty in self.__anno_resolved__:
-            v = getattr(self,k,_empty)
-            if v is _empty:
-                continue
-            elif k not in self.imported_keys and not export_defaults:
-                continue
-            elif func := getattr(v,'export_yaml_recur'):
-                res[k] = func(export_defaults)
-            else:
-                res[k] = v
-        
-        return res
+        inst = self.base()
 
-    def load_file(self,fp:str):
-        assert fp.endswith('.yaml') or fp.endswith('.yml')
-        with open(fp,'r') as file:
-            data = yaml.safe_load(file)
-            self.set_attributes(data)
+        for k,v in data.values(): setattr(inst,k,v)
 
-    def save_file(self,export_fp:str,overwrite=False):
-        ''' Exporting a file, will not overwrite by default '''
-        
-        assert os.path.isfile(export_fp)
+        self.session.add(inst)
 
-        if overwrite and os.path.file_exists(export_fp):
-            raise Exception('File exists! Remove file or rerun func with overwrite = True')
-        
-        os.make_dirs(os.path.split(export_fp)[0], exist_ok = True)
+        return inst
 
-        data = self.export_yaml_recur()
+    @transaction
+    def update(self,obj:base,data=None,**kwargs)->base:
+        if not data:
+            data = {}
+        data = data|kwargs
 
-        with open(export_fp, 'w', encoding='utf8') as file:
-            yaml.dump(data, file, default_flow_style=False, allow_unicode=True)
+        for k,v in data.values(): setattr(obj,k,v)
 
-    def set_attributes(self,data:dict):    
-        self.ensure_type_hints()
-
-        applied_keys = []
-        for k,v in data.items():
-            applied_keys.append(k)
-            if k in self.__anno_resolved__.keys():
-                ty = self.__anno_resolved__[k]
-                try:
-                    setattr(self,k,ty(v))
-                except:
-                    raise Exception(f'Key "{k}" with value "{v}" was not about to be converted!')
-            else:
-                raise Exception(f'Key "{k}" is not defined in the settings_interface! Perhaps you ment to have it as a sub object variable?')
-        
-        unapplied_keys = [k for k in self.__anno_resolved__.keys() if (k not in applied_keys) and (not getattr(self,k,None))]
-        defaulted_keys = [k for k in self.__anno_resolved__.keys() if (k not in applied_keys) and (getattr(self,k,None))]
-
-        if unapplied_keys:
-            raise Exception(f'Following values were not imported and are required: /n {unapplied_keys}')
-
-        if defaulted_keys:
-            print('Following keys were not imported and resolved to default values:')
-            for k in defaulted_keys:
-                print(f'{k} has defaulted to: f{getattr(self,k)}')
-        
-        self.imported_keys = applied_keys
-
-    def ensure_type_hints(self):
-        if not hasattr(self.__anno_resolved__):
-            self.__anno_resolved__ = typing.get_type_hints(self)
-
-class _context_variable_base(_settings_base):
-    ''' Platform Context Variable '''
-    #Consider complex version as a grid matrix?
-    def __init__(self, values:str|dict):
-        if isinstance(values,str):
-            for k in self._keys:
-                setattr(self,k,values)
-        else:
-            self.set_attributes(values)
-            
-    def get_value(self,context:str):
-        class _empty:...
-        if v := self.getattr(self,context.lower(),_empty) != _empty:
-            return v
-        elif getattr(self,'default',_empty) != _empty:
-            return self.default
-        else:
-            raise Exception(f'Context argument "{context}" nor is a default defined for this context value!')
+        # self.session.flush()
+        return obj
     
-    def __getitem__(self,k):
-        return self.get_value(k)
+    @transaction
+    def delete(self,obj)->None:
+        self.session.delete(obj)
+    
 
-    _keys = ['default']
-    default:str
+    @property
+    def session(self):
+        c_session.get()
+    @property
+    def engine(self):
+        c_engine.get()
 
-    def __repr__(self):
-        injection = {}
-
-        class _empty:...
-        for k in self._keys:
-            if (v:=self(getattr(self,k,_empty))) != _empty:
-                injection[k] = v
-
-        return f'< Context_Varaible Object: {injection}>'
-
-
-class platform_context_variable(_context_variable_base):
-    _keys = ['default','windows','linux']
-    default : str
-    windows : str
-    linux   : str
-
-pcv = platform_context_variable
-
-class settings_interface(_settings_base):
-    database_fp   : str
-    cache_dir     : str = './cache/'
-    logging_dir   : str = './logs/'
-    lock_location : str = './'
-    facing_dir    : pcv = pcv({'Windows':'./face_win/','Linux':'./face_linux/'})    #converted on import
 
 
 class db_interface():
@@ -153,13 +104,45 @@ class db_interface():
         
         self.db_lock_check()
         self.db_lock_register()
+
+        self.
+    
+    engine  = None
+    session = None
+
+    def ensure_c_engine(self):
+        ''' Get root engine '''
+        if not self.engine:
+            ... #Create engine w/ settings (ie loc and the like)
         
+        c_engine = self.engine
+
+    def ensure_c_session(self):
+        ''' create root session if it doesnt and set to self.session. If it does exist create nested session. return current session obj '''
+        if not self.engine:
+            self.engine = self.ensure_c_engine()
+        
+        if not c_session:
+            c_session = self.engine.Session(bind = ???, keep_post_commit = True)
+            ... #Create session with args, Return.
+        elif c_session.in_transaction():
+            return c_session.nested_transaction()
+        else:
+            return c_session
+
     def db_lock_check(self):
+        #Check if lock file, throw error if so
         self.settings.lock_location
 
     def db_lock_register(self):
-        self.settings.lock_location
+        #Create the lock file
+        atexit.register(self.db_lock_unregister)
+        # self.settings.lock_location
         
     def db_lock_unregister(self):
-        self.settings.lock_location
-        
+        #Remove the lock file
+        ...
+        # self.settings.lock_location
+    
+
+
