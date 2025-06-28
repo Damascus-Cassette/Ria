@@ -12,6 +12,8 @@ from typing import TypeAlias
 c_session = ContextVar('session' , default=None)
 c_engine  = ContextVar('engine'  , default=None)
 
+from .db_struct import User
+
 
 @contextmanager
 def _transaction_context_manager(db_interface):
@@ -88,28 +90,42 @@ class repo_baseclass():
     @property
     def engine(self):
         return c_engine.get()
-    
 
+class repo_testclass(repo_baseclass):
+    base = User
+    @transaction
+    def test(self):
+        self.create()
 
 
 class db_interface():
     ''' Interface for managing the file database directly. Each instance is a locked session with a specific db. DBs should not have overlapping cached files '''
-    def __init__(self,settings_file:dict|None=None,**kwargs):
+    
+    test:repo_testclass
 
+    def __init__(self,settings_file:dict|None=None,**kwargs):
+        
         self.settings = settings_interface()
+
         if settings_file:
             self.settings.load_file(settings_file)
-        elif kwargs:
-            self.settings.set_attributes(kwargs)
         else:
-            #Initilizes anyway, object throws warnings & exceptions w/a
-            self.settings.set_attributes({})
-        
+            self.settings.set_attributes(kwargs)
+
+    def start_session(self):
         self.db_lock_check()
         self.db_lock_register()
+        self.test_repo = repo_testclass(self)
+        
+    def close_session(self):
+        self.db_lock_unregister()
 
-        self.repo_baseclass = repo_baseclass(self)
-    
+    def __enter__(self):
+        self.start_session()
+
+    def __exit__(self):
+        self.exit_session()
+        
     engine  = None
     session = None
 
@@ -170,7 +186,4 @@ class db_interface():
     def db_lock_unregister(self):
         #Remove the lock file
         ...
-        # self.settings.lock_location
-    
-
-
+        # self.settings.lock_location        
