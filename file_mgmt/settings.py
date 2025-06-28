@@ -13,9 +13,12 @@ class _settings_base:
     __anno_resolved__ : dict[str,Any]
     strict = True
 
-    def __init__(self):
-        ...
-    
+    def __init__(self, values:dict|None=None):
+        if values:
+            self.set_attributes(values)
+        else:
+            ... #Is placeholder!
+
     def export_dict_recur(self,export_defaults=False)->dict:
         ''' Export yaml recursivly w/a based on hasattr(self,k,export_dict_recur). Otherwise record straight (Non strict) '''
         self.ensure_type_hints()
@@ -142,12 +145,16 @@ class platform_context_variable(_context_variable_base):
 
 pcv = platform_context_variable
 
-class settings_interface(_settings_base):
+class db_info(_settings_base):
     database_fp   : str
     cache_dir     : str = './cache/'
     logging_dir   : str = './logs/'
     lock_location : str = './'
     facing_dir    : pcv = pcv({'windows':'./face_win/','linux':'./face_linux/'})    #converted on import
+
+class settings_interface(_settings_base):
+    strict = False
+    database : db_info = db_info()
 
 
 if __name__ == '__main__':
