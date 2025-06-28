@@ -3,7 +3,6 @@ from .db_interface import db_interface
 from .settings     import settings_interface
 
 
-
 # import hashlib
 # import random
 # import uuid
