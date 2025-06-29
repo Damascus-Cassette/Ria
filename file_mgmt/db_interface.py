@@ -1,4 +1,4 @@
-from .db_struct import (asc_Space_NamedFile, asc_Space_NamedSpace, File, Space, target, Export, Session, User)
+from .db_struct import (asc_Space_NamedFile, asc_Space_NamedSpace, File, Space, Export, Session, User)
 import atexit
 from sqlalchemy import create_engine
 
