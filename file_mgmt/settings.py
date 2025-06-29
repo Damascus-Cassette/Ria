@@ -2,16 +2,25 @@ from typing import Any
 import typing
 import yaml
 import os
+from contextvars import ContextVar
+from contextlib  import contextmanager
 
 missing_flag = '<! MISSING REQUIRED VALUE !>'
     #Consider adding type to missing value
 
+class _standin_context:
+    value : ContextVar = ContextVar('value',default = 'default') 
+
+
 class _settings_base:
     ''' dataclass that interprets a settings_object or custom start, holds initialized repos '''
+    context = context
 
     imported_keys : list[str] = []#keys corrisponding to values that have been imported
+
     __anno_resolved__ : dict[str,Any]
-    strict = True
+
+    strict = True           #Settings base, consider _tracked_attributes list?
 
     def __init__(self, values:dict|None=None):
         if values:
@@ -100,10 +109,19 @@ class _settings_base:
         if not hasattr(self,'__anno_resolved__'):
             self.__anno_resolved__ = typing.get_type_hints(self)
 
+
 class _context_variable_base(_settings_base):
-    ''' Platform Context Variable '''
-    #Consider complex version as a grid matrix?
-    strict = False
+    ''' Generic Context Varaible, initilized with context at declaration
+     Fugly struct atm, consider something cleaner '''
+
+    strict = False 
+
+    context : Any
+    _c_attr : str
+    _d_attr : str
+    _keys   : list = ['default']
+    
+    #Consider complex version as a grid matrix, or chained dicts
     def __init__(self, values:str|dict):
         if isinstance(values,str):
             for k in self._keys:
@@ -111,20 +129,10 @@ class _context_variable_base(_settings_base):
         else:
             self.set_attributes(values)
             
-    def get_value(self,context:str):
-        class _empty:...
-        if v := self.getattr(self,context,_empty) != _empty:
-            return v
-        elif getattr(self,'default',_empty) != _empty:
-            return self.default
-        else:
-            raise Exception(f'Context argument "{context}" nor is a default defined for this context value!')
-    
-    def __getitem__(self,k):
-        return self.get_value(k)
+    def get(self):
+        assert (cvar := getattr(self.context,self._c_attr,None)) != None
+        return getattr(self, cvar.get(), getattr(self,self._d_attr))
 
-    _keys = ['default']
-    default:str
 
     def __repr__(self):
         injection = {}
@@ -136,9 +144,24 @@ class _context_variable_base(_settings_base):
 
         return f'< Context_Varaible Object: {injection}>'
 
+class context:
+    #Fugly structure, consider something cleaner
+    platform : ContextVar = ContextVar('platform',default = 'default') 
+    
+    @classmethod
+    def set(cls,**kwargs):
+        for k,v in kwargs.items():
+            if (cvar:=getattr(cls,k,None)):
+                cvar.set(v)
+            else:
+                raise Exception(f"Context could not be set for key {k} of value {v}")
 
 class platform_context_variable(_context_variable_base):
-    _keys = ['default','windows','linux']
+    context = context
+    _c_attr = 'platform'
+    _d_attr = 'default'
+    _keys   = ['default','windows','linux']
+
     default : str
     windows : str
     linux   : str
@@ -146,6 +169,7 @@ class platform_context_variable(_context_variable_base):
 pcv = platform_context_variable
 
 class db_info(_settings_base):
+    context = context
     database_fp   : str
     cache_dir     : str = './cache/'
     logging_dir   : str = './logs/'
@@ -153,6 +177,7 @@ class db_info(_settings_base):
     facing_dir    : pcv = pcv({'windows':'./face_win/','linux':'./face_linux/'})    #converted on import
 
 class settings_interface(_settings_base):
+    context = context
     strict = False
     database : db_info = db_info()
 
