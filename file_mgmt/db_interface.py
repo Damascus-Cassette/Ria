@@ -1,4 +1,4 @@
-from .db_struct import (asc_Space_NamedFile, asc_Space_NamedSpace, File, Space, target, Export, Session, User)
+from .db_struct import (asc_Space_NamedFile, asc_Space_NamedSpace, File, Space, Export, Session, User)
 import atexit
 from sqlalchemy import create_engine
 
@@ -14,12 +14,14 @@ c_engine  = ContextVar('engine'  , default=None)
 
 from .db_struct import User
 
+import typing
 
 @contextmanager
 def _transaction_context_manager(db_interface):
     ''' Temporarly set session & engine within context of execution'''
-    c_engine.set (db_interface.get_engine())
-    c_session.set(db_interface.get_session()) 
+    db_interface.ensure_c_engine()
+    db_interface.ensure_c_session()
+    yield
 
 def transaction[F](func:F)->F:
     return _transaction(func)
@@ -30,15 +32,18 @@ class _transaction():
         self.container = None
 
     def __call__(self,*args,**kwargs):
+        assert self.container
         with _transaction_context_manager(self.container.db_interface):
-            self.container.db_interface.ensure_c_engine()
-            self.container.db_interface.ensure_c_session()
+            # self.container.db_interface.ensure_c_engine()
+            # self.container.db_interface.ensure_c_session()
 
-            return self.func(*args,**kwargs)
-
+            val = self.func(self.container,*args,**kwargs)
+        return val
+    
     @classmethod
     def init_transactions(cls,repo_inst):
-        for k,v in repo_inst.__dict__().items():
+        for k in dir(repo_inst):
+            v = getattr(repo_inst,k)
             if isinstance(v,cls):
                 v.container = repo_inst
 
@@ -48,6 +53,13 @@ class repo_baseclass():
     def __init__(self, db_interface):
         self.db_interface = db_interface
         _transaction.init_transactions(self)
+
+    @property
+    def session(self):
+        return c_session.get()
+    @property
+    def engine(self):
+        return c_engine.get()
     
     @transaction
     def create(self,data=None,**kwargs)->base:
@@ -57,11 +69,12 @@ class repo_baseclass():
         
         inst = self.base()
 
-        for k,v in data.values():
+        for k,v in data.items():
             assert hasattr(inst,k)
             setattr(inst,k,v)
             #TODO: Raise custom exceptions!
 
+        print(self.session)
         self.session.add(inst)
 
         return inst
@@ -72,7 +85,7 @@ class repo_baseclass():
             data = {}
         data = data|kwargs
 
-        for k,v in data.values(): 
+        for k,v in data.items(): 
             assert hasattr(obj,k)
             setattr(obj,k,v)
             #TODO: Raise custom exceptions!
@@ -84,24 +97,16 @@ class repo_baseclass():
     def delete(self,obj)->None:
         self.session.delete(obj)
     
-    @property
-    def session(self):
-        return c_session.get()
-    @property
-    def engine(self):
-        return c_engine.get()
 
-class repo_testclass(repo_baseclass):
-    base = User
-    @transaction
-    def test(self):
-        self.create()
 
 
 class db_interface():
     ''' Interface for managing the file database directly. Each instance is a locked session with a specific db. DBs should not have overlapping cached files '''
     
-    test:repo_testclass
+    engine  = None
+    session = None
+
+    # test : repo_testclass
 
     def __init__(self,settings_file:dict|None=None,**kwargs):
         
@@ -112,27 +117,50 @@ class db_interface():
         else:
             self.settings.set_attributes(kwargs)
 
-    def start_session(self):
-        self.db_lock_check()
-        self.db_lock_register()
-        self.test_repo = repo_testclass(self)
-        
-    def close_session(self):
-        self.db_lock_unregister()
+        for k,th in self.__anno_resolved__.items():
+            i = getattr(self,k,None)
+            if issubclass(th,repo_baseclass) and not i:
+                setattr(self,k,th(self))
+
+
+    @property
+    def __anno_resolved__(self):
+        if not hasattr(self,'__anno_resolved_cache__'):
+            self.__anno_resolved_cache__ = typing.get_type_hints(self.__class__)
+        return self.__anno_resolved_cache__
+
 
     def __enter__(self):
         self.start_session()
-
+    def start_session(self):
+        # self.db_lock_check()
+        # self.db_lock_register()
+        ...
+        
     def __exit__(self):
         self.exit_session()
+    def close_session(self):
+        # self.db_lock_unregister()
+        ...
+
+    # def db_lock_check(self):
+    #     #Check if lock file, throw error if so
+    #     self.settings.lock_location
+
+    # def db_lock_register(self):
+    #     #Create the lock file
+    #     atexit.register(self.db_lock_unregister)
+    #     # self.settings.lock_location
         
-    engine  = None
-    session = None
+    # def db_lock_unregister(self):
+    #     #Remove the lock file
+    #     ...
+    #     # self.settings.lock_location        
 
     def ensure_c_engine(self):
         ''' ensure root engine exists and is assigned to contextVar c_engine '''
         if not self.engine:
-            self.engine = create_engine(self.settings.database_fp)        
+            self.engine = create_engine(self.settings.database.database_fp)        
         c_engine.set(self.engine)
         return c_engine.get()
 
@@ -144,10 +172,7 @@ class db_interface():
             self.engine = self.ensure_c_engine()
 
         if not c_session.get():
-            if self.session:
-                c_session.set(self.session)
-            else:
-                c_session.set(self.engine.Session(bind=self.engine, keep_post_commit = True))
+            c_session.set(self.engine.Session(bind=self.engine, keep_post_commit = True))
 
         session        = c_session.get()
         in_transaction = session.in_transaction()
@@ -174,16 +199,3 @@ class db_interface():
                 session.close()
             raise
      
-    def db_lock_check(self):
-        #Check if lock file, throw error if so
-        self.settings.lock_location
-
-    def db_lock_register(self):
-        #Create the lock file
-        atexit.register(self.db_lock_unregister)
-        # self.settings.lock_location
-        
-    def db_lock_unregister(self):
-        #Remove the lock file
-        ...
-        # self.settings.lock_location        

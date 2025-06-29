@@ -104,9 +104,9 @@ class User(Base):
     myExports : Mapped[list[Export]]  = relationship(back_populates='myUser')
 
 
-Base.metadata.create_all(engine)
 
 if __name__ == '__main__':
+    Base.metadata.create_all(engine)
 
     _file  = File( id = 'Random_File_UUID' , hid = 'A_Unique_File' )
     _space = Space(id = 'Random_Space_UUID', hid = 'A_Unique_Space')
