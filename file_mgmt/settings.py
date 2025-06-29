@@ -1,7 +1,7 @@
 from typing import Any
 from contextvars import ContextVar
 from contextlib  import contextmanager
-from .settings_base import *
+from .settings_base import _context_variable_base, _settings_base
 
 class context:
     #Fugly structure, consider something cleaner
