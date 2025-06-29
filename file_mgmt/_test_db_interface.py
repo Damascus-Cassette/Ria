@@ -29,7 +29,7 @@ class _transaction():
 def transaction[T](func:T)->T:
     return _transaction(func)
 
-class repo_base():
+class repo_interface_base():
     context   : Any
     c_engine  : ContextVar
     c_session : ContextVar
@@ -39,17 +39,10 @@ class repo_base():
     @transaction
     def test(cls,c_attr):
         print(getattr(cls.context,c_attr).get())
-        #DO something in the db in session context
 
-class settings_standin():    
-    def __enter__(self):
-        yield self
-    def __exit__(self):
-        yield self
 
 class db_interface():
-
-    repo    : repo_base
+    repo    : repo_interface_base
     context : Any
 
     def __init__(self,settings):
@@ -58,17 +51,20 @@ class db_interface():
             setattr(self,k,v)
 
         class context:
-            ''' Constructed generic context var container. Consider as dict '''
+            ''' Constructed generic context var container, Local to class & child repos '''
             c_test    = ContextVar('test'    , default = None)
 
         self.context = context
         self.c_engine  = ContextVar('engine' , default = None)
         self.c_session = ContextVar('session', default = None)
 
-        session_manager = self._session_cm()
+        self.repo = self._construct_repo([repo_interface_base],context)
 
-        self.repo = type('repo_base', tuple([repo_base]) , { 'c_engine':self.c_engine, 'c_session':self.c_session, 'context':context})
-        _transaction.rewrap(self.repo,session_manager)
+    def _construct_repo(self,base_classes,context):
+        session_manager = self._session_cm()
+        ret = type('repo_base', tuple(base_classes) , {'db_interface':self, 'c_engine':self.c_engine, 'c_session':self.c_session, 'context':context}))
+        _transaction.rewrap(ret,session_manager)
+        return ret
 
     def _generic_cm(self,**cust_cvars):
 
