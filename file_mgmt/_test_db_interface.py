@@ -37,8 +37,11 @@ class repo_interface_base():
     base = None #used later
 
     @transaction
-    def test(cls,c_attr):
-        print(getattr(cls.context,c_attr).get())
+    def test(cls,c_attr=''):
+        print(cls.c_engine.get())
+        print(cls.c_session.get())
+        if c_attr:
+            print(getattr(cls.context,c_attr).get())
 
 
 class db_interface():
@@ -50,60 +53,60 @@ class db_interface():
         for k,v in settings.items():        #standin for setting items
             setattr(self,k,v)
 
-        class context:
-            ''' Constructed generic context var container, Local to class & child repos '''
-            c_test    = ContextVar('test'    , default = None)
-
-        self.context = context
+        self.context = self._construct_context({
+            'test':None,
+            })
+        
         self.c_engine  = ContextVar('engine' , default = None)
         self.c_session = ContextVar('session', default = None)
 
         self.repo = self._construct_repo([repo_interface_base],context)
 
+    def _construct_context(self,cvars:dict):
+        
+        items = {}
+        for k,v in cvars.items():
+            items[k] = ContextVar(k,default=v)
+
+        return type('context',tuple([object]),items)
+
     def _construct_repo(self,base_classes,context):
-        session_manager = self._session_cm()
-        ret = type('repo_base', tuple(base_classes) , {'db_interface':self, 'c_engine':self.c_engine, 'c_session':self.c_session, 'context':context}))
+        session_manager = self._session_cm
+        ret = type('repo_base', tuple(base_classes) , {'db_interface':self, 'c_engine':self.c_engine, 'c_session':self.c_session, 'context':context})
         _transaction.rewrap(ret,session_manager)
         return ret
 
-    def _generic_cm(self,**cust_cvars):
+    @contextmanager
+    def _generic_cm(self,**kwargs):
+        cust_tokens = {}
+        try:
+            for k,v in kwargs.items():
+                if isinstance((cvar:=getattr(self.context,k,None)),ContextVar):
+                    cust_tokens[k] = cvar.set(v)
+            yield
+        except:
+            raise
+        finally:
+            for k,v in cust_tokens.items():
+                cvar = getattr(self.context,k)
+                cvar.reset(v)
 
-        @contextmanager
-        def context_manager(*args,**kwargs):
-            cust_tokens = {}
-            try:
-                for k,v in cust_cvars.items():
-                    if isinstance((cvar:=getattr(self.context,k,None)),ContextVar):
-                        cust_tokens[k] = cvar.set(v)
-                yield
-            except:
-                raise
-            finally:
-                for k,v in cust_tokens.items():
-                    cvar = getattr(self.context,k)
-                    cvar.reset(v)
-
-        return context_manager
-        
-
-    def _session_cm(self):
-        @contextmanager
-        def session_manager(*args,**kwargs):
-            try:
-                t1 = self.c_engine.set('c_engine_something') 
-                t2 = self.c_session.set('c_session_something')
-                yield 
-            except:
-                raise
-            finally:
-                self.c_engine.reset(t1)
-                self.c_session.reset(t2) 
-        return session_manager
+    @contextmanager
+    def _session_cm(self,*args,**kwargs):
+        try:
+            t1 = self.c_engine.set('c_engine_something') 
+            t2 = self.c_session.set('c_session_something')
+            yield 
+        except:
+            raise
+        finally:
+            self.c_engine.reset(t1)
+            self.c_session.reset(t2) 
 
 dbi = db_interface({})
 
-# dbi.repo.make()
+dbi.repo.test()
 
-with dbi._generic_cm(c_test = 'customMessage')():
+with dbi._generic_cm(c_test = 'customMessage'):
     dbi.repo.test('c_test')
     
