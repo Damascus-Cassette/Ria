@@ -9,6 +9,9 @@ class vars():
     malformed_settings = os.path.join(this_dir,'test_resources/malformed_settings.yaml')
     good_settings      = os.path.join(this_dir,'test_resources/test_settings.yaml')
 
+@pytest.fixture()
+def loaded_db_interface():
+    return db_interface(settings_file=vars.good_settings)
 
 @pytest.mark.parametrize('path, expected',
         [
@@ -27,6 +30,6 @@ def test_load_settings(path,expected):
     if expected != passed_test:
         raise
 
-
-def test_load_db_interface():
-    db_interface(settings_file=vars.good_settings)
+def test_db_interface_repos(loaded_db_interface):
+    print(loaded_db_interface.test)
+    

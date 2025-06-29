@@ -14,6 +14,7 @@ c_engine  = ContextVar('engine'  , default=None)
 
 from .db_struct import User
 
+import typing
 
 @contextmanager
 def _transaction_context_manager(db_interface):
@@ -38,7 +39,7 @@ class _transaction():
 
     @classmethod
     def init_transactions(cls,repo_inst):
-        for k,v in repo_inst.__dict__().items():
+        for k,v in repo_inst.__dict__.items():
             if isinstance(v,cls):
                 v.container = repo_inst
 
@@ -48,6 +49,13 @@ class repo_baseclass():
     def __init__(self, db_interface):
         self.db_interface = db_interface
         _transaction.init_transactions(self)
+
+    @property
+    def session(self):
+        return c_session.get()
+    @property
+    def engine(self):
+        return c_engine.get()
     
     @transaction
     def create(self,data=None,**kwargs)->base:
@@ -84,12 +92,6 @@ class repo_baseclass():
     def delete(self,obj)->None:
         self.session.delete(obj)
     
-    @property
-    def session(self):
-        return c_session.get()
-    @property
-    def engine(self):
-        return c_engine.get()
 
 class repo_testclass(repo_baseclass):
     base = User
@@ -101,7 +103,8 @@ class repo_testclass(repo_baseclass):
 class db_interface():
     ''' Interface for managing the file database directly. Each instance is a locked session with a specific db. DBs should not have overlapping cached files '''
     
-    test:repo_testclass
+    test : repo_testclass
+
 
     def __init__(self,settings_file:dict|None=None,**kwargs):
         
@@ -111,6 +114,17 @@ class db_interface():
             self.settings.load_file(settings_file)
         else:
             self.settings.set_attributes(kwargs)
+
+        for k,th in self.__anno_resolved__.items():
+            i = getattr(self,k,None)
+            if issubclass(th,repo_baseclass) and not i:
+                setattr(self,k,th(self))
+
+    @property
+    def __anno_resolved__(self):
+        if not hasattr(self,'__anno_resolved_cache__'):
+            self.__anno_resolved_cache__ = typing.get_type_hints(self)
+        return self.__anno_resolved_cache__
 
     def start_session(self):
         self.db_lock_check()
