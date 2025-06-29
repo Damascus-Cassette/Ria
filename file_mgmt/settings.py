@@ -14,7 +14,7 @@ class _standin_context:
 
 class _settings_base:
     ''' dataclass that interprets a settings_object or custom start, holds initialized repos '''
-    context = context
+    context = _standin_context
 
     imported_keys : list[str] = []#keys corrisponding to values that have been imported
 
@@ -144,17 +144,34 @@ class _context_variable_base(_settings_base):
 
         return f'< Context_Varaible Object: {injection}>'
 
+
+##################  ##################
+## Seperation of base and inherited ##
+##################  ##################
+#TODO: Consider moving to seperate file.
+
+
+
 class context:
     #Fugly structure, consider something cleaner
     platform : ContextVar = ContextVar('platform',default = 'default') 
-    
-    @classmethod
-    def set(cls,**kwargs):
+
+
+@contextmanager
+def settings_context(**kwargs):
+    tokens = {}
+    try:
         for k,v in kwargs.items():
-            if (cvar:=getattr(cls,k,None)):
-                cvar.set(v)
+            if (cvar:=getattr(context,k,None)):
+                tokens[k] = cvar.set(v)
             else:
                 raise Exception(f"Context could not be set for key {k} of value {v}")
+            yield
+    finally:
+        for k,v in tokens.items():
+            cvar = getattr(context,k,None)
+            cvar.reset(v)
+
 
 class platform_context_variable(_context_variable_base):
     context = context
@@ -162,7 +179,7 @@ class platform_context_variable(_context_variable_base):
     _d_attr = 'default'
     _keys   = ['default','windows','linux']
 
-    default : str
+    default = './face_default/'
     windows : str
     linux   : str
 
