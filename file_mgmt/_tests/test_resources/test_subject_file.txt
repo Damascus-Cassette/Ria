@@ -1,0 +1,1 @@
+This file is meant to be copied, then uploaded to the database, replaced with a symlink and compared against the original

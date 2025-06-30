@@ -3,6 +3,7 @@ import os
 
 this_dir           = os.path.split(__file__)[0]
 good_settings      = os.path.join(this_dir,'test_resources/test_settings.yaml')
+test_resources     = os.path.join(this_dir,'test_resources')
 
 from ..db_interface  import db_interface,settings_interface
 
@@ -82,6 +83,12 @@ def test_session_basic(_db_interface:db_interface):
         assert not session.query(repo_user.base).filter_by(id='IDname2').all()
         assert     session.query(repo_user.base).filter_by(id='IDname202').all()
 
+
+def test_db_file_upload():
+    
+    ...
+# def test_db_space_upload():
+#     ...
 
 # def test_db_userrepo(_db_interface:db_interface):
 #     cls = _db_interface.user_repo
