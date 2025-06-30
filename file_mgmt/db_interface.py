@@ -1,86 +1,69 @@
-from .db_struct import (asc_Space_NamedFile, asc_Space_NamedSpace, File, Space, Export, Session, User)
-import atexit
-from sqlalchemy import create_engine
-
-from contextlib import contextmanager
+from typing      import Any,TypeAlias,get_type_hints
+from contextlib  import contextmanager
 from contextvars import ContextVar
-from functools import wraps
+from functools   import wraps
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
+
 from .settings import settings_interface
 
-from typing import TypeAlias
+from .db_struct import User,Base
 
-c_session = ContextVar('session' , default=None)
-c_engine  = ContextVar('engine'  , default=None)
-
-from .db_struct import User
-
-import typing
-
-@contextmanager
-def _transaction_context_manager(db_interface):
-    ''' Temporarly set session & engine within context of execution'''
-    db_interface.ensure_c_engine()
-    db_interface.ensure_c_session()
-    yield
-
-def transaction[F](func:F)->F:
-    return _transaction(func)
 
 class _transaction():
-    def __init__[F](self, func:F)->F:
-        self.func         = func
-        self.container = None
+    ''' Placeholder and re-wrap on db_interface init'''
 
-    def __call__(self,*args,**kwargs):
-        assert self.container
-        with _transaction_context_manager(self.container.db_interface):
-            # self.container.db_interface.ensure_c_engine()
-            # self.container.db_interface.ensure_c_session()
-
-            val = self.func(self.container,*args,**kwargs)
-        return val
+    def __init__(self, func):
+        self.func = func
     
     @classmethod
-    def init_transactions(cls,repo_inst):
-        for k in dir(repo_inst):
-            v = getattr(repo_inst,k)
-            if isinstance(v,cls):
-                v.container = repo_inst
+    def rewrap(cls, t_cls, context_func):
+        for k in dir(t_cls):
+            if isinstance(var := getattr(t_cls,k), cls):
+                new_func = cls.makefunc(t_cls,var.func,context_func)
+                setattr(t_cls, k, new_func)
 
-class repo_baseclass():
+    @staticmethod
+    def makefunc(housing_class, func, context_func):
+        @wraps(func)
+        def new_func(*args,**kwargs):
+            with context_func():
+                return func(housing_class,*args,**kwargs)
+        return new_func
+
+def transaction[T](func:T)->T:
+    return _transaction(func)
+
+class repo_interface_base():
+    context   : Any
+    c_engine  : ContextVar
+    c_session : ContextVar
+
     base : TypeAlias = None
 
-    def __init__(self, db_interface):
-        self.db_interface = db_interface
-        _transaction.init_transactions(self)
-
-    @property
-    def session(self):
-        return c_session.get()
-    @property
-    def engine(self):
-        return c_engine.get()
-    
     @transaction
-    def create(self,data=None,**kwargs)->base:
+    def create(cls,obj = None,data=None, **kwargs)->base:
+        session = cls.c_session.get()
         if not data:
             data = {}
         data = data|kwargs
         
-        inst = self.base()
+        if not obj:
+            obj = cls.base()        
 
         for k,v in data.items():
-            assert hasattr(inst,k)
-            setattr(inst,k,v)
-            #TODO: Raise custom exceptions!
+            assert hasattr(obj,k)
+            setattr(obj,k,v)
 
-        print(self.session)
-        self.session.add(inst)
+        session.add(obj)
 
-        return inst
+        return obj
 
     @transaction
-    def update(self,obj:base,data=None,**kwargs)->base:
+    def update(cls,obj:base,data=None,**kwargs)->base:
+        session = cls.c_session.get()
+
         if not data:
             data = {}
         data = data|kwargs
@@ -88,114 +71,151 @@ class repo_baseclass():
         for k,v in data.items(): 
             assert hasattr(obj,k)
             setattr(obj,k,v)
-            #TODO: Raise custom exceptions!
-
-        # self.session.flush()
         return obj
     
     @transaction
-    def delete(self,obj)->None:
-        self.session.delete(obj)
-    
+    def delete(cls,obj)->None:
+        session = cls.c_session.get()
+        session.delete(obj)
 
+    @classmethod
+    def echo_context(cls,c_attr)->str:
+        return getattr(cls.context,c_attr,None).get()
+
+class user_repo(repo_interface_base):
+    base = User
 
 
 class db_interface():
-    ''' Interface for managing the file database directly. Each instance is a locked session with a specific db. DBs should not have overlapping cached files '''
-    
-    engine  = None
-    session = None
+    _repo_base : repo_interface_base
+    user_repo  : user_repo 
 
-    # test : repo_testclass
+    context : Any
 
-    def __init__(self,settings_file:dict|None=None,**kwargs):
+    def __init__(self,settings:dict|str):
+
+        self.context = self._construct_context({
+            'platform':'default',
+            })
+        self.c_engine    = ContextVar('engine' ,   default = None)
+        self.c_session   = ContextVar('session',   default = None)
+        self.c_savepoint = ContextVar('savepoint', default = None)
         
-        self.settings = settings_interface()
+        self._load_settings(settings)
+        self._load_db()
 
-        if settings_file:
-            self.settings.load_file(settings_file)
+        self._construct_repos_from_anno()
+    
+    def _load_settings(self,settings):
+        if isinstance(settings,str):
+            self.settings = settings_interface(override_context=self.context)
+            self.settings.load_file(settings)
         else:
-            self.settings.set_attributes(kwargs)
+            self.settings = settings_interface(values=settings,override_context=self.context)
+        
+    def _load_db(self):
+        # self.settings.fetch(value-uid)
+        db_p = self.settings.database.database_fp
+        self.engine = create_engine(db_p)
+        Base.metadata.create_all(self.engine)
 
+        return self.c_engine.set(self.engine)
+    
+
+        # if not self._db_check_lock(force):
+        #     self._db_register_lock(use_atexit=True)
+        # else:
+        #     raise Exception('')
+    # def _db_check_lock(self)->bool:
+    #     ''' check if lock apart from current thread exists in database. If so no transaction can complete unless forced '''
+    # def _db_register_lock(self,use_atexit)->None:
+    #     ''' Register lock, add atexit command for removal of lock'''
+    #     import atexit
+    # def _db_unregister_lock(self)->None:
+    #     ...
+
+    def _construct_repos_from_anno(self):
         for k,th in self.__anno_resolved__.items():
             i = getattr(self,k,None)
-            if issubclass(th,repo_baseclass) and not i:
-                setattr(self,k,th(self))
+            if issubclass(th,repo_interface_base) and not i:
+                new_cls = self._construct_repo([th],self.context)
+                setattr(self,k,new_cls)
 
+    def _construct_context(self,cvars:dict):
+        items = {}
+        for k,v in cvars.items():
+            items[k] = ContextVar(k,default=v)
+
+        return type('context',tuple([object]),items)
+
+    def _construct_repo(self,base_classes,context):
+        session_manager = self.session_cm
+        ret = type('repo_base', tuple(base_classes) , {
+            'db_interface' : self, 
+            'c_engine'     : self.c_engine, 
+            'c_session'    : self.c_session,
+            'c_savepoint'  : self.c_savepoint, 
+            'context'      : context
+            })
+        _transaction.rewrap(ret,session_manager)
+        return ret
 
     @property
     def __anno_resolved__(self):
         if not hasattr(self,'__anno_resolved_cache__'):
-            self.__anno_resolved_cache__ = typing.get_type_hints(self.__class__)
+            self.__anno_resolved_cache__ = get_type_hints(self.__class__)
         return self.__anno_resolved_cache__
 
+    @contextmanager
+    def generic_cm(self,**kwargs):
+        cust_tokens = {}
+        try:
+            for k,v in kwargs.items():
+                if isinstance((cvar:=getattr(self.context,k,None)),ContextVar):
+                    cust_tokens[k] = cvar.set(v)
+            yield
+        except:
+            raise
+        finally:
+            for k,v in cust_tokens.items():
+                cvar = getattr(self.context,k)
+                cvar.reset(v)
 
-    def __enter__(self):
-        self.start_session()
-    def start_session(self):
-        # self.db_lock_check()
-        # self.db_lock_register()
-        ...
-        
-    def __exit__(self):
-        self.exit_session()
-    def close_session(self):
-        # self.db_lock_unregister()
-        ...
+    @contextmanager
+    def session_cm(self,*args,**kwargs):
+        if not getattr(self,'engine',None):
+            self._load_db()
 
-    # def db_lock_check(self):
-    #     #Check if lock file, throw error if so
-    #     self.settings.lock_location
+        if not self.c_session.get():
+            self.c_session.set(Session(bind=self.engine, expire_on_commit = True))
+            print('Creating Session!')
 
-    # def db_lock_register(self):
-    #     #Create the lock file
-    #     atexit.register(self.db_lock_unregister)
-    #     # self.settings.lock_location
-        
-    # def db_lock_unregister(self):
-    #     #Remove the lock file
-    #     ...
-    #     # self.settings.lock_location        
-
-    def ensure_c_engine(self):
-        ''' ensure root engine exists and is assigned to contextVar c_engine '''
-        if not self.engine:
-            self.engine = create_engine(self.settings.database.database_fp)        
-        c_engine.set(self.engine)
-        return c_engine.get()
-
-    def ensure_c_session(self):
-        ''' create root session if it doesnt and set to self.session. If it does exist create nested session. return current session obj '''
-        #Much of this is similar to transaction in examples of: https://ryan-zheng.medium.com/simplifying-database-interactions-in-python-with-the-repository-pattern-and-sqlalchemy-22baecae8d84
-
-        if not self.engine:
-            self.engine = self.ensure_c_engine()
-
-        if not c_session.get():
-            c_session.set(self.engine.Session(bind=self.engine, keep_post_commit = True))
-
-        session        = c_session.get()
+        session        = self.c_session.get()
         in_transaction = session.in_transaction()
-        try: 
-            #Yield session object(even if nested), then commit and close
+
+        try:
             if in_transaction:
-                _session = c_session.get().begin_nested()
-                yield _session
-                _session.commit()
-                c_session.set(None)
+                _savepoint = session.begin_nested()
+                token1 = self.c_session.set(session)
+                token2 = self.c_savepoint.set(_savepoint)
+                # token = self.c_session.set(_session)
+                yield session
+                _savepoint.commit()
             else:
                 yield session
                 session.commit()
-                session.close()     
-                #if not nested, close session
-
+                session.close()
+                self.c_session.set(None)
         except:
-            #Undo and do not commit changes
             if in_transaction:
-                _session.rollback() 
-                c_session.set(None)
+                _savepoint.rollback() 
             else:
                 session.rollback()  
                 session.close()
+                self.c_session.set(None)
             raise
-     
+
+        finally:
+            if in_transaction:
+                self.c_session.reset(token1) 
+                self.c_savepoint.reset(token2) 
