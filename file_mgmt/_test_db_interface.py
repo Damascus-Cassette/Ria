@@ -3,6 +3,8 @@ from contextlib  import contextmanager
 from contextvars import ContextVar
 from functools   import wraps
 
+from sqlalchemy import create_engine
+
 from .settings import settings_interface
 
 class _transaction():
@@ -83,19 +85,38 @@ class db_interface():
         self.context = self._construct_context({
             'platform':'default',
             })
+        self.c_engine  = ContextVar('engine' , default = None)
+        self.c_session = ContextVar('session', default = None)
         
+        self._load_settings(settings)
+        self._load_db()
+
+        self._construct_repos_from_anno()
+    
+    def _load_settings(self,settings):
         if isinstance(settings,str):
             self.settings = settings_interface(override_context=self.context)
             self.settings.load_file(settings)
         else:
             self.settings = settings_interface(values=settings,override_context=self.context)
-
-        #consider putting off context joining somehow, perhaps with classproperties on all involved?
         
-        self.c_engine  = ContextVar('engine' , default = None)
-        self.c_session = ContextVar('session', default = None)
+    def _load_db(self):
+        # self.settings.fetch(value-uid)
+        db_p = self.settings.database.database_fp
+        self.engine = create_engine(db_p)
+        self.c_engine.set(self.engine)
 
-        self._construct_repos_from_anno()
+        # if not self._db_check_lock(force):
+        #     self._db_register_lock(use_atexit=True)
+        # else:
+        #     raise Exception('')
+    # def _db_check_lock(self)->bool:
+    #     ''' check if lock apart from current thread exists in database. If so no transaction can complete unless forced '''
+    # def _db_register_lock(self,use_atexit)->None:
+    #     ''' Register lock, add atexit command for removal of lock'''
+    #     import atexit
+    # def _db_unregister_lock(self)->None:
+    #     ...
 
     def _construct_repos_from_anno(self):
         for k,th in self.__anno_resolved__.items():
@@ -140,7 +161,7 @@ class db_interface():
 
     @contextmanager
     def session_cm(self,*args,**kwargs):
-        try:
+        try:    
             t1 = self.c_engine.set('c_engine_something') 
             t2 = self.c_session.set('c_session_something')
             yield 
