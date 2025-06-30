@@ -8,11 +8,11 @@ from contextlib  import contextmanager
 missing_flag = '<! MISSING REQUIRED VALUE !>'
     #Consider adding type to missing value
 
-class _standin_context:
-    value : ContextVar = ContextVar('value',default = 'default') 
+class _standin_context: ...
 
+class _common_root: ...
 
-class _settings_base:
+class _settings_base(_common_root):
     ''' dataclass that interprets a settings_object or custom start, holds initialized repos '''
     context = _standin_context
 
@@ -22,12 +22,14 @@ class _settings_base:
 
     strict = True           #Settings base, consider _tracked_attributes list?
 
-    def __init__(self, values:dict|None=None):
+    def __init__(self, values:dict|None=None, override_context=None):
+        if override_context:
+            self.context = override_context 
         if values:
             self.set_attributes(values)
         else:
             ... #Is placeholder!
-
+            
     def export_dict_recur(self,export_defaults=False)->dict:
         ''' Export yaml recursivly w/a based on hasattr(self,k,export_dict_recur). Otherwise record straight (Non strict) '''
         self.ensure_type_hints()
@@ -84,9 +86,13 @@ class _settings_base:
             if k in self.__anno_resolved__.keys():
                 ty = self.__anno_resolved__[k]
                 try:
-                    setattr(self,k,ty(v))
-                except:
-                    raise Exception(f'Key "{k}" with value "{v}" was not about to be converted!')
+                    if issubclass(ty,_common_root):
+                        setattr(self,k,ty(v,override_context=self.context))
+                    else: 
+                        setattr(self,k,ty(v))
+                except Exception as e:
+                    raise e
+                    # raise Exception(f'Key "{k}" with value "{v}" was not able to be converted!')
             else:
                 raise Exception(f'Key "{k}" is not defined in the settings_interface! Perhaps you ment to have it as a sub object variable?')
         
@@ -122,7 +128,10 @@ class _context_variable_base(_settings_base):
     _keys   : list = ['default']
     
     #Consider complex version as a grid matrix, or chained dicts
-    def __init__(self, values:str|dict):
+    def __init__(self, values:str|dict,override_context=None):
+        if override_context:
+            self.context = override_context
+
         if isinstance(values,str):
             for k in self._keys:
                 setattr(self,k,values)

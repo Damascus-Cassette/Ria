@@ -1,8 +1,9 @@
-from contextvars import ContextVar
+from typing      import Any,TypeAlias,get_type_hints
 from contextlib  import contextmanager
+from contextvars import ContextVar
 from functools   import wraps
-from typing      import Any
-# from contextlib  import contextmanager
+
+from .settings import settings_interface
 
 class _transaction():
     ''' Placeholder and re-wrap on db_interface init'''
@@ -15,7 +16,6 @@ class _transaction():
         for k in dir(t_cls):
             if isinstance(var := getattr(t_cls,k), cls):
                 new_func = cls.makefunc(t_cls,var.func,context_func)
-                print(t_cls, k, new_func)
                 setattr(t_cls, k, new_func)
 
     @staticmethod
@@ -34,36 +34,77 @@ class repo_interface_base():
     c_engine  : ContextVar
     c_session : ContextVar
 
-    base = None #used later
+    base : TypeAlias = None
 
     @transaction
-    def test(cls,c_attr=''):
-        print(cls.c_engine.get())
-        print(cls.c_session.get())
-        if c_attr:
-            print(getattr(cls.context,c_attr).get())
+    def create(cls,data=None,**kwargs)->base:
+        if not data:
+            data = {}
+        data = data|kwargs
+        
+        inst = cls.base()
+
+        for k,v in data.items():
+            assert hasattr(inst,k)
+            setattr(inst,k,v)
+
+        cls.session.add(inst)
+
+        return inst
+
+    @transaction
+    def update(cls,obj:base,data=None,**kwargs)->base:
+        if not data:
+            data = {}
+        data = data|kwargs
+
+        for k,v in data.items(): 
+            assert hasattr(obj,k)
+            setattr(obj,k,v)
+
+        return obj
+    
+    @transaction
+    def delete(cls,obj)->None:
+        cls.session.delete(obj)
+
+    @classmethod
+    def echo_context(cls,c_attr)->str:
+        return getattr(cls.context,c_attr,None).get()
+
 
 
 class db_interface():
-    repo    : repo_interface_base
+    _repo_base : repo_interface_base
     context : Any
 
-    def __init__(self,settings):
-
-        for k,v in settings.items():        #standin for setting items
-            setattr(self,k,v)
+    def __init__(self,settings:dict|str):
 
         self.context = self._construct_context({
-            'c_test':None,
+            'platform':'default',
             })
+        
+        if isinstance(settings,str):
+            self.settings = settings_interface(override_context=self.context)
+            self.settings.load_file(settings)
+        else:
+            self.settings = settings_interface(values=settings,override_context=self.context)
+
+        #consider putting off context joining somehow, perhaps with classproperties on all involved?
         
         self.c_engine  = ContextVar('engine' , default = None)
         self.c_session = ContextVar('session', default = None)
 
-        self.repo = self._construct_repo([repo_interface_base], self.context)
+        self._construct_repos_from_anno()
+
+    def _construct_repos_from_anno(self):
+        for k,th in self.__anno_resolved__.items():
+            i = getattr(self,k,None)
+            if issubclass(th,repo_interface_base) and not i:
+                new_cls = self._construct_repo([th],self.context)
+                setattr(self,k,new_cls)
 
     def _construct_context(self,cvars:dict):
-        
         items = {}
         for k,v in cvars.items():
             items[k] = ContextVar(k,default=v)
@@ -71,13 +112,19 @@ class db_interface():
         return type('context',tuple([object]),items)
 
     def _construct_repo(self,base_classes,context):
-        session_manager = self._session_cm
+        session_manager = self.session_cm
         ret = type('repo_base', tuple(base_classes) , {'db_interface':self, 'c_engine':self.c_engine, 'c_session':self.c_session, 'context':context})
         _transaction.rewrap(ret,session_manager)
         return ret
 
+    @property
+    def __anno_resolved__(self):
+        if not hasattr(self,'__anno_resolved_cache__'):
+            self.__anno_resolved_cache__ = get_type_hints(self.__class__)
+        return self.__anno_resolved_cache__
+
     @contextmanager
-    def _generic_cm(self,**kwargs):
+    def generic_cm(self,**kwargs):
         cust_tokens = {}
         try:
             for k,v in kwargs.items():
@@ -92,7 +139,7 @@ class db_interface():
                 cvar.reset(v)
 
     @contextmanager
-    def _session_cm(self,*args,**kwargs):
+    def session_cm(self,*args,**kwargs):
         try:
             t1 = self.c_engine.set('c_engine_something') 
             t2 = self.c_session.set('c_session_something')
@@ -102,11 +149,3 @@ class db_interface():
         finally:
             self.c_engine.reset(t1)
             self.c_session.reset(t2) 
-
-dbi = db_interface({})
-
-dbi.repo.test()
-
-with dbi._generic_cm(c_test = 'customMessage'):
-    dbi.repo.test('c_test')
-    

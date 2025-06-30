@@ -3,7 +3,7 @@ from contextvars import ContextVar
 from contextlib  import contextmanager
 from .settings_base import _context_variable_base, _settings_base
 
-class context:
+class _context:
     #Fugly structure, consider something cleaner
     platform : ContextVar = ContextVar('platform',default = 'default') 
 
@@ -25,7 +25,7 @@ def settings_context(**kwargs):
 
 
 class platform_context_variable(_context_variable_base):
-    context = context
+    context = _context
     _c_attr = 'platform'
     _d_attr = 'default'
     _keys   = ['default','windows','linux']
@@ -37,7 +37,7 @@ class platform_context_variable(_context_variable_base):
 pcv = platform_context_variable
 
 class db_info(_settings_base):
-    context = context
+    context = _context
     database_fp   : str
     cache_dir     : str = './cache/'
     logging_dir   : str = './logs/'
@@ -45,9 +45,11 @@ class db_info(_settings_base):
     facing_dir    : pcv = pcv({'windows':'./face_win/','linux':'./face_linux/'})    #converted on import
 
 class settings_interface(_settings_base):
-    context = context
     strict = False
     database : db_info = db_info()
+
+    
+
 
 
 if __name__ == '__main__':
