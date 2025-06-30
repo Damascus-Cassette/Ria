@@ -1,6 +1,6 @@
 database:
   cache_dir: ./cache/
-  database_fp: "sqlite:///:memory:"
+  database_fp: "sqlite:///"
   facing_dir:
     linux: ./face_linux/
     windows: ./face_win/

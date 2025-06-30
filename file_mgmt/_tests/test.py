@@ -50,3 +50,13 @@ def test_db_settings_context_echo(_db_interface:db_interface,attr,value,expects,
 
         if not (ret == expects) == succeed:
             raise Exception(f'Context Echo Failed! Key:{attr} Expected:{value} Got:{ret}')
+
+def test_db_userrepo(_db_interface:db_interface):
+    cls = _db_interface.user_repo
+    with _db_interface.session_cm() as session:
+        # session == cls.c_session.get()
+        obj = cls.create(id = 'Username', hid = 'Wrongname')
+        print(obj)
+        assert not session.query(cls.base).filter_by(hid='RightName').all()
+        cls.update(obj,hid='Rightname')
+        assert session.query(cls.base).filter_by(hid='RightName').all()

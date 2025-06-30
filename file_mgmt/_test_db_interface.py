@@ -4,8 +4,12 @@ from contextvars import ContextVar
 from functools   import wraps
 
 from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 
 from .settings import settings_interface
+
+from .db_struct import User,Base
+
 
 class _transaction():
     ''' Placeholder and re-wrap on db_interface init'''
@@ -25,7 +29,7 @@ class _transaction():
         @wraps(func)
         def new_func(*args,**kwargs):
             with context_func():
-                v = func(housing_class,*args,**kwargs)
+                return func(housing_class,*args,**kwargs)
         return new_func
 
 def transaction[T](func:T)->T:
@@ -40,22 +44,27 @@ class repo_interface_base():
 
     @transaction
     def create(cls,data=None,**kwargs)->base:
+        session = cls.c_session.get()
         if not data:
             data = {}
         data = data|kwargs
         
-        inst = cls.base()
+        obj = cls.base()        
 
         for k,v in data.items():
-            assert hasattr(inst,k)
-            setattr(inst,k,v)
+            assert hasattr(obj,k)
+            setattr(obj,k,v)
 
-        cls.session.add(inst)
+        session.add(obj)
+        # session.flush()
+        session.refresh(obj)
 
-        return inst
+        return obj
 
     @transaction
     def update(cls,obj:base,data=None,**kwargs)->base:
+        session = cls.c_session.get()
+
         if not data:
             data = {}
         data = data|kwargs
@@ -64,20 +73,30 @@ class repo_interface_base():
             assert hasattr(obj,k)
             setattr(obj,k,v)
 
+        session.refresh(obj)
+        # session.flush()
+        
         return obj
     
     @transaction
     def delete(cls,obj)->None:
-        cls.session.delete(obj)
+        session = cls.c_session.get()
+        session.delete(obj)
+        session.refresh()
+        # session.flush()
 
     @classmethod
     def echo_context(cls,c_attr)->str:
         return getattr(cls.context,c_attr,None).get()
 
+class user_repo(repo_interface_base):
+    base = User
 
 
 class db_interface():
     _repo_base : repo_interface_base
+    user_repo  : user_repo 
+
     context : Any
 
     def __init__(self,settings:dict|str):
@@ -104,7 +123,10 @@ class db_interface():
         # self.settings.fetch(value-uid)
         db_p = self.settings.database.database_fp
         self.engine = create_engine(db_p)
-        self.c_engine.set(self.engine)
+        Base.metadata.create_all(self.engine)
+
+        return self.c_engine.set(self.engine)
+    
 
         # if not self._db_check_lock(force):
         #     self._db_register_lock(use_atexit=True)
@@ -161,12 +183,34 @@ class db_interface():
 
     @contextmanager
     def session_cm(self,*args,**kwargs):
-        try:    
-            t1 = self.c_engine.set('c_engine_something') 
-            t2 = self.c_session.set('c_session_something')
-            yield 
+        if not getattr(self,'engine',None):
+            self._load_db()
+
+        if not self.c_session.get():
+            ## May have to strip this context value if I'm to close the session
+            self.c_session.set(Session(bind=self.engine, expire_on_commit = True))
+
+        session        = self.c_session.get()
+        in_transaction = session.in_transaction()
+
+        try:
+            if in_transaction:
+                _session = session.begin_nested()
+                t2 = self.c_session.set(_session)
+                yield _session
+                _session.commit()
+            else:
+                yield session
+                session.commit()
+                # session.close()
         except:
+            if in_transaction:
+                _session.rollback() 
+            else:
+                session.rollback()  
+                session.close()
             raise
+
         finally:
-            self.c_engine.reset(t1)
-            self.c_session.reset(t2) 
+            if in_transaction:
+                self.c_session.reset(t2) 
