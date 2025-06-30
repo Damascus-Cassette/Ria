@@ -54,13 +54,13 @@ class db_interface():
             setattr(self,k,v)
 
         self.context = self._construct_context({
-            'test':None,
+            'c_test':None,
             })
         
         self.c_engine  = ContextVar('engine' , default = None)
         self.c_session = ContextVar('session', default = None)
 
-        self.repo = self._construct_repo([repo_interface_base],context)
+        self.repo = self._construct_repo([repo_interface_base], self.context)
 
     def _construct_context(self,cvars:dict):
         
