@@ -54,7 +54,6 @@ def test_db_settings_context_echo(_db_interface:db_interface,attr,value,expects,
 def test_session_basic(_db_interface:db_interface):
     user_repo = _db_interface.user_repo
     with _db_interface.session_cm() as session:
-    # with Session.begin() as session:
         u1 = user_repo.base()
         u1.id  = 'IDname1'
         
@@ -66,30 +65,22 @@ def test_session_basic(_db_interface:db_interface):
         
         session.add(u1)
 
-        nested = session.begin_nested()  # establish a savepoint
-        session.add(u2)
-        nested.commit()
+        user_repo.create(u2)
 
-        nested = session.begin_nested()  # establish a savepoint
+        _savepoint = session.begin_nested()  # establish a savepoint
         session.add(u3)
-        nested.rollback()  # rolls back u3, keeps u1 and u2
+        _savepoint.rollback() 
 
         assert     session.query(user_repo.base).filter_by(id='IDname1').all()
         assert     session.query(user_repo.base).filter_by(id='IDname2').all()
         assert not session.query(user_repo.base).filter_by(id='IDname3').all()
 
-        # user_repo.delete(u1)
-        # user_repo.delete(u2)
-
-        nested = session.begin_nested()  # establish a savepoint
-        session.delete(u1)
-        session.delete(u2)
-        nested.commit()
+        user_repo.delete(u1)
+        user_repo.update(u2,id='IDname202')
 
         assert not session.query(user_repo.base).filter_by(id='IDname1').all()
         assert not session.query(user_repo.base).filter_by(id='IDname2').all()
-
-
+        assert     session.query(user_repo.base).filter_by(id='IDname202').all()
 
 
 # def test_db_userrepo(_db_interface:db_interface):

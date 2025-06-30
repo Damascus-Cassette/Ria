@@ -43,7 +43,7 @@ class repo_interface_base():
     base : TypeAlias = None
 
     @transaction
-    def create(cls,obj = None, **kwargs)->base:
+    def create(cls,obj = None,data=None, **kwargs)->base:
         session = cls.c_session.get()
         if not data:
             data = {}
@@ -77,7 +77,6 @@ class repo_interface_base():
     def delete(cls,obj)->None:
         session = cls.c_session.get()
         session.delete(obj)
-        session.refresh()
 
     @classmethod
     def echo_context(cls,c_attr)->str:
@@ -98,8 +97,9 @@ class db_interface():
         self.context = self._construct_context({
             'platform':'default',
             })
-        self.c_engine  = ContextVar('engine' , default = None)
-        self.c_session = ContextVar('session', default = None)
+        self.c_engine    = ContextVar('engine' ,   default = None)
+        self.c_session   = ContextVar('session',   default = None)
+        self.c_savepoint = ContextVar('savepoint', default = None)
         
         self._load_settings(settings)
         self._load_db()
@@ -150,7 +150,13 @@ class db_interface():
 
     def _construct_repo(self,base_classes,context):
         session_manager = self.session_cm
-        ret = type('repo_base', tuple(base_classes) , {'db_interface':self, 'c_engine':self.c_engine, 'c_session':self.c_session, 'context':context})
+        ret = type('repo_base', tuple(base_classes) , {
+            'db_interface' : self, 
+            'c_engine'     : self.c_engine, 
+            'c_session'    : self.c_session,
+            'c_savepoint'  : self.c_savepoint, 
+            'context'      : context
+            })
         _transaction.rewrap(ret,session_manager)
         return ret
 
@@ -189,12 +195,12 @@ class db_interface():
 
         try:
             if in_transaction:
-                _session = session.begin_nested()
-                token = self.c_session.set(_session)
-                # yield _session
+                _savepoint = session.begin_nested()
+                token1 = self.c_session.set(session)
+                token2 = self.c_savepoint.set(_savepoint)
+                # token = self.c_session.set(_session)
                 yield session
-                _session.commit()
-                # _session.close()
+                _savepoint.commit()
             else:
                 yield session
                 session.commit()
@@ -202,7 +208,7 @@ class db_interface():
                 self.c_session.set(None)
         except:
             if in_transaction:
-                _session.rollback() 
+                _savepoint.rollback() 
             else:
                 session.rollback()  
                 session.close()
@@ -211,4 +217,5 @@ class db_interface():
 
         finally:
             if in_transaction:
-                self.c_session.reset(token) 
+                self.c_session.reset(token1) 
+                self.c_savepoint.reset(token2) 
