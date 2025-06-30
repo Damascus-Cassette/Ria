@@ -22,7 +22,7 @@ from .db_repo        import (
 
 class db_interface():  
     _repo_base      : repo_interface_base
-    user_repo       : repo_user
+    repo_user       : repo_user
     repo_NamedFile  : repo_NamedFile 
     repo_NamedSpace : repo_NamedSpace 
     repo_File       : repo_File 

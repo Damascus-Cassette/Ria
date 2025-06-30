@@ -4,7 +4,7 @@ import os
 this_dir           = os.path.split(__file__)[0]
 good_settings      = os.path.join(this_dir,'test_resources/test_settings.yaml')
 
-from .._test_db_interface  import db_interface,settings_interface
+from ..db_interface  import db_interface,settings_interface
 
 @pytest.fixture
 def _settings():
@@ -52,35 +52,35 @@ def test_db_settings_context_echo(_db_interface:db_interface,attr,value,expects,
             raise Exception(f'Context Echo Failed! Key:{attr} Expected:{value} Got:{ret}')
 
 def test_session_basic(_db_interface:db_interface):
-    user_repo = _db_interface.user_repo
+    repo_user = _db_interface.repo_user
     with _db_interface.session_cm() as session:
-        u1 = user_repo.base()
+        u1 = repo_user.base()
         u1.id  = 'IDname1'
         
-        u2 = user_repo.base()
+        u2 = repo_user.base()
         u2.id  = 'IDname2'
         
-        u3 = user_repo.base()
+        u3 = repo_user.base()
         u3.id  = 'IDname3'
         
         session.add(u1)
 
-        user_repo.create(u2)
+        repo_user.create(u2)
 
         _savepoint = session.begin_nested()  # establish a savepoint
         session.add(u3)
         _savepoint.rollback() 
 
-        assert     session.query(user_repo.base).filter_by(id='IDname1').all()
-        assert     session.query(user_repo.base).filter_by(id='IDname2').all()
-        assert not session.query(user_repo.base).filter_by(id='IDname3').all()
+        assert     session.query(repo_user.base).filter_by(id='IDname1').all()
+        assert     session.query(repo_user.base).filter_by(id='IDname2').all()
+        assert not session.query(repo_user.base).filter_by(id='IDname3').all()
 
-        user_repo.delete(u1)
-        user_repo.update(u2,id='IDname202')
+        repo_user.delete(u1)
+        repo_user.update(u2,id='IDname202')
 
-        assert not session.query(user_repo.base).filter_by(id='IDname1').all()
-        assert not session.query(user_repo.base).filter_by(id='IDname2').all()
-        assert     session.query(user_repo.base).filter_by(id='IDname202').all()
+        assert not session.query(repo_user.base).filter_by(id='IDname1').all()
+        assert not session.query(repo_user.base).filter_by(id='IDname2').all()
+        assert     session.query(repo_user.base).filter_by(id='IDname202').all()
 
 
 # def test_db_userrepo(_db_interface:db_interface):
