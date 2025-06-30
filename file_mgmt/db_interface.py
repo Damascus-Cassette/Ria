@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 
 from .settings       import settings_interface
-from .db_struct_base import repo_interface_base
+from .db_struct_base import repo_interface_base,_transaction
 from .db_repo        import *
 
 class db_interface():  
