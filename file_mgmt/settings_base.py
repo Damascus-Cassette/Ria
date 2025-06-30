@@ -32,7 +32,6 @@ class _settings_base(_common_root):
             
     def export_dict_recur(self,export_defaults=False)->dict:
         ''' Export yaml recursivly w/a based on hasattr(self,k,export_dict_recur). Otherwise record straight (Non strict) '''
-        self.ensure_type_hints()
         class _empty: ...
         res = {}
         
@@ -75,7 +74,6 @@ class _settings_base(_common_root):
             yaml.dump(data, file, default_flow_style=False, allow_unicode=True)
 
     def set_attributes(self,data:dict):    
-        self.ensure_type_hints()
 
         applied_keys = []
         for k,v in data.items():
@@ -111,10 +109,26 @@ class _settings_base(_common_root):
         
         self.imported_keys = applied_keys
 
-    def ensure_type_hints(self):
-        if not hasattr(self,'__anno_resolved__'):
-            self.__anno_resolved__ = typing.get_type_hints(self)
+    @property
+    def __anno_resolved__(self):
+        if not hasattr(self,'__anno_resolved_cache__'):
+            self.__anno_resolved_cache__ = typing.get_type_hints(self)
+        return self.__anno_resolved_cache__
 
+    @contextmanager
+    def generic_cm(self,**kwargs):
+        cust_tokens = {}
+        try:
+            for k,v in kwargs.items():
+                if isinstance((cvar:=getattr(self.context,k,None)),ContextVar):
+                    cust_tokens[k] = cvar.set(v)
+            yield
+        except:
+            raise
+        finally:
+            for k,v in cust_tokens.items():
+                cvar = getattr(self.context,k)
+                cvar.reset(v)
 
 class _context_variable_base(_settings_base):
     ''' Generic Context Varaible, initilized with context at declaration

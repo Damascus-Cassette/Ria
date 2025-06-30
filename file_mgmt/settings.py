@@ -8,22 +8,6 @@ class _context:
     platform : ContextVar = ContextVar('platform',default = 'default') 
 
 
-@contextmanager
-def settings_context(**kwargs):
-    tokens = {}
-    try:
-        for k,v in kwargs.items():
-            if (cvar:=getattr(context,k,None)):
-                tokens[k] = cvar.set(v)
-            else:
-                raise Exception(f"Context could not be set for key {k} of value {v}")
-            yield
-    finally:
-        for k,v in tokens.items():
-            cvar = getattr(context,k,None)
-            cvar.reset(v)
-
-
 class platform_context_variable(_context_variable_base):
     context = _context
     _c_attr = 'platform'
@@ -47,10 +31,6 @@ class db_info(_settings_base):
 class settings_interface(_settings_base):
     strict = False
     database : db_info = db_info()
-
-    
-
-
 
 if __name__ == '__main__':
     import argparse

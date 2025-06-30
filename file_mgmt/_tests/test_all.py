@@ -29,7 +29,6 @@ class vars():
             return self.session.query(self.model).filter_by(id=id).first()
 
         
-
 @pytest.fixture()
 def loaded_db_interface():
     return db_interface(settings_file=vars.good_settings)
