@@ -43,20 +43,20 @@ class repo_interface_base():
     base : TypeAlias = None
 
     @transaction
-    def create(cls,obj)->base:
+    def create(cls,obj = None, **kwargs)->base:
         session = cls.c_session.get()
-        # if not data:
-        #     data = {}
-        # data = data|kwargs
+        if not data:
+            data = {}
+        data = data|kwargs
         
-        # obj = cls.base()        
+        if not obj:
+            obj = cls.base()        
 
-        # for k,v in data.items():
-        #     assert hasattr(obj,k)
-        #     setattr(obj,k,v)
+        for k,v in data.items():
+            assert hasattr(obj,k)
+            setattr(obj,k,v)
 
         session.add(obj)
-        session.refresh(obj)
 
         return obj
 
@@ -71,10 +71,6 @@ class repo_interface_base():
         for k,v in data.items(): 
             assert hasattr(obj,k)
             setattr(obj,k,v)
-
-        session.refresh(obj)
-        # session.flush()
-        
         return obj
     
     @transaction
@@ -82,7 +78,6 @@ class repo_interface_base():
         session = cls.c_session.get()
         session.delete(obj)
         session.refresh()
-        # session.flush()
 
     @classmethod
     def echo_context(cls,c_attr)->str:
@@ -186,8 +181,8 @@ class db_interface():
             self._load_db()
 
         if not self.c_session.get():
-            ## May have to strip this context value if I'm to close the session
             self.c_session.set(Session(bind=self.engine, expire_on_commit = True))
+            print('Creating Session!')
 
         session        = self.c_session.get()
         in_transaction = session.in_transaction()
@@ -195,21 +190,25 @@ class db_interface():
         try:
             if in_transaction:
                 _session = session.begin_nested()
-                t2 = self.c_session.set(_session)
-                yield _session
+                token = self.c_session.set(_session)
+                # yield _session
+                yield session
                 _session.commit()
+                # _session.close()
             else:
                 yield session
                 session.commit()
-                # session.close()
+                session.close()
+                self.c_session.set(None)
         except:
             if in_transaction:
                 _session.rollback() 
             else:
                 session.rollback()  
                 session.close()
+                self.c_session.set(None)
             raise
 
         finally:
             if in_transaction:
-                self.c_session.reset(t2) 
+                self.c_session.reset(token) 

@@ -51,15 +51,64 @@ def test_db_settings_context_echo(_db_interface:db_interface,attr,value,expects,
         if not (ret == expects) == succeed:
             raise Exception(f'Context Echo Failed! Key:{attr} Expected:{value} Got:{ret}')
 
-def test_db_userrepo(_db_interface:db_interface):
-    cls = _db_interface.user_repo
+def test_session_basic(_db_interface:db_interface):
+    user_repo = _db_interface.user_repo
     with _db_interface.session_cm() as session:
-        # session == cls.c_session.get()
-        obj = cls.base()
-        obj.id  = 'IDname'
-        obj.hid = 'Rightname'
-        cls.create(obj)
-        # print(obj)
-        assert not session.query(cls.base).filter_by(hid='RightName').all()
-        cls.update(obj,hid='Rightname')
-        assert session.query(cls.base).filter_by(hid='RightName').all()
+    # with Session.begin() as session:
+        u1 = user_repo.base()
+        u1.id  = 'IDname1'
+        
+        u2 = user_repo.base()
+        u2.id  = 'IDname2'
+        
+        u3 = user_repo.base()
+        u3.id  = 'IDname3'
+        
+        session.add(u1)
+
+        nested = session.begin_nested()  # establish a savepoint
+        session.add(u2)
+        nested.commit()
+
+        nested = session.begin_nested()  # establish a savepoint
+        session.add(u3)
+        nested.rollback()  # rolls back u3, keeps u1 and u2
+
+        assert     session.query(user_repo.base).filter_by(id='IDname1').all()
+        assert     session.query(user_repo.base).filter_by(id='IDname2').all()
+        assert not session.query(user_repo.base).filter_by(id='IDname3').all()
+
+        # user_repo.delete(u1)
+        # user_repo.delete(u2)
+
+        nested = session.begin_nested()  # establish a savepoint
+        session.delete(u1)
+        session.delete(u2)
+        nested.commit()
+
+        assert not session.query(user_repo.base).filter_by(id='IDname1').all()
+        assert not session.query(user_repo.base).filter_by(id='IDname2').all()
+
+
+
+
+# def test_db_userrepo(_db_interface:db_interface):
+#     cls = _db_interface.user_repo
+#     with _db_interface.session_cm() as session:
+#         # session == cls.c_session.get()
+#         obj = cls.base()
+#         obj.id  = 'IDname'
+#         obj.hid = 'WrongName'
+        
+#         print(obj)
+#         obj = cls.create(obj)
+#         print(obj)
+
+#         assert not session.query(cls.base).filter_by(hid='RightName').all()
+        
+#         cls.update(obj,hid='Rightname')
+#         session.refresh(obj)
+
+#         assert session.query(cls.base).filter_by(hid='RightName').all()
+    
+#     # cls.c_session.get().close()
