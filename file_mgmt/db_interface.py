@@ -10,11 +10,25 @@ from sqlalchemy.orm import Session
 from .settings       import settings_interface
 from .db_struct      import Base
 from .db_repo_base   import repo_interface_base,_transaction
-from .db_repo        import *
+from .db_repo        import (
+        repo_user,
+        repo_NamedFile,
+        repo_NamedSpace,
+        repo_File,
+        repo_Space,
+        repo_Export,
+        repo_Session,
+        )
 
 class db_interface():  
-    _repo_base : repo_interface_base
-    user_repo  : user_repo 
+    _repo_base      : repo_interface_base
+    user_repo       : repo_user
+    repo_NamedFile  : repo_NamedFile 
+    repo_NamedSpace : repo_NamedSpace 
+    repo_File       : repo_File 
+    repo_Space      : repo_Space 
+    repo_Export     : repo_Export 
+    repo_Session    : repo_Session 
 
     context : Any
 
