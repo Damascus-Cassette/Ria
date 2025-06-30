@@ -43,20 +43,19 @@ class repo_interface_base():
     base : TypeAlias = None
 
     @transaction
-    def create(cls,data=None,**kwargs)->base:
+    def create(cls,obj)->base:
         session = cls.c_session.get()
-        if not data:
-            data = {}
-        data = data|kwargs
+        # if not data:
+        #     data = {}
+        # data = data|kwargs
         
-        obj = cls.base()        
+        # obj = cls.base()        
 
-        for k,v in data.items():
-            assert hasattr(obj,k)
-            setattr(obj,k,v)
+        # for k,v in data.items():
+        #     assert hasattr(obj,k)
+        #     setattr(obj,k,v)
 
         session.add(obj)
-        # session.flush()
         session.refresh(obj)
 
         return obj

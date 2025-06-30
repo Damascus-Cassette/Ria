@@ -55,8 +55,11 @@ def test_db_userrepo(_db_interface:db_interface):
     cls = _db_interface.user_repo
     with _db_interface.session_cm() as session:
         # session == cls.c_session.get()
-        obj = cls.create(id = 'Username', hid = 'Wrongname')
-        print(obj)
+        obj = cls.base()
+        obj.id  = 'IDname'
+        obj.hid = 'Rightname'
+        cls.create(obj)
+        # print(obj)
         assert not session.query(cls.base).filter_by(hid='RightName').all()
         cls.update(obj,hid='Rightname')
         assert session.query(cls.base).filter_by(hid='RightName').all()
