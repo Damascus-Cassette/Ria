@@ -1,8 +1,12 @@
 database:
-  cache_dir: ./cache/
-  database_fp: "sqlite:///:memory:"
-  facing_dir:
-    linux: ./face_linux/
-    windows: ./face_win/
-  lock_location: ./
-  logging_dir: ./logs/
+  dirs:
+    db: "sqlite:///:memory:"
+    view:
+    store:
+    export:
+  file_timeout:
+    last_user: True     #Time since last user
+    date
+  space_timeout:
+
+
