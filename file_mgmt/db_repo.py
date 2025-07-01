@@ -61,24 +61,38 @@ class repo_user(repo_interface_base):
 class repo_NamedSpace(repo_interface_base):
     base=asc_Space_NamedSpace
 
-    @transaction
+    @classmethod
     def store(cls, 
               dp            : str   ,
               name          : str   ,
               repl_junction : bool  , 
               do_remove     : bool  ,
               ):
+        ''' 
+        Upload all nested files, folders (through reflective recursion)
+        Return Instance of NamedSpace
+        '''
         #upload all files via named file instances, 
         _repo_NamedFile  = cls.db_interface.repo_NamedFile  
         _repo_Space = cls.db_interface.repo_Space  
         
-        _Space = _repo_Space.store(dp, repl_junction, do_remove)
+        space_inst = _repo_Space.store(dp, repl_junction, do_remove)
         
-        _NamedSpace       = cls.base()
-        _NamedSpace.name  = name
-        _NamedSpace.space = _Space
+        nSpace_inst       = cls.base()
+        nSpace_inst.name  = name
+        nSpace_inst.space = space_inst
 
-        return _NamedSpace
+        cls.create(nSpace_inst)
+
+        return nSpace_inst
+    
+    @classmethod
+    def from_space(cls,name,space_inst):
+        assert isinstance(space_inst,Space)
+        nSpace_inst       = cls.base()
+        nSpace_inst.name  = name
+        nSpace_inst.space = space_inst
+        
 
     def on_remove(obj):
         ''' Removes file reference '''
@@ -163,6 +177,8 @@ class repo_Space(repo_interface_base):
             _NamedSpace = _repo_NamedSpace.store(folder.path,folder.name,space_inst,repl_junction,do_remove)
             space_inst.spaces.append(_NamedSpace)
         
+        space_inst.id = space_inst.get_id()
+
         cls.create(space_inst)
 
         return space_inst
