@@ -11,59 +11,106 @@ from .db_struct import (
     User,
     )
 
-class utils():
-    def file_uid(filepath):
-        ...
-    def file_to_symlink(filepath,uid):
-        ...
-u = utils
+class log:
+    ...
+
+class file_utils:
+    def get_uid():...
+    
+    def store_file():...
+
+    def rename_temp():...
+    def unname_temp():...
+    def remove_temp():...
+    
+    def make_symlink():...
+
+    def remove_symlink():...
+    def remove_file():...
+
+    @classmethod
+    def move_file(cls, fp_from, fp_to, repl_symlink, do_remove):
+        
+        raise #TODO: Move file
+
+        if do_remove and repl_symlink:
+            raise
+        elif do_remove:
+            fu.remove_file(fp_from)            
+        elif repl_symlink:
+            temp_path = fu.rename_temp(file_item.path)
+            try:
+                fu.make_symlink(file_item.path, filepath)
+                fu.remove_temp(temp_path)
+            except:
+                fu.remove_symlink(filepath)
+                fu.unname_temp(temp_path, filepath)
+                raise
 
 
+class space_utils:
+    ...
+
+fu = file_utils
+su = space_utils
 
 class repo_user(repo_interface_base):
     base=User
 
-class repo_NamedFile(repo_interface_base):
-    base=asc_Space_NamedFile
-
 class repo_NamedSpace(repo_interface_base):
     base=asc_Space_NamedSpace
 
+class repo_NamedFile(repo_interface_base):
+    base=asc_Space_NamedFile
+
+    @transaction
+    def store(cls, 
+              filepath     : str, 
+              filename     : str, 
+              space        : Space, 
+              repl_symlink : bool, 
+              do_remove    : bool):
+        ''' Store a file to {store} and replace original with symlink where true '''
+        _repo_File = cls.db_interface.repo_File
+
+        namedFile_Inst = cls.base()
+
+        file_uid  = fu.get_uid(filepath)
+        file_item = _repo_File.store(filepath, file_uid)
+
+        assert file_item.verify_on_disk()
+
+        namedFile_Inst.file  = file_item
+        namedFile_Inst.name  = filename
+        namedFile_Inst.space = space 
+
+        fu.move_file(filepath,file_item.path,repl_symlink,do_remove) 
+
+        _repo_File.create(file_item)
+        cls.create(namedFile_Inst)
+
 class repo_File(repo_interface_base):
     base=File
+    # @transaction
+    def store(cls, filepath, uid, repl_symlink=False, do_remove=False ):
+        ''' Non-committed file instance '''
+        session = cls.context.c_session.get()
+        if existing := session.quiery(cls.base).filter(id=uid).first() and existing.verify_on_disk():
+            return existing
+        elif existing:
+            log.log(existing.id, " exists in db, but is not on disk! Uploading")
 
+        file_inst = cls.base()
+        file_inst.id = uid
+        file_inst.filepath
 
+        fu.move_file(filepath,
+                     uid,
+                     repl_symlink=repl_symlink,
+                     do_remove=do_remove)
 
-    @classmethod
-    def ensure_in_db(cls, filepath, replace=True)->str:
-        session = cls.db_interface.c_session.get()
-        uid     = cls.get_uid(filepath)
-        
-        if not cls.uid_in_db(uid):
-            store_fp = cls.find_place(uid)
-            cls.move_item()
+        return file_inst
 
-        if replace:
-            ...
-
-        return uid
-
-    @classmethod
-    def move_item(cls,fp_from,fp_to):
-        ...
-
-    @classmethod
-    def find_place(cls,filepath,uid)->str:
-        return
-
-    @classmethod
-    def get_uid(cls,filepath)->str:
-        return
-        
-    @classmethod
-    def uid_in_db(cls,uid)->bool:
-        session = cls.db_interface.c_session.get()
-        return any(session.query(cls.base).filter(id = uid).all())
 
 class repo_Space(repo_interface_base):
     base=Space
