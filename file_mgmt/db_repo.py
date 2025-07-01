@@ -15,7 +15,8 @@ class log:
     ...
 
 class file_utils:
-    def get_uid():...
+    def get_uid():
+        ''' Return UID of file, sha256 hash. Follow symlinks and get sha256 of file'''
     
     def store_file():...
 
@@ -60,6 +61,48 @@ class repo_user(repo_interface_base):
 class repo_NamedSpace(repo_interface_base):
     base=asc_Space_NamedSpace
 
+    @transaction
+    def store(cls, 
+              dp            : str   ,
+              name          : str   ,
+              repl_junction : bool  , 
+              do_remove     : bool  ,
+              ):
+        #upload all files via named file instances, 
+        _repo_NamedFile  = cls.db_interface.repo_NamedFile  
+        _repo_Space = cls.db_interface.repo_Space  
+        
+        _Space = _repo_Space.store(dp, repl_junction, do_remove)
+        
+        inst = cls.base()
+        inst.name  = name
+        inst.space = _Space
+
+        # #traverse recursivly ensuring each file exists with UUID. 
+        # #TODO: Transfer & refactor utility struct representation
+        # # For each folder, 
+        #     # Create Space w/ ID if doesnt exist
+        #     # Create Namedspace
+        #     # Upload each file via namedFile
+        #     # 
+        #     # Create Spaces w/a with UUID
+        # this_namedSpace = 
+        # for folder in thisfolderstruct.folders: #backwards
+        #     space_exists = _repo_NamedSpace.exists(folder.uid)
+
+        #     namedSpace   = _repo_NamedSpace.store(folder.path, folder.uid)
+
+        #     for file in folder.files:
+        #         namedFile = _repo_NamedFile.store(file.path,file.name)
+        #         namedSpace.pspace.myFiles.append(namedFile)
+
+        #     this_namedSpace.childspaces.append(namedSpace)
+
+    def on_remove(obj):
+        ''' Removes file reference '''
+        #TODO: Hook into on pre-removal from db
+        obj.remove_target(obj)
+
 class repo_NamedFile(repo_interface_base):
     base=asc_Space_NamedFile
 
@@ -89,9 +132,16 @@ class repo_NamedFile(repo_interface_base):
         _repo_File.create(file_item)
         cls.create(namedFile_Inst)
 
+    def on_remove(obj):
+        ''' Removes file reference '''
+        #TODO: Hook into on pre-removal from db
+        obj.remove_target(obj)
+
+
 class repo_File(repo_interface_base):
     base=File
-    # @transaction
+
+    @transaction
     def store(cls, filepath, uid, repl_symlink=False, do_remove=False ):
         ''' Non-committed file instance '''
         session = cls.context.c_session.get()
@@ -104,16 +154,32 @@ class repo_File(repo_interface_base):
         file_inst.id = uid
         file_inst.filepath
 
-        fu.move_file(filepath,
-                     uid,
-                     repl_symlink=repl_symlink,
-                     do_remove=do_remove)
+        fu.move_file(filepath ,
+                     uid      ,
+                     repl_symlink = repl_symlink,
+                     do_remove    = do_remove   ,)
 
         return file_inst
 
 
 class repo_Space(repo_interface_base):
     base=Space
+
+    @classmethod
+    def store(cls, dp, repl_junction, do_remove):
+        _repo_NamedFile = cls.db_interface.repo_NamedFile 
+
+        space_inst = cls.base()
+        
+        for file in db: #TODO
+            _NamedFile = _repo_NamedFile.store(file.path,file.name,space_inst,repl_junction,do_remove)
+            space_inst.files.append(_NamedFile)
+        for folder in db:
+            _NamedFile = _repo_NamedFile.store(folder.path,folder.name,space_inst,repl_junction,do_remove)
+            space_inst.spaces.append(_NamedFile)
+        
+        cls.create(space_inst)
+        
 
 class repo_Export(repo_interface_base):
     base=Export
