@@ -74,29 +74,11 @@ class repo_NamedSpace(repo_interface_base):
         
         _Space = _repo_Space.store(dp, repl_junction, do_remove)
         
-        inst = cls.base()
-        inst.name  = name
-        inst.space = _Space
+        _NamedSpace       = cls.base()
+        _NamedSpace.name  = name
+        _NamedSpace.space = _Space
 
-        # #traverse recursivly ensuring each file exists with UUID. 
-        # #TODO: Transfer & refactor utility struct representation
-        # # For each folder, 
-        #     # Create Space w/ ID if doesnt exist
-        #     # Create Namedspace
-        #     # Upload each file via namedFile
-        #     # 
-        #     # Create Spaces w/a with UUID
-        # this_namedSpace = 
-        # for folder in thisfolderstruct.folders: #backwards
-        #     space_exists = _repo_NamedSpace.exists(folder.uid)
-
-        #     namedSpace   = _repo_NamedSpace.store(folder.path, folder.uid)
-
-        #     for file in folder.files:
-        #         namedFile = _repo_NamedFile.store(file.path,file.name)
-        #         namedSpace.pspace.myFiles.append(namedFile)
-
-        #     this_namedSpace.childspaces.append(namedSpace)
+        return _NamedSpace
 
     def on_remove(obj):
         ''' Removes file reference '''
@@ -159,6 +141,8 @@ class repo_File(repo_interface_base):
                      repl_symlink = repl_symlink,
                      do_remove    = do_remove   ,)
 
+        cls.create(file_inst)
+
         return file_inst
 
 
@@ -168,21 +152,24 @@ class repo_Space(repo_interface_base):
     @classmethod
     def store(cls, dp, repl_junction, do_remove):
         _repo_NamedFile = cls.db_interface.repo_NamedFile 
+        _repo_NamedSpace = cls.db_interface.repo_NamedSpace 
 
         space_inst = cls.base()
         
-        for file in db: #TODO
+        for file   in db: #TODO
             _NamedFile = _repo_NamedFile.store(file.path,file.name,space_inst,repl_junction,do_remove)
             space_inst.files.append(_NamedFile)
         for folder in db:
-            _NamedFile = _repo_NamedFile.store(folder.path,folder.name,space_inst,repl_junction,do_remove)
-            space_inst.spaces.append(_NamedFile)
+            _NamedSpace = _repo_NamedSpace.store(folder.path,folder.name,space_inst,repl_junction,do_remove)
+            space_inst.spaces.append(_NamedSpace)
         
         cls.create(space_inst)
-        
+
+        return space_inst
 
 class repo_Export(repo_interface_base):
     base=Export
+
 
 class repo_Session(repo_interface_base):
     base=Session    
