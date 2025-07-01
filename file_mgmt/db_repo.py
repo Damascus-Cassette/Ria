@@ -92,6 +92,7 @@ class repo_NamedSpace(repo_interface_base):
         nSpace_inst       = cls.base()
         nSpace_inst.name  = name
         nSpace_inst.space = space_inst
+        cls.create(nSpace_inst)
         return nSpace_inst
 
     def on_remove(obj):
@@ -112,16 +113,16 @@ class repo_NamedFile(repo_interface_base):
         ''' Store a file to {store} and replace original with symlink where true '''
         _repo_File = cls.db_interface.repo_File
 
-        namedFile_Inst = cls.base()
+        nfile_inst = cls.base()
 
         file_uid  = fu.get_uid(filepath)
         file_item = _repo_File.store(filepath, file_uid)
 
         assert file_item.verify_on_disk()
 
-        namedFile_Inst.file  = file_item
-        namedFile_Inst.name  = filename
-        namedFile_Inst.space = space 
+        nfile_inst.file  = file_item
+        nfile_inst.name  = filename
+        nfile_inst.space = space 
 
         fu.move_file(filepath,file_item.path,repl_symlink,do_remove) 
 
@@ -134,12 +135,14 @@ class repo_NamedFile(repo_interface_base):
         nFile_inst       = cls.base()
         nFile_inst.name  = name
         nFile_inst.space = file_inst
+        cls.create(nFile_inst)
         return nFile_inst
 
     def on_remove(obj):
         ''' Removes file reference '''
         #TODO: Hook into on pre-removal from db
         obj.remove_target(obj)
+        
 
 
 class repo_File(repo_interface_base):
@@ -178,10 +181,10 @@ class repo_Space(repo_interface_base):
 
         space_inst = cls.base()
         
-        for file   in db: #TODO
+        for file   in dp: #TODO
             _NamedFile = _repo_NamedFile.store(file.path,file.name,space_inst,repl_junction,do_remove)
             space_inst.files.append(_NamedFile)
-        for folder in db:
+        for folder in dp:
             _NamedSpace = _repo_NamedSpace.store(folder.path,folder.name,space_inst,repl_junction,do_remove)
             space_inst.spaces.append(_NamedSpace)
         
