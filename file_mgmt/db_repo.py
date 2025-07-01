@@ -92,7 +92,7 @@ class repo_NamedSpace(repo_interface_base):
         nSpace_inst       = cls.base()
         nSpace_inst.name  = name
         nSpace_inst.space = space_inst
-        
+        return nSpace_inst
 
     def on_remove(obj):
         ''' Removes file reference '''
@@ -127,6 +127,14 @@ class repo_NamedFile(repo_interface_base):
 
         _repo_File.create(file_item)
         cls.create(namedFile_Inst)
+
+    @classmethod
+    def from_file(cls,name,file_inst):
+        assert isinstance(file_inst,File)
+        nFile_inst       = cls.base()
+        nFile_inst.name  = name
+        nFile_inst.space = file_inst
+        return nFile_inst
 
     def on_remove(obj):
         ''' Removes file reference '''
