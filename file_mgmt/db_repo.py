@@ -1,4 +1,7 @@
 
+import shutil
+import os
+
 from .db_repo_base import repo_interface_base, transaction
 
 from .db_struct import (
@@ -31,22 +34,16 @@ class file_utils:
 
     @classmethod
     def move_file(cls, fp_from, fp_to, repl_symlink, do_remove):
-        
-        raise #TODO: Move file
-
         if do_remove and repl_symlink:
             raise
         elif do_remove:
-            fu.remove_file(fp_from)            
+            shutil.move(fp_from,fp_to)
+            fu.remove_file(fp_from)
         elif repl_symlink:
-            temp_path = fu.rename_temp(file_item.path)
-            try:
-                fu.make_symlink(file_item.path, filepath)
-                fu.remove_temp(temp_path)
-            except:
-                fu.remove_symlink(filepath)
-                fu.unname_temp(temp_path, filepath)
-                raise
+            shutil.move(fp_from,fp_to)
+            os.symlink(fp_to,fp_from)
+        else:
+            shutil.copyfile(fp_from,fp_to)
 
 
 class space_utils:
@@ -103,7 +100,7 @@ class repo_NamedSpace(repo_interface_base):
 class repo_NamedFile(repo_interface_base):
     base=asc_Space_NamedFile
 
-    @transaction
+    @classmethod
     def store(cls, 
               filepath     : str, 
               filename     : str, 
@@ -127,7 +124,7 @@ class repo_NamedFile(repo_interface_base):
         fu.move_file(filepath,file_item.path,repl_symlink,do_remove) 
 
         _repo_File.create(file_item)
-        cls.create(namedFile_Inst)
+        cls.create(nfile_inst)
 
     @classmethod
     def from_file(cls,name,file_inst):
@@ -143,12 +140,10 @@ class repo_NamedFile(repo_interface_base):
         #TODO: Hook into on pre-removal from db
         obj.remove_target(obj)
         
-
-
 class repo_File(repo_interface_base):
     base=File
 
-    @transaction
+    @classmethod
     def store(cls, filepath, uid, repl_symlink=False, do_remove=False ):
         ''' Non-committed file instance '''
         session = cls.context.c_session.get()
@@ -169,7 +164,6 @@ class repo_File(repo_interface_base):
         cls.create(file_inst)
 
         return file_inst
-
 
 class repo_Space(repo_interface_base):
     base=Space
@@ -199,4 +193,15 @@ class repo_Export(repo_interface_base):
 
 
 class repo_Session(repo_interface_base):
-    base=Session    
+    base=Session
+
+    @classmethod
+    def start(cls,name,user:User):
+
+        session_inst = cls.base()
+        session_inst.name = name
+        session_inst.user = user
+        
+        cls.create(session_inst)
+        
+        return session_inst

@@ -84,9 +84,32 @@ def test_session_basic(_db_interface:db_interface):
         assert     session.query(repo_user.base).filter_by(id='IDname202').all()
 
 
-def test_db_file_upload():
-    
-    ...
+def test_db_file_upload(_db_interface:db_interface):
+    dbi = _db_interface
+
+    with _db_interface.session_cm() as session:
+        user = dbi.repo_user.base()
+        user.id  = 'IDname1'
+
+        session  = dbi.repo_Session.start('test_session',user)
+        nSpace   = dbi.repo_NamedSpace.store(test_resources, 'test_space', repl_junction=False, do_remove=False)
+        
+        nSpace.session_export(session, dp = ) #Default datapath should be relevent to function & store path in yaml
+        nSpace.session_view(session,   dp = ) #
+        nSpace.user_export(user,       dp = ) #
+
+        assert nSpace.total_users == 3
+
+        session.close()
+        assert nSpace.total_users == 2
+
+        session.exports.clear()
+        assert nSpace.total_users == 1
+
+        user.exports.clear()
+        assert nSpace.total_users == 0
+
+
 # def test_db_space_upload():
 #     ...
 
