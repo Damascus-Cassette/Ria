@@ -85,8 +85,8 @@ class settings_interface(settings_dict_base):
         _strict = False
         _required = False
 
-        db_standard    = i_g(str,  in_context='db_standard' , default = 'sqlite')
-        db_path        = i_g(str,  in_context='db_path'     , default = ':memory:')
+        db_standard    = i_g(str,  in_context='db_standard' , strict = True, default = 'sqlite')
+        db_path        = i_g(str,  in_context='db_path'     , strict = True, default = ':memory:')
         _sqla_db_path  = i_fp(str, default = "{db_standard}:///{db_path}")
 
         class dirs(settings_dict_base):
