@@ -1,9 +1,9 @@
 from typing import Any
 from contextvars import ContextVar
 from contextlib  import contextmanager
-from .settings_base import _context_variable_base, _settings_base
-from .settings_base import formatted_string as fs
-from .settings_base import formatted_path   as ffp
+from .old_settings_base import _context_variable_base, _settings_base
+from .old_settings_base import formatted_string as fs
+from .old_settings_base import formatted_path   as ffp
 
 class _context:
     #Standin, replaced on import.

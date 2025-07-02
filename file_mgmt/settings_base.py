@@ -1,223 +1,220 @@
-from typing import Any
-import typing
-import yaml
-import os
 from contextvars import ContextVar
 from contextlib  import contextmanager
+from typing      import Any
+import inspect
+import json
+import yaml
 import string
 
+class _common_root:
+    ...    
+
+class _unset(_common_root):
+
+    ...
+
 missing_flag = '<! MISSING REQUIRED VALUE !>'
-    #Consider adding type to missing value
+unset_v_flag = '<! UNSET VALUE !>'
 
-class _standin_context: 
-    ''' Context container, Meant to hold ContextVar objects'''
+c_Context= ContextVar('Settings_Context' , default=None)
+c_uuids  = ContextVar('Settings_uuid'    , default=None)
 
-class _common_root: ...
+class input_base(_common_root):
+    context        : Any
+    uuid_map       : dict
 
-class _settings_base(_common_root):
-    ''' dataclass that interprets a settings_object or custom start, holds initialized repos '''
-    
-    _strict = True           #Settings base, consider _tracked_attributes list?
-    _add_to_context : list
-    Context : Any = _standin_context
+    data           : Any
 
-    _imported_keys  : list[str] = []
-        #keys corrisponding to values that have been imported
+    strict         : bool      = True
 
-    __anno_resolved__ : dict[str,Any]
+    as_type        : Any 
+    as_uuid        : str|None  = None 
+    in_context     : str|None  = None 
+    default        : Any       = None 
+    default_args   : list[Any] = None
+    default_kwargs : dict[Any] = None
 
+    allow_blind    : bool      = True
 
-    def __init__(self, values:dict|None=None, override_context=None):
-        if override_context:
-            self.Context = override_context 
-        if values:
-            self._set_attributes(values)
-        else:
-            ... #Is placeholder!
-        self._insert_keys_to_context()
-            
-    def _insert_keys_to_context(self):
-        for k in getattr(self,'_add_to_context',[]):
-            setattr(self.Context,k, ContextVar(k,default = getattr(self,k)))
-        
+    did_default    : bool      = True
 
-    def _export_dict_recur(self,export_defaults=False)->dict:
-        ''' Export yaml recursivly w/a based on hasattr(self,k,_export_dict_recur). Otherwise record straight (Non _strict) '''
-        class _empty: ...
-        res = {}
-        
-        for k,ty in self.__anno_resolved__.items():
-            v = getattr(self,k,_empty)
-            if v is _empty and not export_defaults:
-                continue
-            elif v is _empty and export_defaults and self._strict:
-                res[k] = missing_flag
-            elif v is _empty and export_defaults and not self._strict:
-                continue
-            elif k not in self._imported_keys and not export_defaults:
-                continue
-            elif (func := getattr(v,'_export_dict_recur',_empty)) != _empty:
-                res[k] = func(export_defaults)
-            else:
-                res[k] = v
-        
+    @classmethod
+    def construct(cls, as_type, strict:bool=True, allow_blind=True, as_uuid:str|None=None, in_context:str|None=None, default:Any=None, default_args=None, default_kwargs=None):
+        res = type('constructed_input',tuple([cls,_common_root]),{
+                        'strict'         : strict,
+                        'as_type'        : as_type,
+                        'as_uuid'        : as_uuid,
+                        'in_context'     : in_context,
+                        'default'        : default,
+                        'default_args'   : default_args,
+                        'default_kwargs' : default_kwargs,
+                        'allow_blind'    : allow_blind,
+                        })
         return res
 
-    def _load_file(self,fp:str):
-        assert fp.endswith('.yaml') or fp.endswith('.yml')
-        with open(fp,'r') as file:
-            data = yaml.safe_load(file)
-            self._set_attributes(data)
-
-    def _save_file(self,export_fp:str,overwrite=False,export_defaults=False):
-        ''' Exporting a file, will not overwrite by default '''
-        
-        assert os.path.isfile(export_fp)
-
-        if  os.path.exists(export_fp) and not overwrite:
-            raise Exception('File exists! Remove file or rerun func with overwrite = True')
-        
-        os.makedirs(os.path.split(export_fp)[0], exist_ok = True)
-
-        data = self._export_dict_recur(export_defaults=export_defaults)
-
-        with open(export_fp, 'w', encoding='utf8') as file:
-            yaml.dump(data, file, default_flow_style=False, allow_unicode=True)
-
-    def _set_attributes(self,data:dict):    
-
-        applied_keys = []
-        for k,v in data.items():
-            if v == missing_flag:
-                raise Exception(f'Key "{k}" is missing a required value! Settings file cannot load')
-            
-            applied_keys.append(k)
-            if k in self.__anno_resolved__.keys():
-                ty = self.__anno_resolved__[k]
-                try:
-                    if issubclass(ty,_common_root):
-                        setattr(self,k,ty(v,override_context=self.Context))
-                    else: 
-                        setattr(self,k,ty(v))
-                except Exception as e:
-                    raise e
-                    # raise Exception(f'Key "{k}" with value "{v}" was not able to be converted!')
+    def __init__(self,data=_unset,):
+        if not data is _unset:
+            self.data = self.as_type(data)
+            self.did_default = False
+        else:
+            if self.default:
+                self.data = self.as_type(self.default)
+            elif self.default_args is not None or self.default_kwargs is not None:
+                if not self.default_args: self.default_args   = []
+                if not self.default_kargs: self.default_kargs = {}
+                self.data = self.as_type(*self.default_args,*self.default_kwargs)
+            elif self.strict:
+                raise Exception('Missing Required Variable!')
             else:
-                raise Exception(f'Key "{k}" is not defined in the settings_interface! Perhaps you ment to have it as a sub object variable?')
+                self.data = _unset
+
+        self.context  = c_Context.get()        
+        self.uuid_map = c_uuids.get()        
+
+        if self.in_context:
+            setattr(self.context, self.in_context, ContextVar(self.in_context, default=self))
+        if self.as_uuid:
+            self.uuid_map[self.as_uuid] = self
         
-        unapplied_keys = [k for k in self.__anno_resolved__.keys() if (k not in applied_keys) and (not getattr(self,k,None))]
-        defaulted_keys = [k for k in self.__anno_resolved__.keys() if (k not in applied_keys) and (getattr(self,k,None))]
+    def return_data(self):
+        ''' Spot to place context evaluation & similar '''
+        return self.data
 
-        if unapplied_keys and self._strict:
-            raise Exception(f'Following values were not imported and are required: /n {unapplied_keys}')
-        elif unapplied_keys and not self._strict:
-            print(f'Warning! Following values were not imported: /n {unapplied_keys}')
+    def __get__(self, instance, owner):
+        return self.return_data()
 
-        if defaulted_keys:
-            print('Following keys were not imported and resolved to default values:')
-            for k in defaulted_keys:
-                value = getattr(self,k)
+    def __set__(self, instance, value):
+        raise
+    
+    def get(self):
+        return self.__get__(None,None)
 
-                if issubclass(value.__class__,_common_root):
-                    value.Context = self.Context
-                    # print(f'Set Context on {value} to {self.Context}')
-                if isinstance(value,self.__class__):
-                    value._set_attributes({})
-                print(f'{k} has defaulted to: f{getattr(self,k)}')
+    def recursive_export(self,export_defaults:bool=False):
+        if   (export_defaults and self.did_default) and (self.data is _unset):
+            return unset_v_flag
+        elif (export_defaults and self.did_default):
+            return self.data
+        elif not (export_defaults and self.did_default):
+            return _unset
+        elif not export_defaults and not self.did_default:
+            return self.data
+        else:
+            raise
+
+class input_context_formatted(input_base):
+    def return_data(self):
+        # assert isinstance(self.data,str)
+        kwds = [k[1] for k in string.Formatter.parse("",self.data) if k[1]]
+        kwds = {k:getattr(self.context,k).get().get() for k in kwds}
+        return self.data.format(**kwds)
+    
+
+class settings_dict_base(_common_root):
+    _in_context : str|None = None #access inst of self in context under this attr string
+    _as_uuid    : str|None = None #access inst of self in uuid list under this string
+    _required   : bool     = True
+
+    def __init__(self,data:dict=_unset):
+        if (data == _unset) and (self._required):
+            print(f'data is {data} and is {_unset}')
+            raise Exception(f'Catagory "{self.__class__}" is required!')
+        if data is _unset:
+            data = {}
+
+        used_keys   = []
+
+        cls_format_dict = {}
+
+        for k,v in data.items():
+            container = getattr(self,k)
+            assert issubclass(container,_common_root)
+            used_keys.append(k)
+
+            if v == missing_flag:
+                raise Exception(f'Missing required value in {self.__name__} : {k}')
+            elif v == unset_v_flag:
+                setattr(self,k,container())
+                continue
+            
+            if issubclass(container,input_base): 
+                cls_format_dict[k] = container(v)
+            else:
+                setattr(self,k,container(v))
+
+        keys        = [k for k in dir(self)  if inspect.isclass(getattr(self,k)) and not k.startswith('__')]
+        total_keys  = [k for k in keys       if issubclass(getattr(self,k),_common_root)]
+        unused_keys = [k for k in total_keys if k not in used_keys]
+
+        for k in unused_keys:
+            print(f'WARNING! Unset Variable {k}, init with no args')
+            container = getattr(self,k)
+            if issubclass(container,input_base): 
+                cls_format_dict[k] = container()
+            else:
+                setattr(self,k,container())
+
+        self.context  = c_Context.get()
+        self.uuid_map = c_uuids.get()
+
+        if self._in_context:
+            setattr(self.context,self._in_context,ContextVar(self._in_context,default=self))
+        if self._as_uuid:
+            self.uuid_map[self._as_uuid] = self
+
+        unused_keys = [k for k in data.keys() if k not in used_keys]
+
+        if unused_keys:
+            print(vars(self))
+            raise Exception(f'unused_keys!: {unused_keys}')
         
-        self._imported_keys = applied_keys
+        new_base_name = self.__class__.__name__ + 'ChildClass'
+        new_base = type(new_base_name, (self.__class__,), cls_format_dict)
+        self.__class__ = new_base
 
-    @property
-    def __anno_resolved__(self):
-        if not hasattr(self,'__anno_resolved_cache__'):
-            self.__anno_resolved_cache__ = typing.get_type_hints(self)
-        return self.__anno_resolved_cache__
-
-    @contextmanager
-    def _generic_cm(self,**kwargs):
-        cust_tokens = {}
+    @contextmanager    
+    def loading_cm(context_obj:Any,uuid_map:dict):
         try:
-            for k,v in kwargs.items():
-                if isinstance((cvar:=getattr(self.Context,k,None)),ContextVar):
-                    cust_tokens[k] = cvar.set(v)
+            t1 = c_Context.set(context_obj)
+            t2 = c_uuids.set(uuid_map)
             yield
         except:
             raise
         finally:
-            for k,v in cust_tokens.items():
-                cvar = getattr(self.Context,k)
-                cvar.reset(v)
+            c_Context.reset(t1)
+            c_uuids.reset(t2)
 
-class _context_variable_base(_settings_base):
-    ''' Generic Context Varaible, initilized with context at declaration
-     Fugly struct atm, consider something cleaner '''
-
-    _strict = False 
-
-    Context : Any
-    _c_attr : str
-    _d_attr : str
-    _keys   : list = ['default']
-    
-    #Consider complex version as a grid matrix, or chained dicts
-    def __init__(self, values:str|dict,override_context=None):
-        if override_context:
-            self.Context = override_context
-
-        if isinstance(values,str):
-            for k in self._keys:
-                ty = self.__anno_resolved__[k]
-                setattr(self,k,ty(values))
-        else:
-            self._set_attributes(values)
-            
-    def get(self):
-        assert (cvar := getattr(self.Context,self._c_attr,None)) != None
-        return getattr(self, cvar.get(), getattr(self,self._d_attr))
-
-    def __repr__(self):
-        injection = {}
-        class _empty:...
-        for k in self._keys:
-            if (v:=self(getattr(self,k,_empty))) != _empty:
-                injection[k] = v
-
-        return f'< Context_Variable Object: {injection}>'
-    
-
-#All this is Fugly
-
-class _formatted_base(_common_root):
-    _strict = False 
-    context : Any
-
-    def __init__(self,value:str|Any,override_context=None):
-        if override_context:
-            self.Context = override_context
-        assert isinstance(value,str)
-        self.data = value
-
-    def get(self):
-        keys = [k[1] for k in string.Formatter.parse("",self.data) if k[1]]
-        di   = {k:getattr(self.Context,k).get() for k in keys}
-        return self.data.format(**di)    
-    
-    def __repr__(self):
-        return f"<Context Formatter Obj: '{self.data}'>"
-
-class formatted_string(_formatted_base):
-    ...
-
-class formatted_path(_formatted_base):
-    ''' Make path relative to db_root'''
-    def get(self):
-        base_string = self.data 
+    @classmethod
+    def load_data(cls,data:dict,context=None,uuid_map=None):
+        if context is None:
+            context  = type('UnsetContext',tuple([]),{})
+        if uuid_map is None:
+            uuid_map = {}
         
-        if self.data.startswith('.'):
-            base_string = "{db_root}" + self.data[1:]
-        
-        keys = [k[1] for k in string.Formatter.parse("",base_string) if k[1]]
-        di   = {k:getattr(self.Context,k).get() for k in keys}
-        ret  = self.data.format(**di)
-        return ret     
+        with cls.loading_cm(context,uuid_map):
+            return cls(data)
+
+    @staticmethod
+    def load_yaml(fp):
+        with open(fp,'r') as file:
+            data = yaml.safe_load(file)
+            return data
+
+    @staticmethod
+    def load_json(fp):
+        with open(fp,'r') as file:
+            data = json.loads(file)
+            return data
     
+    def recursive_export(self,export_defaults:bool=False):
+        ret = {}
+        for k,v in vars(self).items():
+            if issubclass(v.__class__,_common_root):
+                val = v.recursive_export(export_defaults=export_defaults)
+                if val is _unset:
+                    continue
+                # if val == unset_v_flag: #or else
+                ret[k] = val
+        return ret
+    
+i_g = input_base.construct
+i_f = input_context_formatted.construct
