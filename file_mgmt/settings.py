@@ -96,6 +96,7 @@ class client_info(_settings_base):
     address  : str  = ''
 
 class tests(_settings_base):
+    
     context_variable : pcv = pcv({'windows':'./face_win/','linux':'./face_linux/'})    #converted on import
 
 class settings_interface(_settings_base):
