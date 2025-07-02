@@ -1,6 +1,7 @@
 from contextvars import ContextVar
 from contextlib  import contextmanager
 from typing      import Any
+import inspect
 import json
 import yaml
 import string
@@ -38,8 +39,8 @@ class input_base(_common_root):
     did_default    : bool      = True
 
     @classmethod
-    def construct(cls, as_type, strict:bool, allow_blind=True, as_uuid:str|None=None, in_context:str|None=None, default:Any=None, default_args=None, default_kwargs=None):
-        res = type('constructed_input',tuple([cls]),{
+    def construct(cls, as_type, strict:bool=True, allow_blind=True, as_uuid:str|None=None, in_context:str|None=None, default:Any=None, default_args=None, default_kwargs=None):
+        res = type('constructed_input',tuple([cls,_common_root]),{
                         'strict'         : strict,
                         'as_type'        : as_type,
                         'as_uuid'        : as_uuid,
@@ -51,7 +52,7 @@ class input_base(_common_root):
                         })
         return res
 
-    def __init__(self,data=_unset):
+    def __init__(self,data=_unset,):
         if not data is _unset:
             self.data = self.as_type(data)
             self.did_default = False
@@ -71,7 +72,7 @@ class input_base(_common_root):
         self.uuid_map = c_uuids.get()        
 
         if self.in_context:
-            setattr(self.context,self._in_context,ContextVar(self.__name__,default=self))
+            setattr(self.context, self.in_context, ContextVar(self.in_context, default=self))
         if self.as_uuid:
             self.uuid_map[self.as_uuid] = self
         
@@ -79,12 +80,15 @@ class input_base(_common_root):
         ''' Spot to place context evaluation & similar '''
         return self.data
 
-    def __get__(self):
+    def __get__(self, instance, owner):
         return self.return_data()
 
-    def __set__(self,value):
+    def __set__(self, instance, value):
         raise
     
+    def get(self):
+        return self.__get__(None,None)
+
     def recursive_export(self,export_defaults:bool=False):
         if   (export_defaults and self.did_default) and (self.data is _unset):
             return unset_v_flag
@@ -99,42 +103,73 @@ class input_base(_common_root):
 
 class input_context_formatted(input_base):
     def return_data(self):
-        kwds = [l[1] for l in string.Formatter.parse(self.data)]
-        kwds = {k:getattr(self.context,k).get() for k in kwds}
-        return self.data.format(kwds)
+        # assert isinstance(self.data,str)
+        kwds = [k[1] for k in string.Formatter.parse("",self.data) if k[1]]
+        kwds = {k:getattr(self.context,k).get().get() for k in kwds}
+        return self.data.format(**kwds)
     
 
 class settings_dict_base(_common_root):
-    _in_context : str|None #access inst of self in context under this attr string
-    _as_uuid    : str|None #access inst of self in uuid list under this string
-    
-    def __init__(self,data:dict):
+    _in_context : str|None = None #access inst of self in context under this attr string
+    _as_uuid    : str|None = None #access inst of self in uuid list under this string
+    _required   : bool     = True
+
+    def __init__(self,data:dict=_unset):
+        if (data == _unset) and (self._required):
+            print(f'data is {data} and is {_unset}')
+            raise Exception(f'Catagory "{self.__class__}" is required!')
+        if data is _unset:
+            data = {}
 
         used_keys   = []
 
-        for k,v in vars(self).items():
-            if issubclass(v,_common_root):
-                if k in data.keys():
-                    if data[k] == missing_flag: 
-                        raise Exception(f'Missing Required Varaible for attr "{k}" !')
-                    elif data[k] == unset_v_flag: 
-                        setattr(self,k,v())
-                    setattr(self,k,v(data[k]))
-                    used_keys.append(k)
-                else:
-                    setattr(self,k,v())
+        cls_format_dict = {}
 
-        self.context  = c_Context.get()        
-        self.uuid_map = c_uuids.get()        
+        for k,v in data.items():
+            container = getattr(self,k)
+            assert issubclass(container,_common_root)
+            used_keys.append(k)
+
+            if v == missing_flag:
+                raise Exception(f'Missing required value in {self.__name__} : {k}')
+            elif v == unset_v_flag:
+                setattr(self,k,container())
+                continue
+            
+            if issubclass(container,input_base): 
+                cls_format_dict[k] = container(v)
+            else:
+                setattr(self,k,container(v))
+
+        keys        = [k for k in dir(self)  if inspect.isclass(getattr(self,k)) and not k.startswith('__')]
+        total_keys  = [k for k in keys       if issubclass(getattr(self,k),_common_root)]
+        unused_keys = [k for k in total_keys if k not in used_keys]
+
+        for k in unused_keys:
+            print(f'WARNING! Unset Variable {k}, init with no args')
+            container = getattr(self,k)
+            if issubclass(container,input_base): 
+                cls_format_dict[k] = container()
+            else:
+                setattr(self,k,container())
+
+        self.context  = c_Context.get()
+        self.uuid_map = c_uuids.get()
 
         if self._in_context:
-            setattr(self.context,self._in_context,ContextVar(self.__name__,default=self))
+            setattr(self.context,self._in_context,ContextVar(self._in_context,default=self))
         if self._as_uuid:
             self.uuid_map[self._as_uuid] = self
 
         unused_keys = [k for k in data.keys() if k not in used_keys]
 
-        assert not unused_keys
+        if unused_keys:
+            print(vars(self))
+            raise Exception(f'unused_keys!: {unused_keys}')
+        
+        new_base_name = self.__class__.__name__ + 'ChildClass'
+        new_base = type(new_base_name, (self.__class__,), cls_format_dict)
+        self.__class__ = new_base
 
     @contextmanager    
     def loading_cm(context_obj:Any,uuid_map:dict):
@@ -183,11 +218,3 @@ class settings_dict_base(_common_root):
     
 i_g = input_base.construct
 i_f = input_context_formatted.construct
-
-class test(settings_dict_base):
-
-    var1 : str = i_g(str, as_uuid='var1', default='Var1Contents')
-    var2 : str = i_f(str, as_uuid='var2', default='{var1}_DefaultString2')
-
-    class nested(settings_dict_base):
-        var3 : str = i_f(str, as_uuid='var3')
