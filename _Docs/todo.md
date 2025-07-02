@@ -61,6 +61,16 @@ Add io for exposing the manager and client relation and distributing tasks
 ## 2025-06-25
 - [ ]{~2hr}{@0hr}{f_mgmt} Add fundimental managment utils (sqlite, recur file/folder hashing)
 
+## 2025-06-26 
+## 2025-06-27
+- [x]{~?hr}{@6hr}{f_mgmt} Settings base, loading and struct
+## 2025-06-28 +
+## 2025-06-29 +
+## 2025-06-30 +
+## 2025-07-01 +
+- [ ]{~2hr}{@30hr}{f_mgmt} Database in repo style & interface
+  
+
 # Backlog:
 - [ ]{~2hr}{@0hr}{f_mgmt} Add Secondary interface to mgmt utils (putting sqlite to the file hashing, storing and retrieving spaces-files)
 - [ ]{~1hr}{@0hr}{main} Clarify order of operations in [[structure]]
