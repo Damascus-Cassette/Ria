@@ -1,91 +1,106 @@
+from contextvars import ContextVar
+from contextlib  import contextmanager
 
-class _empty():
-    ''' Utility None '''
+from typing      import Any
 
-class common_root:
-    ''' Utility Root '''
+class _common_root:
+    ...
 
-class s_input():
-    Context : Any
-    def __init__(self, as_type, uuid=None, in_context:str|None=None, default=None, default_args=None, default_kwargs=None):
-        self.as_type        = type    
-        self.uuid           = uuid
-        self.in_context     = in_context
-        self.default        = default
-        self.default_args   = default_args   if default_args   else []
-        self.default_kwargs = default_kwargs if default_kwargs else {}
-    
-    def set_value(self,data):
-        self.data = data
-    
-    def set_default(self,as_type=None):
-        if not as_type:
-            as_type = self.type
+class _unset:
+    ...
 
-        if self.default:
-            self.data = as_type(self.default)
+c_Context= ContextVar('Settings_Context' , default=None)
+c_uuids  = ContextVar('Settings_uuid'    , default=None)
+
+class input_base(_common_root):
+    context        : Any
+    uuid_map       : dict
+
+    data           : Any
+
+    strict         : bool      = True
+
+    as_type        : Any 
+    as_uuid        : str|None  = None 
+    in_context     : str|None  = None 
+    default        : Any       = None 
+    default_args   : list[Any] = None
+    default_kwargs : dict[Any] = None
+
+    allow_blind    : bool      = True
+
+    def __init__(self,data=_unset):
+        if not data is _unset:
+            self.data = self.as_type(data)
         else:
-            self.data = as_type(*self.default_args,**self.default_kwargs)
+            if self.default:
+                self.data = self.as_type(self.default)
+            elif self.default_args is not None or self.default_kwargs is not None:
+                if not self.default_args: self.default_args   = []
+                if not self.default_kargs: self.default_kargs = {}
+                self.data = self.as_type(*self.default_args,*self.default_kwargs)
+            elif self.strict:
+                raise Exception('Missing Required Variable!')
+            else:
+                self.data = _unset
 
-    def set_context_insertion(self):
+        self.context  = c_Context.get()        
+        self.uuid_map = c_uuids.get()        
+
         if self.in_context:
-            setattr(self.Context,self.in_context,self)
-    
-    def return_chain_id(self,data:dict,chain,self_key):
-        data[chain+'.'+self_key] = self
-    
-    def get(self):
-        if issubclass(self.data.__class__,common_root):
-            return self.data.get()
+            setattr(self.context,self._in_context,ContextVar(self.__name__,default=self))
+        if self.as_uuid:
+            self.uuid_map[self.as_uuid] = self
+        
+    def return_data(self):
+        ''' Spot to place context evaluation & similar '''
         return self.data
 
-class formatted_var():
-    
-    def __init__(data):
-        ...
+    def __get__(self):
+        return self.return_data()
 
-    def get(self):
-        ...
-    
-
-class loader_context():
-    context   = ContextVar('context' , default = None)
-    uuid_dict = ContextVar('uuid_d'  , default = None)
-    chain_dict= ContextVar('chain_d' , default = None)
-
-@ContextManager
-def settings_loader(context,uuid_dict,chain_dict):
-    try:
-        token1 = loader_context.context.set(context)
-        token2 = loader_context.uuid_dict.set(uuid_dict)
-        token3 = loader_context.chain_dict.set(chain_dict)
-        yield
-    except:
+    def __set__(self,value):
         raise
-    finally:
-        loader_context.context.reset(token1)
-        loader_context.uuid_dict.reset(token2)
-        loader_context.chain_dict.reset(token3)
 
-class settings_root(common_root):
-    ''' Recursive instance of settigns item. Each input required to be s_input instance '''
-    ''' Next version may be best as a class factory '''
+    @classmethod
+    def construct(cls, as_type, strict:bool, as_uuid:str|None=None, in_context:str|None=None, default:Any=None, default_args=None, default_kwargs=None):
+        res = type('constructed_input',tuple([cls]),{
+                        'strict'         : strict,
+                        'as_type'        : as_type,
+                        'as_uuid'        : as_uuid,
+                        'in_context'     : in_context,
+                        'default'        : default,
+                        'default_args'   : default_args,
+                        'default_kwargs' : default_kwargs,
+                        })
+        return res
 
-    @property
-    def Context(self):
-        return self._Context.get()
+class settings_dict_base(_common_root):
+    
+    _in_context : str|None #access inst of self in context under this attr string
+    _as_uuid    : str|None #access inst of self in uuid list under this string
+    
+    def __init__(self,data:dict):
 
-    _uuids = {}
+        used_keys   = []
 
-    def __init__(self,data,Context=None):
-        self.context = loader_context.context.get()
+        for k,v in vars(self).items():
+            if issubclass(v,_common_root):
+                if k in data.keys():
+                    setattr(self,k,v(data[k]))
+                    used_keys.append(k)
+                else:
+                    setattr(self,k,v())
 
-    def set_value(self,data):
-        for k,v in data.keys():
-            value_container = getattr(self,k)
-            assert issubclass(value_container,common_root)
-            value_container.set_value()
-            value_container.Context = self.Context
-        
-    def set_context():
-        ...
+        self.context  = c_Context.get()        
+        self.uuid_map = c_uuids.get()        
+
+        if self._in_context:
+            setattr(self.context,self._in_context,ContextVar(self.__name__,default=self))
+        if self._as_uuid:
+            self.uuid_map[self._as_uuid] = self
+
+        unused_keys = [k for k in data.keys() if k not in used_keys]
+
+        assert not unused_keys
+    
