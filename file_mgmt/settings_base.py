@@ -100,13 +100,23 @@ class input_base(_common_root):
             return self.data
         else:
             raise
-
+    
+    @staticmethod
+    def string_format_from_context(data,context,):
+        kwds = [k[1] for k in string.Formatter.parse("",data) if k[1]]
+        kwds = {k:getattr(context,k).get() for k in kwds}
+        new_kwds = {}
+        for k,v in kwds.items():
+            if issubclass(v.__class__,input_base):
+                new_kwds[k] = v.get()
+            else:
+                new_kwds[k] = v
+        return data.format(**new_kwds)
+    
 class input_context_formatted(input_base):
     def return_data(self):
         # assert isinstance(self.data,str)
-        kwds = [k[1] for k in string.Formatter.parse("",self.data) if k[1]]
-        kwds = {k:getattr(self.context,k).get().get() for k in kwds}
-        return self.data.format(**kwds)
+        return self.string_format_from_context(self.data, self.context)
     
 
 class settings_dict_base(_common_root):
@@ -184,12 +194,18 @@ class settings_dict_base(_common_root):
             c_uuids.reset(t2)
 
     @contextmanager
-    def generic_cm(self,**kwargs):
+    def generic_cm(self,construct=False,**kwargs):
         cust_tokens = {}
         try:
             for k,v in kwargs.items():
                 if isinstance((cvar:=getattr(self.context,k,None)),ContextVar):
                     cust_tokens[k] = cvar.set(v)
+                elif construct:
+                    cvar = ContextVar(k,default=None)
+                    setattr(self.context,k,cvar)
+                    cust_tokens[k] = cvar.set(v)
+                else:
+                    raise Exception(f'Context does not have key {k}')
             yield
         except:
             raise

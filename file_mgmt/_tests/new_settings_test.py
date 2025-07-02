@@ -1,12 +1,13 @@
 import pytest
 
-from ..settings_new import input_base, input_context_formatted, settings_dict_base
+from ..settings_base import input_base, input_context_formatted, settings_dict_base
+from ..settings_new  import settings_interface
 
 i_f = input_context_formatted.construct
 i_g = input_base.construct
 
 @pytest.fixture
-def settings_struct():
+def test_settings_struct():
     class test(settings_dict_base):
 
         var1 : str = i_g(str, in_context='var_a', default='Var1Contents')
@@ -21,7 +22,7 @@ def settings_struct():
     return test
 
 @pytest.fixture
-def settings_data_good():
+def test_settings_data_good():
     return {
         'var1'   : 'var1Contents',
         'var2'   : 'var2Contents',
@@ -31,11 +32,11 @@ def settings_data_good():
     }
 
 # @pytest.fixture
-# def settings(settings_struct,settings_data_good):
+# def settings(test_settings_struct,test_settings_data_good):
 
-def test_settings(settings_struct:settings_dict_base,settings_data_good):
-    settings = settings_struct.load_data(settings_data_good)
-    d = settings_data_good
+def test_settings(test_settings_struct:settings_dict_base,test_settings_data_good):
+    settings = test_settings_struct.load_data(test_settings_data_good)
+    d = test_settings_data_good
     c = settings.context    
 
     print(c.var_a)
@@ -56,3 +57,13 @@ def test_settings(settings_struct:settings_dict_base,settings_data_good):
     assert settings.nested.var3  == 'var1Contents'+'var2Contents'
     assert settings.nested.var3  ==  c.var_a.get().get() + c.var_b.get().get() 
     assert settings.nested.var3  ==  c.var3.get().get()
+
+@pytest.fixture
+def full_settings_data():
+    return {}
+
+def test_settings_full(full_settings_data:dict):
+    settings = settings_interface.load_data(full_settings_data)
+    with settings.generic_cm(**settings._tests.context_vars, construct = True):
+        assert settings._tests.test_a == settings._tests.control_a
+        assert settings._tests.test_b == settings._tests.control_b

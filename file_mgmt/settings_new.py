@@ -10,23 +10,20 @@ class input_context_platform(input_base):
         else:
             value = self.data['default']
 
-        kwds = [k[1] for k in string.Formatter.parse("",self.data) if k[1]]
-        kwds = {k:getattr(self.context,k).get().get() for k in kwds}
-        return self.data.format(**kwds)
+        return self.string_format_from_context(value,self.context)
+
 
 class input_context_format_path(input_base):
     strict = False
     def return_data(self):
         if self.data.startswith('./'):
-            base = '{db_root}'+self.data[2:]
+            value = '{db_path}'+self.data[1:]
         elif self.data.startswith('../'):
-            base = '{db_root}/'+self.data        
+            value = '{db_path}/'+self.data        
         else:
-            base = self.data
+            value = self.data
 
-        kwds = [k[1] for k in string.Formatter.parse("",base) if k[1]]
-        kwds = {k:getattr(self.context,k).get().get() for k in kwds}
-        return base.format(**kwds)
+        return self.string_format_from_context(value,self.context)
 
 i_g   = input_base.construct
 i_f   = input_context_formatted.construct
@@ -43,7 +40,9 @@ class settings_interface(settings_dict_base):
 
     class _tests(settings_dict_base):
         #Control class for testing
-        _strict = False
+        _strict   = False
+        _required = False
+
         context_vars = {
             'db_standard': 'db_standard',
             'db_path'    : 'db_path'    ,
@@ -62,12 +61,14 @@ class settings_interface(settings_dict_base):
 
     class client_info(settings_dict_base):
         _strict = False
+        _required = False
         
         address  : str  = i_g(str, default = 'localhost:3001')
 
     class manager(settings_dict_base):
         ''' All info related to running this module as a serivce.'''
         _strict = False
+        _required = False
 
         port             : int  = i_g(int ,default=3001)
         require_subuser  : bool = i_g(bool,False)
@@ -75,11 +76,14 @@ class settings_interface(settings_dict_base):
         class services(settings_dict_base):
             ''' Generic Services '''
             _strict = False
+            _required = False
+
             cleanup_period : str  = i_g(str , default='12h00m')
             verify_files   : bool = i_g(bool, default=True)
 
     class database(settings_dict_base):
         _strict = False
+        _required = False
 
         db_standard    = i_g(str,  in_context='db_standard' , default = 'sqlite')
         db_path        = i_g(str,  in_context='db_path'     , default = ':memory:')
@@ -87,6 +91,7 @@ class settings_interface(settings_dict_base):
 
         class dirs(settings_dict_base):
             _strict = False
+            _required = False
 
             view   = i_fp(str, default="./views")
             store  = i_fp(str, default="./store")
@@ -95,6 +100,7 @@ class settings_interface(settings_dict_base):
 
         class filepaths(settings_dict_base):
             _strict = False
+            _required = False
 
             view            = i_fp(str,default="{user}/{session}/{uuid_short}/{uuid}")
             view_log        = i_fp(str,default="{user}/{session}/{uuid_short}/{uuid}.log")
@@ -108,6 +114,8 @@ class settings_interface(settings_dict_base):
 
         class timeout(settings_dict_base):
             _strict = False
+            _required = False
+
             file   = i_g(str,default="0h00m")
             space  = i_g(str,default="0h00m")
             
