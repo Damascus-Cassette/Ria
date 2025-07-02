@@ -1,8 +1,44 @@
 database:
-  cache_dir: ./cache/
-  database_fp: sqlite:////C:/
-  facing_dir:
-    linux: ./face_linux/
-    windows: ./face_win/
-  lock_location: ./
-  logging_dir: ./logs/
+  db_standard: sqlite
+  db_dir: ":memory:"
+
+  debug_root: "{test_dir}"
+  
+  dirs:
+    view: ./views
+    store: ./store
+    export: ./export
+    logs: ./log/{type}
+
+  filepaths:
+    view: "{user}/{session}/{uuid_short}/{uuid}"
+    view_log: "{user}/{session}/{uuid_short}/{uuid}.log"
+    
+    store: "{uuid_short}/{uuid}.blob"
+    store_log: "{uuid_short}/{uuid}.log"
+    
+    export: "{user}/{Session}/exports/{uuid}/"
+    export_log: "{user}/{Session}/exports/{uuid}.log"
+    
+    export_junction: "{user}/{Session}/exports/{name}/" #Auto links it by name to this location. Untracked junction.
+
+  timeout:   #Hours from 0 users to deletion
+    file:   "128h00m"
+    view:   "128h00m"
+    space:  "128h00m"
+    export: "128h00m"
+
+
+manager:
+  debug_standalone: False
+
+  port: 3001
+  require_subuser: False
+
+  services:
+    cleanup_period: 12
+    verify_files: True
+
+client:
+  debug_standalone: False
+  address: localhost:3001

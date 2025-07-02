@@ -13,7 +13,7 @@ def _test_dir(pytestconfig):
 @pytest.fixture
 def _settings(_test_dir):
     s = settings_interface()
-    s.load_file(good_settings)
+    s._load_file(good_settings)
     return s
 
 @pytest.fixture
@@ -38,6 +38,7 @@ def test_db_interface_context_echo(_db_interface:db_interface,attr,value,expects
             ret = _db_interface._repo_base.echo_context(attr)
         except:
             ret = False
+            raise
 
         if not (ret == expects) == succeed:
             raise Exception(f'Context Echo Failed! Key:{attr} Expected:{value} Got:{ret}')
@@ -46,15 +47,15 @@ def test_db_interface_context_echo(_db_interface:db_interface,attr,value,expects
     ('platform'        , 'default', './face_default/' , True  ),    
     ('platform'        , 'linux'  , './face_linux/'   , True  ),    
     ('platform'        , 'windows', './face_win/'     , True  ),    
-    ('platform'        , 'linux'  , 'Anthing'         , False ),    
-    ('platform'        , 'windows', 'Anthing'         , False ),    
+    ('platform'        , 'linux'  , 'Anything'        , False ),    
+    ('platform'        , 'windows', 'Anything'        , False ),    
     ('__not_context__' , 'windows', 'Anything'        , False ),    
 ])
 def test_db_settings_context_echo(_db_interface:db_interface,attr,value,expects,succeed:bool ):
 
     with _db_interface.generic_cm(**{attr:value}):
         try:
-            ret = _db_interface.settings.database.facing_dir.get()
+            ret = _db_interface.settings.tests.context_variable.get()
         except:
             ret = False
 
@@ -93,30 +94,30 @@ def test_session_basic(_db_interface:db_interface):
         assert     session.query(repo_user.base).filter_by(id='IDname202').all()
 
 
-def test_db_file_upload(_db_interface:db_interface):
-    dbi = _db_interface
+# def test_db_file_upload(_db_interface:db_interface):
+#     dbi = _db_interface
 
-    with _db_interface.session_cm() as session:
-        user = dbi.repo_user.base()
-        user.id  = 'IDname1'
+#     with _db_interface.session_cm() as session:
+#         user = dbi.repo_user.base()
+#         user.id  = 'IDname1'
 
-        session  = dbi.repo_Session.start('test_session',user)
-        nSpace   = dbi.repo_NamedSpace.store(test_resources, 'test_space', repl_junction=False, do_remove=False)
+#         session  = dbi.repo_Session.start('test_session',user)
+#         nSpace   = dbi.repo_NamedSpace.store(test_resources, 'test_space', repl_junction=False, do_remove=False)
         
-        nSpace.session_export(session, dp = ) #Default datapath should be relevent to function & store path in yaml
-        nSpace.session_view(session,   dp = ) #
-        nSpace.user_export(user,       dp = ) #
+#         nSpace.session_export(session, dp = ) #Default datapath should be relevent to function & store path in yaml
+#         nSpace.session_view(session,   dp = ) #
+#         nSpace.user_export(user,       dp = ) #
 
-        assert nSpace.total_users == 3
+#         assert nSpace.total_users == 3
 
-        session.close()
-        assert nSpace.total_users == 2
+#         session.close()
+#         assert nSpace.total_users == 2
 
-        session.exports.clear()
-        assert nSpace.total_users == 1
+#         session.exports.clear()
+#         assert nSpace.total_users == 1
 
-        user.exports.clear()
-        assert nSpace.total_users == 0
+#         user.exports.clear()
+#         assert nSpace.total_users == 0
 
 
 # def test_db_space_upload():

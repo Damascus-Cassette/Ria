@@ -1,9 +1,7 @@
 database:
   db_standard: sqlite
-  db_dir: ":memory:"
+  db_root: ":memory:"
 
-  debug_root: "{test_dir}"
-  
   dirs:
     view: ./views
     store: ./store

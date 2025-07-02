@@ -56,9 +56,9 @@ class db_info_timeout(_settings_base):
     export : str = "24h00m"
 
 class db_info(_settings_base):
-    add_to_context = ['db_standard','db_root']
+    _add_to_context = ['db_standard','db_root']
     _strict         = False
-    context        = _context
+    Context        = _context
     
     db_standard: str = 'sqlite'
     db_root    : str = ':memory:'
@@ -68,8 +68,6 @@ class db_info(_settings_base):
     filepaths  : db_info_filepaths = db_info_filepaths()
     timeout    : db_info_timeout   = db_info_timeout()
     
-    # facing_dir : pcv = pcv({'windows':'./face_win/','linux':'./face_linux/'})    #converted on import
-
 
 class manager_services(_settings_base):
     ''' Generic Services '''
@@ -95,13 +93,17 @@ class client_info(_settings_base):
     debug_standalone : bool = False
     debug_manager    : str  = "localhost:3001"
 
-    manager_address  : str  = ''
+    address  : str  = ''
+
+class tests(_settings_base):
+    context_variable : pcv = pcv({'windows':'./face_win/','linux':'./face_linux/'})    #converted on import
 
 class settings_interface(_settings_base):
     _strict = False
     database : db_info      = db_info()
     manager  : manager_info = manager_info()
     client   : client_info  = client_info()
+    _test    : tests        = tests()
 
 if __name__ == '__main__':
     import argparse

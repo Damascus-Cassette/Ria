@@ -49,13 +49,13 @@ class db_interface():
     def _load_settings(self,settings):
         if isinstance(settings,str):
             self.settings = settings_interface(override_context=self.context)
-            self.settings.load_file(settings)
+            self.settings._load_file(settings)
         else:
             self.settings = settings_interface(values=settings,override_context=self.context)
         
     def _load_db(self):
         # self.settings.fetch(value-uid)
-        db_p = self.settings.database.database_fp
+        db_p = self.settings.database.db_path.get()
         self.engine = create_engine(db_p)
         Base.metadata.create_all(self.engine)
 
@@ -112,7 +112,10 @@ class db_interface():
         try:
             for k,v in kwargs.items():
                 if isinstance((cvar:=getattr(self.context,k,None)),ContextVar):
+                    print(f'cvar {cvar} is being set to {v}')
                     cust_tokens[k] = cvar.set(v)
+                # else:
+                #     raise Exception('Context is missing ContextVar for: ',k)
             yield
         except:
             raise

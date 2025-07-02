@@ -116,6 +116,13 @@ class _settings_base(_common_root):
         if defaulted_keys:
             print('Following keys were not imported and resolved to default values:')
             for k in defaulted_keys:
+                value = getattr(self,k)
+
+                if issubclass(value.__class__,_common_root):
+                    value.Context = self.Context
+                    # print(f'Set Context on {value} to {self.Context}')
+                if isinstance(value,self.__class__):
+                    value._set_attributes({})
                 print(f'{k} has defaulted to: f{getattr(self,k)}')
         
         self._imported_keys = applied_keys
@@ -147,7 +154,7 @@ class _context_variable_base(_settings_base):
 
     _strict = False 
 
-    context : Any
+    Context : Any
     _c_attr : str
     _d_attr : str
     _keys   : list = ['default']
@@ -168,21 +175,19 @@ class _context_variable_base(_settings_base):
         assert (cvar := getattr(self.Context,self._c_attr,None)) != None
         return getattr(self, cvar.get(), getattr(self,self._d_attr))
 
-
     def __repr__(self):
         injection = {}
-
         class _empty:...
         for k in self._keys:
             if (v:=self(getattr(self,k,_empty))) != _empty:
                 injection[k] = v
 
-        return f'< Context_Varaible Object: {injection}>'
+        return f'< Context_Variable Object: {injection}>'
     
 
 #All this is Fugly
 
-class _formatted_base():
+class _formatted_base(_common_root):
     _strict = False 
     context : Any
 
@@ -194,8 +199,11 @@ class _formatted_base():
 
     def get(self):
         keys = [k[1] for k in string.Formatter.parse("",self.data) if k[1]]
-        di   = {k:getattr(self.Context,k) for k in keys}
-        return self.data.format(di)    
+        di   = {k:getattr(self.Context,k).get() for k in keys}
+        return self.data.format(**di)    
+    
+    def __repr__(self):
+        return f"<Context Formatter Obj: '{self.data}'>"
 
 class formatted_string(_formatted_base):
     ...
@@ -209,7 +217,7 @@ class formatted_path(_formatted_base):
             base_string = "{db_root}" + self.data[1:]
         
         keys = [k[1] for k in string.Formatter.parse("",base_string) if k[1]]
-        di   = {k:getattr(self.Context,k) for k in keys}
-
-        return self.data.format(di)    
+        di   = {k:getattr(self.Context,k).get() for k in keys}
+        ret  = self.data.format(**di)
+        return ret     
     
