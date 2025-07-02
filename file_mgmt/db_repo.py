@@ -55,6 +55,14 @@ su = space_utils
 class repo_user(repo_interface_base):
     base=User
 
+    @classmethod
+    def make(cls, id, hid):
+        inst = cls.base()
+        inst.id  = id
+        inst.hid = hid
+        cls.create(inst)
+        return inst
+
 class repo_NamedSpace(repo_interface_base):
     base=asc_Space_NamedSpace
 
@@ -152,19 +160,28 @@ class repo_File(repo_interface_base):
         elif existing:
             log.log(existing.id, " exists in db, but is not on disk! Uploading")
 
-        file_inst = cls.base()
-        file_inst.id = uid
-        file_inst.filepath
+        file = cls.base()
+        file.id = uid
+        file.filepath
 
         fu.move_file(filepath ,
                      uid      ,
                      repl_symlink = repl_symlink,
                      do_remove    = do_remove   ,)
 
-        cls.create(file_inst)
+        cls.create(file)
 
-        return file_inst
+        return file
 
+    @classmethod
+    def as_named(cls,name,file:File):
+        assert isinstance(file,File)
+        nFile = asc_Space_NamedFile()
+        nFile.cFile = file        
+        nFile.cName = name  
+        repo_NamedSpace.create(nFile)
+        return nFile 
+    
 class repo_Space(repo_interface_base):
     base=Space
 
@@ -187,16 +204,32 @@ class repo_Space(repo_interface_base):
         cls.create(space_inst)
 
         return space_inst
+    
+    @classmethod
+    def as_named(cls,name,space:Space):
+        assert isinstance(space,Space)
+        nspace = asc_Space_NamedSpace()
+        nspace.cSpace = space        
+        nspace.cName  = name  
+        repo_NamedSpace.create(nspace)
+        return nspace 
 
 class repo_Export(repo_interface_base):
     base=Export
 
+    @classmethod
+    def from_file(cls,file,name,dp=None):
+        ...
+
+    @classmethod
+    def from_namedFile(cls,namedFile,dp=None):
+        ...
 
 class repo_Session(repo_interface_base):
     base=Session
 
     @classmethod
-    def start(cls,name,user:User):
+    def make(cls,name,user:User):        
 
         session_inst = cls.base()
         session_inst.name = name
