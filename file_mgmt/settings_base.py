@@ -9,7 +9,8 @@ import string
 missing_flag = '<! MISSING REQUIRED VALUE !>'
     #Consider adding type to missing value
 
-class _standin_context: ...
+class _standin_context: 
+    ''' Context container, Meant to hold ContextVar objects'''
 
 class _common_root: ...
 
@@ -18,7 +19,7 @@ class _settings_base(_common_root):
     
     _strict = True           #Settings base, consider _tracked_attributes list?
     _add_to_context : list
-    Context = _standin_context
+    Context : Any = _standin_context
 
     _imported_keys  : list[str] = []
         #keys corrisponding to values that have been imported
@@ -62,13 +63,13 @@ class _settings_base(_common_root):
         
         return res
 
-    def load_file(self,fp:str):
+    def _load_file(self,fp:str):
         assert fp.endswith('.yaml') or fp.endswith('.yml')
         with open(fp,'r') as file:
             data = yaml.safe_load(file)
             self._set_attributes(data)
 
-    def save_file(self,export_fp:str,overwrite=False,export_defaults=False):
+    def _save_file(self,export_fp:str,overwrite=False,export_defaults=False):
         ''' Exporting a file, will not overwrite by default '''
         
         assert os.path.isfile(export_fp)
@@ -126,7 +127,7 @@ class _settings_base(_common_root):
         return self.__anno_resolved_cache__
 
     @contextmanager
-    def generic_cm(self,**kwargs):
+    def _generic_cm(self,**kwargs):
         cust_tokens = {}
         try:
             for k,v in kwargs.items():
