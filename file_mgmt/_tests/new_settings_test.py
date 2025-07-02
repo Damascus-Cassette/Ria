@@ -1,7 +1,7 @@
 import pytest
 
 from ..settings_base import input_base, input_context_formatted, settings_dict_base
-from ..settings_new  import settings_interface
+from ..settings  import settings_interface
 
 i_f = input_context_formatted.construct
 i_g = input_base.construct

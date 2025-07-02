@@ -1,123 +1,123 @@
-from typing import Any
-from contextvars import ContextVar
-from contextlib  import contextmanager
-from .old_settings_base import _context_variable_base, _settings_base
-from .old_settings_base import formatted_string as fs
-from .old_settings_base import formatted_path   as ffp
+from .settings_base import settings_dict_base, input_base, input_context_formatted
 
-class _context:
-    #Standin, replaced on import.
-    ...
+import string
 
-class platform_context_variable(_context_variable_base):
-    Context = _context
+class input_context_platform(input_base):
+    def return_data(self):
+        key = self.context.platform.get()
+        if key in self.data.keys():
+            value = self.data[key]
+        else:
+            value = self.data['default']
+
+        return self.string_format_from_context(value,self.context)
+
+
+class input_context_format_path(input_base):
+    strict = False
+    def return_data(self):
+        if self.data.startswith('./'):
+            value = '{db_path}'+self.data[1:]
+        elif self.data.startswith('../'):
+            value = '{db_path}/'+self.data        
+        else:
+            value = self.data
+
+        return self.string_format_from_context(value,self.context)
+
+i_g   = input_base.construct
+i_f   = input_context_formatted.construct
+i_fp  = input_context_format_path.construct
+i_pcv = input_context_platform.construct
+
+
+##################################
+
+
+class settings_interface(settings_dict_base):
     _strict = False
+    _in_context = 'Settings_Root'
 
-    _c_attr = 'platform'
-    _d_attr = 'default'
-    _keys   = ['default','windows','linux']
+    class _tests(settings_dict_base):
+        #Control class for testing
+        _strict   = False
+        _required = False
 
-    default : ffp = ffp('./face_default/')
-    windows : ffp = ffp('./face_win')
-    linux   : ffp = ffp('./face_lin')
+        context_vars = {
+            'db_standard': 'db_standard',
+            'db_path'    : 'db_path'    ,
+            'user'       : 'user'       ,
+            'user'       : 'user'       ,
+            'session'    : 'session'    ,
+            'uuid_short' : 'uuid_short' ,
+            'uuid'       : 'uuid'       ,
+            }
+        
+        test_a        = i_fp(str,default="./{user}/{session}/{uuid_short}/{uuid}.log")
+        control_a     = "db_path/user/session/uuid_short/uuid.log"
+        
+        test_b        = i_fp(str,default="../{user}/{session}/{uuid_short}/{uuid}.log")
+        control_b     = "db_path/../user/session/uuid_short/uuid.log"
 
-pcv = platform_context_variable
+    class client_info(settings_dict_base):
+        _strict = False
+        _required = False
+        
+        address  : str  = i_g(str, default = 'localhost:3001')
 
-class db_info_dirs(_settings_base):
-    Context = _context
-    _strict = False
+    class manager(settings_dict_base):
+        ''' All info related to running this module as a serivce.'''
+        _strict = False
+        _required = False
 
-    view   : ffp = ffp("./views")
-    store  : ffp = ffp("./store")
-    export : ffp = ffp("./export")
-    logs   : ffp = ffp("./log/{type}")
+        port             : int  = i_g(int ,default=3001)
+        require_subuser  : bool = i_g(bool,False)
+        
+        class services(settings_dict_base):
+            ''' Generic Services '''
+            _strict = False
+            _required = False
 
-class db_info_filepaths(_settings_base):
-    _strict = False
-    Context = _context
-    view            : ffp = ffp("{user}/{session}/{uuid_short}/{uuid}")
-    view_log        : ffp = ffp("{user}/{session}/{uuid_short}/{uuid}.log")
+            cleanup_period : str  = i_g(str , default='12h00m')
+            verify_files   : bool = i_g(bool, default=True)
 
-    store           : ffp = ffp("{uuid_short}/{uuid}.blob")
-    store_log       : ffp = ffp("{uuid_short}/{uuid}.log")
+    class database(settings_dict_base):
+        _strict = False
+        _required = False
 
-    export          : ffp = ffp("{user}/{session}/exports/{uuid}/")
-    export_log      : ffp = ffp("{user}/{session}/exports/{uuid}.log")
-    export_junction : ffp = ffp("{user}/{session}/exports/{name}/" )
+        db_standard    = i_g(str,  in_context='db_standard' , default = 'sqlite')
+        db_path        = i_g(str,  in_context='db_path'     , default = ':memory:')
+        _sqla_db_path  = i_fp(str, default = "{db_standard}:///{db_path}")
 
-class db_info_timeout(_settings_base):
-    _strict = False
-    ''' Timeout after 0 Summed users per object type (views do not count innactive sessions)'''
-    Context = _context
-    file   : str = "0h00m"
-    space  : str = "0h00m"
-    
-    view   : str = "24h00m"
-    export : str = "24h00m"
+        class dirs(settings_dict_base):
+            _strict = False
+            _required = False
 
-class db_info(_settings_base):
-    _add_to_context = ['db_standard','db_root']
-    _strict         = False
-    Context        = _context
-    
-    db_standard: str = 'sqlite'
-    db_root    : str = ':memory:'
-    db_path    : ffp = ffp("{db_standard}:///{db_root}")
+            view   = i_fp(str, default="./views")
+            store  = i_fp(str, default="./store")
+            export = i_fp(str, default="./export")
+            logs   = i_fp(str, default="./log/{type}")
 
-    dirs       : db_info_dirs      = db_info_dirs()
-    filepaths  : db_info_filepaths = db_info_filepaths()
-    timeout    : db_info_timeout   = db_info_timeout()
-    
+        class filepaths(settings_dict_base):
+            _strict = False
+            _required = False
 
-class manager_services(_settings_base):
-    ''' Generic Services '''
-    _strict = False
-    Context = _context
-    cleanup_period : str  = '12h00m'
-    verify_files   : bool = True
+            view            = i_fp(str,default="{user}/{session}/{uuid_short}/{uuid}")
+            view_log        = i_fp(str,default="{user}/{session}/{uuid_short}/{uuid}.log")
 
-class manager_info(_settings_base):
-    ''' All info related to running this module as a serivce.'''
-    _strict = False
-    
-    services         : manager_services = manager_services()
-    
-    debug_standalone : bool = False
-    debug_port       : str  = 3001
+            store           = i_fp(str,default="{uuid_short}/{uuid}.blob")
+            store_log       = i_fp(str,default="{uuid_short}/{uuid}.log")
 
-    port             : int  = 3001
-    require_subuser  : bool = False
+            export          = i_fp(str,default="{user}/{session}/exports/{uuid}/")
+            export_log      = i_fp(str,default="{user}/{session}/exports/{uuid}.log")
+            export_junction = i_fp(str,default="{user}/{session}/exports/{name}/" )
 
-class client_info(_settings_base):
-    _strict = False
-    debug_standalone : bool = False
-    debug_manager    : str  = "localhost:3001"
+        class timeout(settings_dict_base):
+            _strict = False
+            _required = False
 
-    address  : str  = ''
-
-class tests(_settings_base):
-    
-    context_variable : pcv = pcv({'windows':'./face_win/','linux':'./face_linux/'})    #converted on import
-
-class settings_interface(_settings_base):
-    _strict = False
-    database : db_info      = db_info()
-    manager  : manager_info = manager_info()
-    client   : client_info  = client_info()
-    _test    : tests        = tests()
-
-if __name__ == '__main__':
-    import argparse
-    import pprint
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-f', '--file')
-    parser.add_argument('-e', '--export',default=False,action='store_true')
-    args = parser.parse_args()
-    
-    settings = settings_interface()
-    if not args.export:
-        settings.load_file(args.file)
-        pprint.pprint(settings.export_dict_recur())
-    if args.export:
-        settings.save_file(args.file,overwrite=True,export_defaults=True)
-
+            file   = i_g(str,default="0h00m")
+            space  = i_g(str,default="0h00m")
+            
+            view   = i_g(str,default="24h00m")
+            export = i_g(str,default="24h00m")
