@@ -183,6 +183,21 @@ class settings_dict_base(_common_root):
             c_Context.reset(t1)
             c_uuids.reset(t2)
 
+    @contextmanager
+    def generic_cm(self,**kwargs):
+        cust_tokens = {}
+        try:
+            for k,v in kwargs.items():
+                if isinstance((cvar:=getattr(self.context,k,None)),ContextVar):
+                    cust_tokens[k] = cvar.set(v)
+            yield
+        except:
+            raise
+        finally:
+            for k,v in cust_tokens.items():
+                cvar = getattr(self.context,k)
+                cvar.reset(v)
+
     @classmethod
     def load_data(cls,data:dict,context=None,uuid_map=None):
         if context is None:
