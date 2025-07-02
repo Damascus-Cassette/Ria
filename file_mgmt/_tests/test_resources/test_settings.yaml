@@ -1,5 +1,5 @@
 database:
-  db_standard: sqlite:///
+  db_standard: sqlite
   db_dir: ":memory:"
 
   debug_root: "{test_dir}"

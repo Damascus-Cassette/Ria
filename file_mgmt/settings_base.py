@@ -4,6 +4,7 @@ import yaml
 import os
 from contextvars import ContextVar
 from contextlib  import contextmanager
+import string
 
 missing_flag = '<! MISSING REQUIRED VALUE !>'
     #Consider adding type to missing value
@@ -14,24 +15,33 @@ class _common_root: ...
 
 class _settings_base(_common_root):
     ''' dataclass that interprets a settings_object or custom start, holds initialized repos '''
-    context = _standin_context
+    
+    _strict = True           #Settings base, consider _tracked_attributes list?
+    _add_to_context : list
+    Context = _standin_context
 
-    imported_keys : list[str] = []#keys corrisponding to values that have been imported
+    _imported_keys  : list[str] = []
+        #keys corrisponding to values that have been imported
 
     __anno_resolved__ : dict[str,Any]
 
-    strict = True           #Settings base, consider _tracked_attributes list?
 
     def __init__(self, values:dict|None=None, override_context=None):
         if override_context:
-            self.context = override_context 
+            self.Context = override_context 
         if values:
-            self.set_attributes(values)
+            self._set_attributes(values)
         else:
             ... #Is placeholder!
+        self._insert_keys_to_context()
             
-    def export_dict_recur(self,export_defaults=False)->dict:
-        ''' Export yaml recursivly w/a based on hasattr(self,k,export_dict_recur). Otherwise record straight (Non strict) '''
+    def _insert_keys_to_context(self):
+        for k in getattr(self,'_add_to_context',[]):
+            setattr(self.Context,k, ContextVar(k,default = getattr(self,k)))
+        
+
+    def _export_dict_recur(self,export_defaults=False)->dict:
+        ''' Export yaml recursivly w/a based on hasattr(self,k,_export_dict_recur). Otherwise record straight (Non _strict) '''
         class _empty: ...
         res = {}
         
@@ -39,13 +49,13 @@ class _settings_base(_common_root):
             v = getattr(self,k,_empty)
             if v is _empty and not export_defaults:
                 continue
-            elif v is _empty and export_defaults and self.strict:
+            elif v is _empty and export_defaults and self._strict:
                 res[k] = missing_flag
-            elif v is _empty and export_defaults and not self.strict:
+            elif v is _empty and export_defaults and not self._strict:
                 continue
-            elif k not in self.imported_keys and not export_defaults:
+            elif k not in self._imported_keys and not export_defaults:
                 continue
-            elif (func := getattr(v,'export_dict_recur',_empty)) != _empty:
+            elif (func := getattr(v,'_export_dict_recur',_empty)) != _empty:
                 res[k] = func(export_defaults)
             else:
                 res[k] = v
@@ -56,7 +66,7 @@ class _settings_base(_common_root):
         assert fp.endswith('.yaml') or fp.endswith('.yml')
         with open(fp,'r') as file:
             data = yaml.safe_load(file)
-            self.set_attributes(data)
+            self._set_attributes(data)
 
     def save_file(self,export_fp:str,overwrite=False,export_defaults=False):
         ''' Exporting a file, will not overwrite by default '''
@@ -68,12 +78,12 @@ class _settings_base(_common_root):
         
         os.makedirs(os.path.split(export_fp)[0], exist_ok = True)
 
-        data = self.export_dict_recur(export_defaults=export_defaults)
+        data = self._export_dict_recur(export_defaults=export_defaults)
 
         with open(export_fp, 'w', encoding='utf8') as file:
             yaml.dump(data, file, default_flow_style=False, allow_unicode=True)
 
-    def set_attributes(self,data:dict):    
+    def _set_attributes(self,data:dict):    
 
         applied_keys = []
         for k,v in data.items():
@@ -85,7 +95,7 @@ class _settings_base(_common_root):
                 ty = self.__anno_resolved__[k]
                 try:
                     if issubclass(ty,_common_root):
-                        setattr(self,k,ty(v,override_context=self.context))
+                        setattr(self,k,ty(v,override_context=self.Context))
                     else: 
                         setattr(self,k,ty(v))
                 except Exception as e:
@@ -97,9 +107,9 @@ class _settings_base(_common_root):
         unapplied_keys = [k for k in self.__anno_resolved__.keys() if (k not in applied_keys) and (not getattr(self,k,None))]
         defaulted_keys = [k for k in self.__anno_resolved__.keys() if (k not in applied_keys) and (getattr(self,k,None))]
 
-        if unapplied_keys and self.strict:
+        if unapplied_keys and self._strict:
             raise Exception(f'Following values were not imported and are required: /n {unapplied_keys}')
-        elif unapplied_keys and not self.strict:
+        elif unapplied_keys and not self._strict:
             print(f'Warning! Following values were not imported: /n {unapplied_keys}')
 
         if defaulted_keys:
@@ -107,7 +117,7 @@ class _settings_base(_common_root):
             for k in defaulted_keys:
                 print(f'{k} has defaulted to: f{getattr(self,k)}')
         
-        self.imported_keys = applied_keys
+        self._imported_keys = applied_keys
 
     @property
     def __anno_resolved__(self):
@@ -120,21 +130,21 @@ class _settings_base(_common_root):
         cust_tokens = {}
         try:
             for k,v in kwargs.items():
-                if isinstance((cvar:=getattr(self.context,k,None)),ContextVar):
+                if isinstance((cvar:=getattr(self.Context,k,None)),ContextVar):
                     cust_tokens[k] = cvar.set(v)
             yield
         except:
             raise
         finally:
             for k,v in cust_tokens.items():
-                cvar = getattr(self.context,k)
+                cvar = getattr(self.Context,k)
                 cvar.reset(v)
 
 class _context_variable_base(_settings_base):
     ''' Generic Context Varaible, initilized with context at declaration
      Fugly struct atm, consider something cleaner '''
 
-    strict = False 
+    _strict = False 
 
     context : Any
     _c_attr : str
@@ -144,16 +154,17 @@ class _context_variable_base(_settings_base):
     #Consider complex version as a grid matrix, or chained dicts
     def __init__(self, values:str|dict,override_context=None):
         if override_context:
-            self.context = override_context
+            self.Context = override_context
 
         if isinstance(values,str):
             for k in self._keys:
-                setattr(self,k,values)
+                ty = self.__anno_resolved__[k]
+                setattr(self,k,ty(values))
         else:
-            self.set_attributes(values)
+            self._set_attributes(values)
             
     def get(self):
-        assert (cvar := getattr(self.context,self._c_attr,None)) != None
+        assert (cvar := getattr(self.Context,self._c_attr,None)) != None
         return getattr(self, cvar.get(), getattr(self,self._d_attr))
 
 
@@ -166,3 +177,38 @@ class _context_variable_base(_settings_base):
                 injection[k] = v
 
         return f'< Context_Varaible Object: {injection}>'
+    
+
+#All this is Fugly
+
+class _formatted_base():
+    _strict = False 
+    context : Any
+
+    def __init__(self,value:str|Any,override_context=None):
+        if override_context:
+            self.Context = override_context
+        assert isinstance(value,str)
+        self.data = value
+
+    def get(self):
+        keys = [k[1] for k in string.Formatter.parse("",self.data) if k[1]]
+        di   = {k:getattr(self.Context,k) for k in keys}
+        return self.data.format(di)    
+
+class formatted_string(_formatted_base):
+    ...
+
+class formatted_path(_formatted_base):
+    ''' Make path relative to db_root'''
+    def get(self):
+        base_string = self.data 
+        
+        if self.data.startswith('.'):
+            base_string = "{db_root}" + self.data[1:]
+        
+        keys = [k[1] for k in string.Formatter.parse("",base_string) if k[1]]
+        di   = {k:getattr(self.Context,k) for k in keys}
+
+        return self.data.format(di)    
+    

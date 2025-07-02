@@ -1,14 +1,17 @@
+from ..db_interface  import db_interface,settings_interface
 import pytest
 import os
 
-this_dir           = os.path.split(__file__)[0]
-good_settings      = os.path.join(this_dir,'test_resources/test_settings.yaml')
-test_resources     = os.path.join(this_dir,'test_resources')
+this_dir        =  os.path.split(__file__)[0]
+good_settings   =  os.path.join(this_dir,'test_resources/test_settings.yaml')
+test_resources  =  os.path.join(this_dir,'test_resources')
 
-from ..db_interface  import db_interface,settings_interface
+@pytest.fixture(scope="session")
+def _test_dir(pytestconfig):
+    return pytestconfig.getoption("test_dir")
 
 @pytest.fixture
-def _settings():
+def _settings(_test_dir):
     s = settings_interface()
     s.load_file(good_settings)
     return s
@@ -16,6 +19,12 @@ def _settings():
 @pytest.fixture
 def _db_interface():
     return db_interface(good_settings) 
+
+
+#################################################################################
+###                                                                           ###       
+#################################################################################
+
 
 @pytest.mark.parametrize('attr,value,expects,succeed',[
     ('platform','linux','linux',True),    
