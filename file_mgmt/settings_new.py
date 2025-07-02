@@ -103,4 +103,26 @@ class settings_dict_base(_common_root):
         unused_keys = [k for k in data.keys() if k not in used_keys]
 
         assert not unused_keys
-    
+
+    @contextmanager    
+    def loading_cm(context_obj:Any,uuid_map:dict):
+        try:
+            t1 = c_Context.set(context_obj)
+            t2 = c_uuids.set(uuid_map)
+            yield
+        except:
+            raise
+        finally:
+            c_Context.reset(t1)
+            c_uuids.reset(t2)
+
+    @classmethod
+    def load_data(cls,data:dict,context=None,uuid_map=None):
+        if context is None:
+            context  = type('UnsetContext',tuple([]),{})
+        if uuid_map is None:
+            uuid_map = {}
+        
+        with cls.loading_cm(context,uuid_map):
+            return cls(data)
+        
