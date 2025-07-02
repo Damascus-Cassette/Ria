@@ -48,14 +48,13 @@ class db_interface():
     
     def _load_settings(self,settings):
         if isinstance(settings,str):
-            self.settings = settings_interface(override_context=self.context)
-            self.settings._load_file(settings)
+            self.settings = settings_interface.load_file(settings, context=self.context)
         else:
-            self.settings = settings_interface(values=settings,override_context=self.context)
+            self.settings = settings_interface.load_data(settings, context=self.context)
         
     def _load_db(self):
         # self.settings.fetch(value-uid)
-        db_p = self.settings.database.db_path.get()
+        db_p = self.settings.database._sqla_db_path
         self.engine = create_engine(db_p)
         Base.metadata.create_all(self.engine)
 
