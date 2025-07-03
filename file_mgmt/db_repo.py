@@ -318,7 +318,7 @@ class context():
     @classproperty
     def f_uuid(cls): return cls.File.get().id
     @classproperty
-    def f_uuid_short(cls): return cls.File.get().id[:10]
+    def f_uuid_s(cls): return cls.File.get().id[:10]
 
     @classproperty
     def s_uuid(cls): return cls.Space.get().id
