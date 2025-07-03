@@ -1,3 +1,4 @@
-.pyc
+*.pyc
 .pytest_cache/
 .test_database/
+.test_loc/

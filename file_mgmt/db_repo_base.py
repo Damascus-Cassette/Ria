@@ -36,6 +36,7 @@ class repo_interface_base():
 
     @transaction
     def create(cls,obj = None,data=None, **kwargs)->base:
+        assert isinstance(obj,cls.base)
         session = cls.c_session.get()
         if not data:
             data = {}
@@ -57,7 +58,8 @@ class repo_interface_base():
 
     @transaction
     def update(cls,obj:base,data=None,**kwargs)->base:
-        session = cls.c_session.get()
+        assert isinstance(obj,cls.base)
+        # session = cls.c_session.get()
 
         if not data:
             data = {}
@@ -70,6 +72,8 @@ class repo_interface_base():
     
     @transaction
     def delete(cls,obj)->None:
+        assert isinstance(obj,cls.base)
+
         session = cls.c_session.get()
         session.delete(obj)
 

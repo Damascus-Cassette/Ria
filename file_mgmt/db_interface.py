@@ -160,7 +160,7 @@ class db_interface():
             for l in tokens:
                 l()
 
-    def repo_fill_context(
+    def fill_context(
             self    ,
             User    = _unset,
             Session = _unset,
@@ -168,6 +168,7 @@ class db_interface():
             Space   = _unset,
             File    = _unset):
         ''' Identical I->O for ensuring fetch of objects from context if not set'''
+        #TODO: Make more generic with **qkwargs
         ret = []
         if not User    is _unset:
             if not User:

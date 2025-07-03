@@ -85,6 +85,8 @@ class Export(Base):
     myUserId : Mapped[str|None]  = mapped_column(ForeignKey('users.id'))
     myUser   : Mapped[User|None] = relationship(back_populates='myExports')
 
+    onDisk   : Mapped[bool] = Column(Boolean, default=False)
+
     #TODO: Consider better primary_key s being spaceId & location?
     #TODO: Consider tracking same Exports resulting from multiple sessions? Edge case
 

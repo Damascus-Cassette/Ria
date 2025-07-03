@@ -105,9 +105,9 @@ class repo_NamedSpace(repo_interface_base):
         
         space_inst = _repo_Space.store(dp, repl_junction, do_remove)
         
-        nSpace_inst       = cls.base()
-        nSpace_inst.name  = name
-        nSpace_inst.space = space_inst
+        nSpace_inst        = cls.base()
+        nSpace_inst.hid    = name
+        nSpace_inst.pSpace = space_inst
 
         cls.create(nSpace_inst)
 
@@ -146,9 +146,9 @@ class repo_NamedFile(repo_interface_base):
 
         assert _repo_File.verify_on_disk(file)
 
-        nfile_inst.file  = file
-        nfile_inst.name  = filename
-        nfile_inst.space = space 
+        nfile_inst.hid    = filename
+        nfile_inst.cFile  = file
+        nfile_inst.pSpace = space 
 
         fu.move_file(filepath,_repo_File.path(file),repl_symlink,do_remove) 
 
@@ -272,17 +272,45 @@ class repo_Space(repo_interface_base):
         
         space.id = uuid_utils.get(keysum)
         return space.id
+    
+    @classmethod
+    def place_on_disk(cls,space,dp):
+        ''' Place space on disk at directory path. If folder exists, throw error'''
+        #TODO
 
 class repo_Export(repo_interface_base):
     base=Export
 
     @classmethod
-    def from_file(cls,file,name,dp=None):
-        ...
+    def from_space(cls, space, export_name, place=False, export_dp=None, user=None, session=None)->Export:
+        user,session = cls.db_interface.fill_context(User=user, Session=session)
 
+        export = cls.base()
+
+        export.hid       = export_name
+        export.myUser    = user
+        export.mySession = session
+        export.mySpace   = space
+        export.onDisk    = False
+
+        if export_dp:
+            export.location = export_dp
+        else:
+            with cls.db_interface.repo_cm(Export=export,Space=space):
+                export.location = cls.db_interface.settings.filepaths.export
+
+        if place:
+            cls.place_on_disk(export)
+
+        cls.create(export)
+
+        return export
+    
     @classmethod
-    def from_namedFile(cls,namedFile,dp=None):
-        ...
+    def place_on_disk(cls,export)->None:
+        _repo_Space = cls.db_interface.repo_Space
+        _repo_Space.place_on_disk(export.mySpace, export.location)
+        cls.modify(export,onDisk=True)
 
 class repo_Session(repo_interface_base):
     base=Session

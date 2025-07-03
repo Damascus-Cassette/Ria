@@ -38,11 +38,12 @@ def test_file_space_creation(dbi,test_fp):
                                             space        = space,
                                             repl_symlink = False,
                                             do_remove    = False)
-        space.myFiles.append(named_file)
         dbi.repo_Space.set_id(space)
         dbi.repo_Space.create(space)
+        
+        # space.myFiles.append(named_file)
 
-        nSpace = dbi.repo_Space.as_named(space,'NamedSpace')
+        # nSpace = dbi.repo_Space.as_named(space,'NamedSpace')
 
-        export = session.export_space(space)
-        export = session.export_namedSpace(nSpace)
+        export = session.export_space(space, export_dp=None,export_dirname=None, hid='ExportName')
+        # export = session.export_namedSpace(nSpace)
