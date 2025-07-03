@@ -203,42 +203,35 @@ class db_interface():
         if not getattr(self,'engine',None):
             self._load_db()
 
-        if not self.c_session.get():
-            self.c_session.set(Session(bind=self.engine, expire_on_commit = False))
-            print('Creating New Session!')
-
-        session        = self.c_session.get()
-        in_transaction = session.in_transaction()
+        ongoing_session = self.c_session.get()
 
         try:
-            if in_transaction:
+            if ongoing_session:
                 print('Creating New Savepoint!')
-                _savepoint = session.begin_nested()
-                token1 = self.c_session.set(session)
+                _savepoint = ongoing_session.begin_nested()
                 token2 = self.c_savepoint.set(_savepoint)
-                # token = self.c_session.set(_session)
-                yield session
-                # session.flush()
+                yield ongoing_session
                 _savepoint.commit()
             else:
+                print('Creating New Session!')
+                session = Session(bind=self.engine, expire_on_commit = False)
+                token_1 = self.c_session.set(session)
                 yield session
                 session.commit()
                 session.close()
                 
         except:
-            if in_transaction:
+            if ongoing_session:
                 _savepoint.rollback() 
-                self.c_engine.reset(token1)
-                self.c_session.reset(token2)
             else:
                 session.rollback()  
                 session.close()
             raise
 
         finally:
-            if in_transaction:
-                self.c_session.reset(token1) 
+            if ongoing_session:
                 self.c_savepoint.reset(token2)
             else:
+                self.c_session.reset(token_1)
                 self.c_session.set(None)
                 
