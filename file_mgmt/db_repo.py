@@ -323,15 +323,15 @@ class context():
     @classproperty
     def s_uuid(cls): return cls.Space.get().id
     @classproperty
-    def s_uuid_short(cls): return cls.Space.get().id[:10]
+    def s_uuid_s(cls): return cls.Space.get().id[:10]
 
     @classproperty
     def v_uuid(cls): return cls.View.get().id
     @classproperty
-    def v_uuid_short(cls): return cls.View.get().id[:10]
+    def v_uuid_s(cls): return cls.View.get().id[:10]
 
     @classproperty
     def e_uuid(cls): return cls.Exort.get().id
     @classproperty
-    def e_uuid_short(cls): return cls.Exort.get().id[:10]
+    def e_uuid_s(cls): return cls.Exort.get().id[:10]
     
