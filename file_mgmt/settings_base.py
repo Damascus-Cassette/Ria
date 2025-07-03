@@ -103,10 +103,11 @@ class input_base(_common_root):
     
     @staticmethod
     def string_format_from_context(data,context,):
-        kwds = [k[1] for k in string.Formatter.parse("",data) if k[1]]
-        kwds = {k:getattr(context,k).get() for k in kwds}
+        kwds = {k[1]:getattr(context,k[1]) for k in string.Formatter.parse("",data) if k[1]}
         new_kwds = {}
         for k,v in kwds.items():
+            if isinstance(v, ContextVar):
+                v = v.get()
             if issubclass(v.__class__,input_base):
                 new_kwds[k] = v.get()
             else:

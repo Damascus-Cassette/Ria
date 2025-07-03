@@ -46,6 +46,7 @@ class file_utils:
 
     @classmethod
     def move_file(cls, fp_from, fp_to, repl_symlink, do_remove):
+        os.makedirs(os.path.split(fp_to)[0],exist_ok=True)
         if do_remove and repl_symlink:
             raise
         elif do_remove:
@@ -55,7 +56,7 @@ class file_utils:
             shutil.move(fp_from,fp_to)
             os.symlink(fp_to,fp_from)
         else:
-            shutil.copyfile(fp_from,fp_to)
+            shutil.copyfile(fp_from,fp_to, follow_symlinks=True)
 
 import random
 import uuid
@@ -100,7 +101,6 @@ class repo_NamedSpace(repo_interface_base):
         Return Instance of NamedSpace
         '''
         #upload all files via named file instances, 
-        _repo_NamedFile  = cls.db_interface.repo_NamedFile  
         _repo_Space = cls.db_interface.repo_Space  
         
         space_inst = _repo_Space.store(dp, repl_junction, do_remove)
@@ -211,7 +211,7 @@ class repo_File(repo_interface_base):
 
     @classmethod
     def path(cls,file):
-        if cls.db_interface.repo_cm(File=file):
+        with cls.db_interface.repo_cm(File=file):
             return cls.db_interface.settings.database.filepaths.store
 
 class repo_Space(repo_interface_base):
@@ -307,13 +307,24 @@ class context():
     User    = ContextVar('User'   , default=None)
     
     @classproperty
+    def root_dir(cls):
+        db_path = cls.db_path.get().get()
+        if db_path.startswith(':'):
+            return cls._db_root_fallback.get().get()
+        else:
+            return os.path.split(db_path)[0]
+
+    @classproperty
     def user(cls): return cls.User.get().id
     
     @classproperty
     def session(cls): return cls.Session.get().id
         
     @classproperty
-    def export(cls) : return cls.Export.get().hid
+    def view(cls): return cls.View.get().hid
+    
+    @classproperty
+    def export(cls): return cls.Export.get().hid
 
     @classproperty
     def f_uuid(cls): return cls.File.get().id
@@ -331,7 +342,7 @@ class context():
     def v_uuid_s(cls): return cls.View.get().id[:10]
 
     @classproperty
-    def e_uuid(cls): return cls.Exort.get().id
+    def e_uuid(cls): return cls.Export.get().id
     @classproperty
-    def e_uuid_s(cls): return cls.Exort.get().id[:10]
+    def e_uuid_s(cls): return cls.Export.get().id[:10]
     

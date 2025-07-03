@@ -17,9 +17,9 @@ class input_context_format_path(input_base):
     strict = False
     def return_data(self):
         if self.data.startswith('./'):
-            value = '{db_path}'+self.data[1:]
+            value = '{root_dir}'+self.data[1:]
         elif self.data.startswith('../'):
-            value = '{db_path}/'+self.data        
+            value = '{root_dir}/'+self.data        
         else:
             value = self.data
 
@@ -88,29 +88,32 @@ class settings_interface(settings_dict_base):
         db_standard    = i_g(str,  in_context='db_standard' , default = 'sqlite')
         db_path        = i_g(str,  in_context='db_path'     , default = ':memory:')
         _sqla_db_path  = i_fp(str, default = "{db_standard}:///{db_path}")
-
+        _db_root_fallback = i_fp(str, default = "{db_standard}:///{db_path}", in_context='_db_root_fallback')
         class dirs(settings_dict_base):
             _strict = False
             _required = False
 
-            view   = i_fp(str, default="./views")
-            store  = i_fp(str, default="./store")
-            export = i_fp(str, default="./export")
-            logs   = i_fp(str, default="./log/{type}")
+            view        = i_fp(str, default="./views",     in_context='view_dp')
+            view_logs   = i_fp(str, default="{view_db}",   in_context='view_lp')
+            store       = i_fp(str, default="./store",     in_context='store_dp')
+            store_logs  = i_fp(str, default="{store_db}",  in_context='store_lp')
+            export      = i_fp(str, default="./export",    in_context='export_dp')
+            export_logs = i_fp(str, default="{export_db}", in_context='export_lp')
+            # logs   = i_fp(str, default="./log/{type}", in_context='logs_db')
 
         class filepaths(settings_dict_base):
             _strict = False
             _required = False
 
-            view            = i_fp(str,default="{user}/{session}/{v_uuid_s}/{v_uuid}")
-            view_log        = i_fp(str,default="{user}/{session}/{v_uuid_s}/{v_uuid}.log")
+            view            = i_fp(str,default="{view_dp}/{user}/{session}/{v_uuid_s}/{v_uuid}")
+            view_log        = i_fp(str,default="{view_lp}/{user}/{session}/{v_uuid_s}/{v_uuid}.log")
 
-            store           = i_fp(str,default="{f_uuid_s}/{f_uuid}.blob")
-            store_log       = i_fp(str,default="{f_uuid_s}/{f_uuid}.log")
+            store           = i_fp(str,default="{store_dp}/{f_uuid_s}/{f_uuid}.blob")
+            store_log       = i_fp(str,default="{store_lp}/{f_uuid_s}/{f_uuid}.log")
 
-            export          = i_fp(str,default="{user}/{session}/exports/{e_uuid}/")
-            export_log      = i_fp(str,default="{user}/{session}/exports/{e_uuid}.log")
-            export_junction = i_fp(str,default="{user}/{session}/exports/{export}/" )
+            export          = i_fp(str,default="{export_dp}/{user}/{session}/exports/{e_uuid}/")
+            export_log      = i_fp(str,default="{export_dp}/{user}/{session}/exports/{e_uuid}.log")
+            export_junction = i_fp(str,default="{export_lp}/{user}/{session}/exports/{export}/" )
 
         class timeout(settings_dict_base):
             _strict = False
