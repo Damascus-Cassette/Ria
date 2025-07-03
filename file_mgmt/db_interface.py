@@ -204,35 +204,41 @@ class db_interface():
             self._load_db()
 
         if not self.c_session.get():
-            self.c_session.set(Session(bind=self.engine, expire_on_commit = True))
-            print('Creating Session!')
+            self.c_session.set(Session(bind=self.engine, expire_on_commit = False))
+            print('Creating New Session!')
 
         session        = self.c_session.get()
         in_transaction = session.in_transaction()
 
         try:
             if in_transaction:
+                print('Creating New Savepoint!')
                 _savepoint = session.begin_nested()
                 token1 = self.c_session.set(session)
                 token2 = self.c_savepoint.set(_savepoint)
                 # token = self.c_session.set(_session)
                 yield session
+                # session.flush()
                 _savepoint.commit()
             else:
                 yield session
                 session.commit()
                 session.close()
-                self.c_session.set(None)
+                
         except:
             if in_transaction:
                 _savepoint.rollback() 
+                self.c_engine.reset(token1)
+                self.c_session.reset(token2)
             else:
                 session.rollback()  
                 session.close()
-                self.c_session.set(None)
             raise
 
         finally:
             if in_transaction:
                 self.c_session.reset(token1) 
-                self.c_savepoint.reset(token2) 
+                self.c_savepoint.reset(token2)
+            else:
+                self.c_session.set(None)
+                

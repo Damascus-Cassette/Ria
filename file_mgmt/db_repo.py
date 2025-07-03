@@ -83,7 +83,7 @@ class repo_user(repo_interface_base):
         inst = cls.base()
         inst.id  = id
         inst.hid = hid
-        cls.create(inst)
+        # cls.create(inst)
         return inst
 
 class repo_NamedSpace(repo_interface_base):
@@ -109,7 +109,7 @@ class repo_NamedSpace(repo_interface_base):
         nSpace_inst.hid    = name
         nSpace_inst.pSpace = space_inst
 
-        cls.create(nSpace_inst)
+        # cls.create(nSpace_inst)
 
         return nSpace_inst
     
@@ -119,7 +119,7 @@ class repo_NamedSpace(repo_interface_base):
         nSpace_inst       = cls.base()
         nSpace_inst.name  = name
         nSpace_inst.space = space_inst
-        cls.create(nSpace_inst)
+        # cls.create(nSpace_inst)
         return nSpace_inst
 
     def on_remove(obj):
@@ -136,8 +136,8 @@ class repo_NamedFile(repo_interface_base):
               filename     : str, 
               space        : Space, 
               repl_symlink : bool, 
-              do_remove    : bool,
-              do_create    : bool = False):
+              do_remove    : bool):
+            #   do_create    : bool = False):
         ''' Store a file to {store} and replace original with symlink where true '''
         _repo_File = cls.db_interface.repo_File
 
@@ -153,8 +153,8 @@ class repo_NamedFile(repo_interface_base):
         nFile.cFile  = file
         nFile.pSpace = space
 
-        if do_create:
-            cls.create(nFile)
+        # if do_create:
+        #     cls.create(nFile)
         
         return nFile
 
@@ -164,7 +164,7 @@ class repo_NamedFile(repo_interface_base):
         nFile_inst       = cls.base()
         nFile_inst.name  = name
         nFile_inst.space = file_inst
-        cls.create(nFile_inst)
+        # cls.create(nFile_inst)
         return nFile_inst
 
     def on_remove(obj):
@@ -195,8 +195,6 @@ class repo_File(repo_interface_base):
                      do_remove    = do_remove   ,
                      )
 
-        cls.create(file)
-
         return file
 
     @classmethod
@@ -205,7 +203,7 @@ class repo_File(repo_interface_base):
         nFile = asc_Space_NamedFile()
         nFile.cFile = file        
         nFile.cName = name  
-        repo_NamedSpace.create(nFile)
+        # repo_NamedSpace.create(nFile)
         return nFile 
     
     @classmethod
@@ -236,7 +234,7 @@ class repo_Space(repo_interface_base):
         
         space_inst.id = space_inst.get_id()
 
-        cls.create(space_inst)
+        # cls.create(space_inst)
 
         return space_inst
     
@@ -246,7 +244,7 @@ class repo_Space(repo_interface_base):
         nspace = asc_Space_NamedSpace()
         nspace.cSpace = space        
         nspace.cName  = name  
-        repo_NamedSpace.create(nspace)
+        # repo_NamedSpace.create(nspace)
         return nspace 
 
     @classmethod
@@ -285,12 +283,16 @@ class repo_Export(repo_interface_base):
     base=Export
 
     @classmethod
-    def from_space(cls, space, export_name, place=False, export_dp=None, user=None, session=None)->Export:
+    def from_space(cls, space, hid, place=False, export_dp=None, user=None, session=None)->Export:
         user,session = cls.db_interface.fill_context(User=user, Session=session)
+
+        dbi = cls.db_interface
+        print('Session',dbi.c_session.get())
+        print('User'   ,user)
 
         export = cls.base()
 
-        export.hid       = export_name
+        export.hid       = hid
         export.myUser    = user
         export.mySession = session
         export.mySpace   = space
@@ -300,12 +302,10 @@ class repo_Export(repo_interface_base):
             export.location = export_dp
         else:
             with cls.db_interface.repo_cm(Export=export,Space=space):
-                export.location = cls.db_interface.settings.filepaths.export
+                export.location = cls.db_interface.settings.database.filepaths.export
 
         if place:
             cls.place_on_disk(export)
-
-        cls.create(export)
 
         return export
     
@@ -324,9 +324,7 @@ class repo_Session(repo_interface_base):
         session_inst = cls.base()
         session_inst.hid    = hid
         session_inst.myUser = user
-        
-        cls.create(session_inst)
-        
+                
         return session_inst
     
 
