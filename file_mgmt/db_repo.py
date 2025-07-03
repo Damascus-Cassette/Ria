@@ -136,24 +136,27 @@ class repo_NamedFile(repo_interface_base):
               filename     : str, 
               space        : Space, 
               repl_symlink : bool, 
-              do_remove    : bool):
+              do_remove    : bool,
+              do_create    : bool = False):
         ''' Store a file to {store} and replace original with symlink where true '''
         _repo_File = cls.db_interface.repo_File
 
-        nfile_inst = cls.base()
 
         file = _repo_File.store(filepath)
-
         assert _repo_File.verify_on_disk(file)
-
-        nfile_inst.hid    = filename
-        nfile_inst.cFile  = file
-        nfile_inst.pSpace = space 
-
         fu.move_file(filepath,_repo_File.path(file),repl_symlink,do_remove) 
-
         _repo_File.create(file)
-        cls.create(nfile_inst)
+
+
+        nFile = cls.base()
+        nFile.cName  = filename
+        nFile.cFile  = file
+        nFile.pSpace = space
+
+        if do_create:
+            cls.create(nFile)
+        
+        return nFile
 
     @classmethod
     def from_file(cls,name,file_inst):

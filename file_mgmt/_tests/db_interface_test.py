@@ -37,7 +37,9 @@ def test_file_space_creation(dbi,test_fp):
                                             filename     = os.path.split(test_fp)[1],
                                             space        = space,
                                             repl_symlink = False,
-                                            do_remove    = False)
+                                            do_remove    = False,
+                                            do_create    = False)
+        dbi.repo_NamedFile.commit(named_file)
         dbi.repo_Space.set_id(space)
         dbi.repo_Space.create(space)
         
