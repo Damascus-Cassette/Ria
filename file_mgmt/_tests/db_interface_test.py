@@ -25,12 +25,13 @@ def dbi(db_fp):
 def test_import(dbi):
     print(dbi)
 
-def test_file_space_creation(dbi,test_fp,test_db):
+def test_file_space_creation(dbi,test_fp):
     
-    user    = dbi.repo_user.make()
-    session = dbi.repo_Session.make(user)
-    
-    with dbi.generic_cm(user=user, session=session):
+    user        = dbi.repo_user.make()
+    session     = dbi.repo_Session.make('TestSession',user)
+    session.hid = 'TestSession'
+
+    with dbi.repo_cm(user=user, session=session):
         space = dbi.repo_Space.base()
         named_file = dbi.repo_NamedFile.store(filepath     = test_fp,
                                             filename     = os.path.split(test_fp)[1],

@@ -19,6 +19,9 @@ from .db_repo        import (
         repo_Export,
         repo_Session,
         )
+from .db_repo import context as repos_context
+
+class _unset:...
 
 class db_interface():  
     _repo_base      : repo_interface_base
@@ -34,7 +37,7 @@ class db_interface():
 
     def __init__(self,settings:dict|str):
 
-        self.context = self._construct_context({
+        self.context = self._construct_context(inherit_from = (repos_context,), cvars = {
             'platform':'default',
             })
         self.c_engine    = ContextVar('engine' ,   default = None)
@@ -80,12 +83,12 @@ class db_interface():
                 new_cls = self._construct_repo([th],self.context)
                 setattr(self,k,new_cls)
 
-    def _construct_context(self,cvars:dict):
+    def _construct_context(self,cvars:dict,inherit_from=(object,)):
         items = {}
         for k,v in cvars.items():
             items[k] = ContextVar(k,default=v)
 
-        return type('context',tuple([object]),items)
+        return type('context',inherit_from,items)
 
     def _construct_repo(self,base_classes,context):
         session_manager = self.session_cm
@@ -107,6 +110,7 @@ class db_interface():
 
     @contextmanager
     def generic_cm(self,**kwargs):
+        #User for settings generic attributes
         cust_tokens = {}
         try:
             for k,v in kwargs.items():
@@ -122,6 +126,76 @@ class db_interface():
             for k,v in cust_tokens.items():
                 cvar = getattr(self.context,k)
                 cvar.reset(v)
+
+    @contextmanager
+    def repo_cm(
+        self    ,
+        User    = _unset,
+        Session = _unset,
+        Export  = _unset,
+        Space   = _unset,
+        File    = _unset):
+        
+        tokens = {}
+        try:
+            if not User    is _unset:
+                t = self.context.User   .set(User   )
+                tokens.append(lambda: self.context.User.unset(t))
+            if not Session is _unset:
+                t = self.context.Session.set(Session)
+                tokens.append(lambda: self.context.User.unset(t))
+            if not Export  is _unset:
+                t =self.context.Export .set(Export )
+                tokens.append(lambda: self.context.Session.unset(t))
+            if not Space   is _unset:
+                t = self.context.Space  .set(Space  )
+                tokens.append(lambda: self.context.Space.unset(t))
+            if not File    is _unset:
+                t = self.context.File   .set(File   )
+                tokens.append(lambda: self.context.File.unset(t))
+            yield
+        except:
+            raise
+        finally:
+            for l in tokens:
+                l()
+
+    def repo_fill_context(
+            self    ,
+            User    = _unset,
+            Session = _unset,
+            Export  = _unset,
+            Space   = _unset,
+            File    = _unset):
+        ''' Identical I->O for ensuring fetch of objects from context if not set'''
+        ret = []
+        if not User    is _unset:
+            if not User:
+                ret.append(self.context.User   .get())   
+            else:
+                ret.append(User)
+        if not Session is _unset:
+            if not Session:
+                ret.append(self.context.Session.get())
+            else:
+                ret.append(Session)
+        if not Export  is _unset:
+            if not Export:
+                ret.append(self.context.Export .get()) 
+            else:
+                ret.append(Export)
+        if not Space   is _unset:
+            if not Space:
+                ret.append(self.context.Space  .get())  
+            else:
+                ret.append(Space)
+        if not File    is _unset:
+            if not File:
+                ret.append(self.context.File   .get())   
+            else:
+                ret.append(File)
+
+        return tuple(ret)
 
     @contextmanager
     def session_cm(self,*args,**kwargs):

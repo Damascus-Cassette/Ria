@@ -14,6 +14,8 @@ from .db_struct import (
     User,
     )
 
+from contextvars import ContextVar
+
 class log:
     ...
 
@@ -238,3 +240,12 @@ class repo_Session(repo_interface_base):
         cls.create(session_inst)
         
         return session_inst
+    
+
+class context():
+    File    = ContextVar('File'   , default=None)
+    Space   = ContextVar('Space'  , default=None)
+    Export  = ContextVar('Export' , default=None)
+    Session = ContextVar('Session', default=None)
+    User    = ContextVar('User'   , default=None)
+    
