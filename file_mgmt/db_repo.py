@@ -231,9 +231,10 @@ class repo_Session(repo_interface_base):
     base=Session
 
     @classmethod
-    def make(cls,name,user:User):        
+    def make(cls,id,name,user:User):        
 
         session_inst = cls.base()
+        session_inst.id   = id
         session_inst.name = name
         session_inst.user = user
         

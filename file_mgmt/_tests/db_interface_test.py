@@ -27,8 +27,8 @@ def test_import(dbi):
 
 def test_file_space_creation(dbi,test_fp):
     
-    user        = dbi.repo_user.make()
-    session     = dbi.repo_Session.make('TestSession',user)
+    user        = dbi.repo_user.make('TestUser','TestUser')
+    session     = dbi.repo_Session.make('TestSession','TestSession',user)
     session.hid = 'TestSession'
 
     with dbi.repo_cm(user=user, session=session):
