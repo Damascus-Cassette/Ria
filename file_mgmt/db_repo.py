@@ -16,12 +16,22 @@ from .db_struct import (
 
 from contextvars import ContextVar
 
-class log:
-    ...
+class classproperty():
+    #https://stackoverflow.com/questions/5189699/how-to-make-a-class-property
+    def __init__(self,func):
+        self.func = func
+    def __get__(self,cls,container):
+        return self.func(container)
 
+import hashlib
 class file_utils:
-    def get_uid():
+    def get_uid(filepath):
         ''' Return UID of file, sha256 hash. Follow symlinks and get sha256 of file'''
+        #https://docs.python.org/3/library/hashlib.html#hashlib.file_digest
+        #May want to thread curl reqs so that other files can be retrieved as required
+        fp = os.path.realpath(filepath)
+        with open(fp, 'rb', buffering=0) as f:
+            return hashlib.file_digest(f,'sha256').hexdigest()
     
     def store_file():...
 
@@ -50,10 +60,13 @@ class file_utils:
 import random
 import uuid
 class uuid_utils:
-    r = random.random(seed = 'STATIC_SEED')
+    
     @classmethod
     def get(cls,keysum: str)->str:
-        ...
+        r = random.Random()
+        r.seed(keysum)
+        return str(uuid.UUID(bytes = bytes(r.getrandbits(8) for _ in range(16))))
+
 
 class space_utils:
     ...
@@ -129,18 +142,17 @@ class repo_NamedFile(repo_interface_base):
 
         nfile_inst = cls.base()
 
-        file_uid  = fu.get_uid(filepath)
-        file_item = _repo_File.store(filepath, file_uid)
+        file = _repo_File.store(filepath)
 
-        assert file_item.verify_on_disk()
+        assert _repo_File.verify_on_disk(file)
 
-        nfile_inst.file  = file_item
+        nfile_inst.file  = file
         nfile_inst.name  = filename
         nfile_inst.space = space 
 
-        fu.move_file(filepath,file_item.path,repl_symlink,do_remove) 
+        fu.move_file(filepath,_repo_File.path(file),repl_symlink,do_remove) 
 
-        _repo_File.create(file_item)
+        _repo_File.create(file)
         cls.create(nfile_inst)
 
     @classmethod
@@ -160,23 +172,25 @@ class repo_NamedFile(repo_interface_base):
 class repo_File(repo_interface_base):
     base=File
 
-    @classmethod
-    def store(cls, filepath, uid, repl_symlink=False, do_remove=False ):
-        ''' Non-committed file instance '''
-        session = cls.context.c_session.get()
-        if existing := session.quiery(cls.base).filter(id=uid).first() and existing.verify_on_disk():
+    @transaction
+    def store(cls, filepath, repl_symlink=False, do_remove=False ):
+        session = cls.db_interface.c_session.get()
+        uid = fu.get_uid(filepath)
+
+        if existing := session.query(cls.base).filter_by(id=uid).first() and existing.verify_on_disk():
             return existing
         elif existing:
             log.log(existing.id, " exists in db, but is not on disk! Uploading")
 
         file = cls.base()
+        
         file.id = uid
-        file.filepath
 
         fu.move_file(filepath ,
-                     uid      ,
+                     cls.path(file),
                      repl_symlink = repl_symlink,
-                     do_remove    = do_remove   ,)
+                     do_remove    = do_remove   ,
+                     )
 
         cls.create(file)
 
@@ -191,6 +205,15 @@ class repo_File(repo_interface_base):
         repo_NamedSpace.create(nFile)
         return nFile 
     
+    @classmethod
+    def verify_on_disk(cls,file):
+        return os.path.exists(cls.path(file))
+
+    @classmethod
+    def path(cls,file):
+        if cls.db_interface.repo_cm(File=file):
+            return cls.db_interface.settings.database.filepaths.store
+
 class repo_Space(repo_interface_base):
     base=Space
 
@@ -282,4 +305,33 @@ class context():
     Export  = ContextVar('Export' , default=None)
     Session = ContextVar('Session', default=None)
     User    = ContextVar('User'   , default=None)
+    
+    @classproperty
+    def user(cls): return cls.User.get().id
+    
+    @classproperty
+    def session(cls): return cls.Session.get().id
+        
+    @classproperty
+    def export(cls) : return cls.Export.get().hid
+
+    @classproperty
+    def f_uuid(cls): return cls.File.get().id
+    @classproperty
+    def f_uuid_short(cls): return cls.File.get().id[:10]
+
+    @classproperty
+    def s_uuid(cls): return cls.Space.get().id
+    @classproperty
+    def s_uuid_short(cls): return cls.Space.get().id[:10]
+
+    @classproperty
+    def v_uuid(cls): return cls.View.get().id
+    @classproperty
+    def v_uuid_short(cls): return cls.View.get().id[:10]
+
+    @classproperty
+    def e_uuid(cls): return cls.Exort.get().id
+    @classproperty
+    def e_uuid_short(cls): return cls.Exort.get().id[:10]
     

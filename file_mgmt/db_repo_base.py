@@ -48,7 +48,10 @@ class repo_interface_base():
             assert hasattr(obj,k)
             setattr(obj,k,v)
 
-        session.add(obj)
+        if getattr(cls.base,'_use_merge',False):
+            session.merge(obj)
+        else:
+            session.add(obj)
 
         return obj
 

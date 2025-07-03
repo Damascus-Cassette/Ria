@@ -102,15 +102,15 @@ class settings_interface(settings_dict_base):
             _strict = False
             _required = False
 
-            view            = i_fp(str,default="{user}/{session}/{uuid_short}/{uuid}")
-            view_log        = i_fp(str,default="{user}/{session}/{uuid_short}/{uuid}.log")
+            view            = i_fp(str,default="{user}/{session}/{v_uuid_s}/{v_uuid}")
+            view_log        = i_fp(str,default="{user}/{session}/{v_uuid_s}/{v_uuid}.log")
 
-            store           = i_fp(str,default="{uuid_short}/{uuid}.blob")
-            store_log       = i_fp(str,default="{uuid_short}/{uuid}.log")
+            store           = i_fp(str,default="{f_uuid_s}/{f_uuid}.blob")
+            store_log       = i_fp(str,default="{f_uuid_s}/{f_uuid}.log")
 
-            export          = i_fp(str,default="{user}/{session}/exports/{uuid}/")
-            export_log      = i_fp(str,default="{user}/{session}/exports/{uuid}.log")
-            export_junction = i_fp(str,default="{user}/{session}/exports/{name}/" )
+            export          = i_fp(str,default="{user}/{session}/exports/{e_uuid}/")
+            export_log      = i_fp(str,default="{user}/{session}/exports/{e_uuid}.log")
+            export_junction = i_fp(str,default="{user}/{session}/exports/{export}/" )
 
         class timeout(settings_dict_base):
             _strict = False

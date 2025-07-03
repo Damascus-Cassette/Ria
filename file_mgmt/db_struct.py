@@ -13,6 +13,7 @@ Base = declarative_base()
 
 class asc_Space_NamedFile(Base):
     __tablename__ = 'asc_space_namedfile'
+    _use_merge = True
 
     pSpaceId = mapped_column(String, ForeignKey('spaces.id'), primary_key=True) 
     cName    = mapped_column(String                         , primary_key=True)
@@ -29,10 +30,11 @@ class asc_Space_NamedFile(Base):
 
 class asc_Space_NamedSpace(Base):
     __tablename__ = 'asc_space_namedspace'
+    _use_merge = True
 
     pSpaceId = mapped_column(String, ForeignKey('spaces.id'), primary_key=True)  
     cName    = mapped_column(String                         , primary_key=True)
-    cSpaceId = mapped_column(String, ForeignKey('spaces.id')                  )
+    cSpaceId = mapped_column(String, ForeignKey('spaces.id' ,)                )
     
     pSpace : Mapped[Space] = relationship(back_populates='mySpaces',foreign_keys=[pSpaceId])
     cSpace : Mapped[Space] = relationship(back_populates='inSpaces',foreign_keys=[cSpaceId])
@@ -44,6 +46,7 @@ class asc_Space_NamedSpace(Base):
 
 class File(Base):
     __tablename__ = 'files'
+    _use_merge = True
     id  = Column(String, primary_key=True)
     hid = Column(String)
     inSpaces : Mapped[list[asc_Space_NamedFile]] = relationship(back_populates="cFile")
@@ -51,6 +54,7 @@ class File(Base):
 
 class Space(Base):
     __tablename__ = 'spaces'
+    _use_merge = True
     id  = Column(String, primary_key=True, default=None)
     hid = Column(String)    
     

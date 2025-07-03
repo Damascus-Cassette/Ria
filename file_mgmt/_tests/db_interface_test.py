@@ -11,12 +11,12 @@ def db_fp():
 @pytest.fixture
 def test_fp():
     this_dir = os.path.split(__file__)[0]
-    return os.path.join(this_dir,'test_resouces/test_subject_file.txt')
+    return os.path.join(this_dir,'test_resources/test_subject_file.txt')
 
 @pytest.fixture
 def test_dp():
     this_dir = os.path.split(__file__)[0]
-    return os.path.join(this_dir,'test_resouces/test_space')
+    return os.path.join(this_dir,'test_resources/test_space')
 
 @pytest.fixture
 def dbi(db_fp):

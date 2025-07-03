@@ -136,23 +136,23 @@ class db_interface():
         Space   = _unset,
         File    = _unset):
         
-        tokens = {}
+        tokens = []
         try:
             if not User    is _unset:
-                t = self.context.User   .set(User   )
-                tokens.append(lambda: self.context.User.unset(t))
+                t1 = self.context.User   .set(User   )
+                tokens.append(lambda: self.context.User.reset(t1))
             if not Session is _unset:
-                t = self.context.Session.set(Session)
-                tokens.append(lambda: self.context.User.unset(t))
+                t2 = self.context.Session.set(Session)
+                tokens.append(lambda: self.context.Session.reset(t2))
             if not Export  is _unset:
-                t =self.context.Export .set(Export )
-                tokens.append(lambda: self.context.Session.unset(t))
+                t3 =self.context.Export .set(Export )
+                tokens.append(lambda: self.context.Export.reset(t3))
             if not Space   is _unset:
-                t = self.context.Space  .set(Space  )
-                tokens.append(lambda: self.context.Space.unset(t))
+                t4 = self.context.Space  .set(Space  )
+                tokens.append(lambda: self.context.Space.reset(t4))
             if not File    is _unset:
-                t = self.context.File   .set(File   )
-                tokens.append(lambda: self.context.File.unset(t))
+                t5 = self.context.File   .set(File   )
+                tokens.append(lambda: self.context.File.reset(t5))
             yield
         except:
             raise
