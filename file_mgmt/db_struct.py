@@ -51,10 +51,10 @@ class File(Base):
 
 class Space(Base):
     __tablename__ = 'spaces'
-    id  = Column(String, primary_key=True)
+    id  = Column(String, primary_key=True, default=None)
     hid = Column(String)    
     
-    myFiles  : Mapped[list[asc_Space_NamedFile]] = relationship(back_populates="pSpace")
+    myFiles  : Mapped[list[asc_Space_NamedFile]]  = relationship(back_populates="pSpace")
     
     mySpaces : Mapped[list[asc_Space_NamedSpace]] = relationship(back_populates="pSpace", foreign_keys=[asc_Space_NamedSpace.pSpaceId])
     inSpaces : Mapped[list[asc_Space_NamedSpace]] = relationship(back_populates="cSpace", foreign_keys=[asc_Space_NamedSpace.cSpaceId]) 

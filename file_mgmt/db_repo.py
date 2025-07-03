@@ -47,6 +47,13 @@ class file_utils:
         else:
             shutil.copyfile(fp_from,fp_to)
 
+import random
+import uuid
+class uuid_utils:
+    r = random.random(seed = 'STATIC_SEED')
+    @classmethod
+    def get(cls,keysum: str)->str:
+        ...
 
 class space_utils:
     ...
@@ -216,6 +223,33 @@ class repo_Space(repo_interface_base):
         repo_NamedSpace.create(nspace)
         return nspace 
 
+    @classmethod
+    def set_id(cls,space:Space,chain:list=None):
+        assert isinstance(space,Space)
+        eval_spaces = True
+        keysum = ''
+
+        if space.id and chain is None:
+            raise Exception('Spaces IDs are not mutable, as contents are not mutable!')
+        elif space.id and chain is not None:
+            return space.id
+
+        if chain   is None : chain = [space]
+        elif space in chain: eval_spaces = False # second level recursion, halt eval of spaces. Should still work as UUID in keysum as struct is in keys
+            
+        for nF in space.myFiles: 
+            assert nF.cFile.id
+            keysum += nF.cFile.id + nF.cName
+
+        if eval_spaces:
+            for nS in space.mySpaces:
+                if not nS.cSpace.id:
+                    cls.set_id(nS.cSpace,chain=chain)
+                keysum += nS.cSpace.id + nS.cName
+        
+        space.id = uuid_utils.get(keysum)
+        return space.id
+
 class repo_Export(repo_interface_base):
     base=Export
 
@@ -231,12 +265,11 @@ class repo_Session(repo_interface_base):
     base=Session
 
     @classmethod
-    def make(cls,id,name,user:User):        
+    def make(cls,hid,user:User):        
 
         session_inst = cls.base()
-        session_inst.id   = id
-        session_inst.name = name
-        session_inst.user = user
+        session_inst.hid    = hid
+        session_inst.myUser = user
         
         cls.create(session_inst)
         
