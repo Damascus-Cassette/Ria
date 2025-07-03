@@ -25,7 +25,7 @@ def dbi(db_fp):
 def test_import(dbi):
     print(dbi)
 
-def test_file_space_creation(dbi,test_fp):
+def test_file_space_export_creation(dbi,test_fp):
     with dbi.session_cm():
         print(dbi.c_session.get())
 
@@ -42,16 +42,12 @@ def test_file_space_creation(dbi,test_fp):
                                                 space        = None,
                                                 repl_symlink = False,
                                                 do_remove    = False)
-                                                # do_create    = False)
             space.myFiles.append(named_file)
 
-
             dbi.repo_Space.set_id(space)
-            dbi.repo_Space.create(space)
+            # dbi.repo_Space.create(space)
             # dbi.repo_NamedFile.create(named_file) #implicity created in space create?
-            
-            dbi.c_session.get().flush()
-            
+
             export = dbi.repo_Export.from_space(space, hid='ExportName')
             dbi.repo_Export.create(export)
 

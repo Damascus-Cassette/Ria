@@ -145,7 +145,7 @@ class repo_NamedFile(repo_interface_base):
         file = _repo_File.store(filepath)
         assert _repo_File.verify_on_disk(file)
         fu.move_file(filepath,_repo_File.path(file),repl_symlink,do_remove) 
-        _repo_File.create(file)
+        # _repo_File.create(file)
 
 
         nFile = cls.base()
