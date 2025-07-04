@@ -55,30 +55,6 @@ class Export(Base):
     #TODO: Consider better primary_key s being spaceId & location?
     #TODO: Consider tracking same Exports resulting from multiple sessions? Edge case
 
-class File(Base):
-    __tablename__ = 'files'
-    _use_merge = True
-    id  = Column(String, primary_key=True)
-    hid = Column(String)
-
-    inSpaces : Mapped[list[asc_Space_NamedFile]] = relationship(back_populates="cFile")
-
-
-class asc_Space_NamedFile(Base):
-    __tablename__ = 'asc_space_namedfile'
-    _use_merge = True
-
-    pSpaceId    : Mapped[str]      = mapped_column(ForeignKey('spaces.id'), primary_key=True) 
-    cName       : Mapped[str]      = mapped_column(primary_key=True)
-
-    cFileId     : Mapped[str|None] = mapped_column(ForeignKey('files.id'))
-    cFileIdCopy : Mapped[str|None] = mapped_column()
-
-    pSpace : Mapped[Space] = relationship(back_populates='myFiles')
-    cFile  : Mapped[File ] = relationship(back_populates='inSpaces')
-
-    def __repr__(self):
-        return f"< NamedSpace Object : {self.cName} from file '{self.cFile.id}' >"
 
 class Space(Base):
     __tablename__ = 'spaces'
@@ -107,6 +83,30 @@ class asc_Space_NamedSpace(Base):
         return f"< NamedSpace Object : {self.cName} from space '{self.cSpace.id}' >"
 
 
+class File(Base):
+    __tablename__ = 'files'
+    _use_merge = True
+    id  = Column(String, primary_key=True)
+    hid = Column(String)
+
+    inSpaces : Mapped[list[asc_Space_NamedFile]] = relationship(back_populates="cFile")
+
+
+class asc_Space_NamedFile(Base):
+    __tablename__ = 'asc_space_namedfile'
+    _use_merge = True
+
+    pSpaceId    : Mapped[str]      = mapped_column(ForeignKey('spaces.id'), primary_key=True) 
+    cName       : Mapped[str]      = mapped_column(primary_key=True)
+
+    cFileId     : Mapped[str|None] = mapped_column(ForeignKey('files.id'))
+    cFileIdCopy : Mapped[str|None] = mapped_column()
+
+    pSpace : Mapped[Space] = relationship(back_populates='myFiles')
+    cFile  : Mapped[File ] = relationship(back_populates='inSpaces')
+
+    def __repr__(self):
+        return f"< NamedSpace Object : {self.cName} from file '{self.cFile.id}' >"
 
 
 
