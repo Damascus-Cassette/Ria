@@ -81,19 +81,6 @@ class View(Base):
     def isAlive(self)->bool:
         return self.mySession.isOpen
 
-class Space(Base):
-    __tablename__ = 'spaces'
-    _use_merge = True
-    id  = Column(String, primary_key=True, default=None)
-
-    myFiles  : Mapped[list[asc_Space_NamedFile]]  = relationship(back_populates="pSpace")
-    mySpaces : Mapped[list[asc_Space_NamedSpace]] = relationship(back_populates="pSpace", foreign_keys=[asc_Space_NamedSpace.pSpaceId])
-    inSpaces : Mapped[list[asc_Space_NamedSpace]] = relationship(back_populates="cSpace", foreign_keys=[asc_Space_NamedSpace.cSpaceId])
-
-    inExports : Mapped[list[Export]]              = relationship(back_populates="mySpace")
-    inViews   : Mapped[list[View]]                = relationship(back_populates="mySpace")
-
-
 class asc_Space_NamedSpace(Base):
     __tablename__ = 'asc_space_namedspace'
     _use_merge = True
@@ -109,14 +96,17 @@ class asc_Space_NamedSpace(Base):
         return f"< NamedSpace Object : {self.cName} from space '{self.cSpace.id}' >"
 
 
-class File(Base):
-    __tablename__ = 'files'
+class Space(Base):
+    __tablename__ = 'spaces'
     _use_merge = True
-    id  = Column(String, primary_key=True)
-    hid = Column(String)
+    id  = Column(String, primary_key=True, default=None)
 
-    inSpaces : Mapped[list[asc_Space_NamedFile]] = relationship(back_populates="cFile")
+    myFiles  : Mapped[list[asc_Space_NamedFile]]  = relationship(back_populates="pSpace")
+    mySpaces : Mapped[list[asc_Space_NamedSpace]] = relationship(back_populates="pSpace", foreign_keys=[asc_Space_NamedSpace.pSpaceId])
+    inSpaces : Mapped[list[asc_Space_NamedSpace]] = relationship(back_populates="cSpace", foreign_keys=[asc_Space_NamedSpace.cSpaceId])
 
+    inExports : Mapped[list[Export]]              = relationship(back_populates="mySpace")
+    inViews   : Mapped[list[View]]                = relationship(back_populates="mySpace")
 
 class asc_Space_NamedFile(Base):
     __tablename__ = 'asc_space_namedfile'
@@ -133,6 +123,16 @@ class asc_Space_NamedFile(Base):
 
     def __repr__(self):
         return f"< NamedSpace Object : {self.cName} from file '{self.cFile.id}' >"
+
+class File(Base):
+    __tablename__ = 'files'
+    _use_merge = True
+    id  = Column(String, primary_key=True)
+    hid = Column(String)
+
+    inSpaces : Mapped[list[asc_Space_NamedFile]] = relationship(back_populates="cFile")
+
+
 
 
 
