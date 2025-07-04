@@ -1,7 +1,9 @@
 from __future__ import annotations
 from sqlalchemy import (Column, Boolean, ForeignKey, Integer, String, create_engine, Table)
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker, Mapped, mapped_column
+from sqlalchemy.types import Date
 
+import datetime
 
 if __name__ == '__main__':
     db_url = 'sqlite:///database.db'
@@ -81,6 +83,7 @@ class View(Base):
     def isAlive(self)->bool:
         return self.mySession.isOpen
 
+
 class asc_Space_NamedSpace(Base):
     __tablename__ = 'asc_space_namedspace'
     _use_merge = True
@@ -101,12 +104,97 @@ class Space(Base):
     _use_merge = True
     id  = Column(String, primary_key=True, default=None)
 
-    myFiles  : Mapped[list[asc_Space_NamedFile]]  = relationship(back_populates="pSpace")
-    mySpaces : Mapped[list[asc_Space_NamedSpace]] = relationship(back_populates="pSpace", foreign_keys=[asc_Space_NamedSpace.pSpaceId])
-    inSpaces : Mapped[list[asc_Space_NamedSpace]] = relationship(back_populates="cSpace", foreign_keys=[asc_Space_NamedSpace.cSpaceId])
+    myFiles       : Mapped[list[asc_Space_NamedFile]]  = relationship(back_populates="pSpace")
+    mySpaces      : Mapped[list[asc_Space_NamedSpace]] = relationship(back_populates="pSpace", foreign_keys=[asc_Space_NamedSpace.pSpaceId])
+    inSpaces      : Mapped[list[asc_Space_NamedSpace]] = relationship(back_populates="cSpace", foreign_keys=[asc_Space_NamedSpace.cSpaceId])
 
-    inExports : Mapped[list[Export]]              = relationship(back_populates="mySpace")
-    inViews   : Mapped[list[View]]                = relationship(back_populates="mySpace")
+    inExports     : Mapped[list[Export]]              = relationship(back_populates="mySpace")
+    inViews       : Mapped[list[View]]                = relationship(back_populates="mySpace")
+
+    hasUsers      : Mapped[bool]          = mapped_column(default = True)
+    lastHadUser   : Mapped[Date|None] = mapped_column(default = None)
+
+    inDecay       : Mapped[bool]          = mapped_column(default = False)
+    firstFileDrop : Mapped[Date|None] = mapped_column(default = None)
+
+    ### Unmapped temporary variables ###
+
+    cached_users  : list[Export|View] = None
+
+    def verify_state(self):
+        if self.hasUsers:
+            assert not self.lastHadUser
+            assert not (self.inDecay or self.firstFileDrop)
+        else:
+            assert self.lastHadUser
+            assert self.inDecay and self.firstFileDrop
+    
+    def get_alive_users(self, chain=None)->list[Export|View]:
+        ''' Recur through spaces to return 'alive' Exports & Views ('Users' of this space) '''
+        ret = []
+        if chain is None: chain = [self]
+        else: chain.append(self)
+
+        for namedSpace in self.inSpaces:
+            if (_space := namedSpace.pSpace) not in chain:
+                ret.extend(_space.get_alive_users(chain))
+        ret.extend(filter(self.inExports, lambda x: x.isAlive))
+        ret.extend(filter(self.inViews  , lambda x: x.isAlive))
+        ret = list(set(ret))
+        self.cached_users = ret
+
+        self.enact_user_count()
+
+        return ret
+
+    def enact_user_count(self):
+        ''' Set results of user count observation '''
+        #TODO: Determine if needs optimization!
+
+        if self.cached_users is None:
+            self.get_alive_users()
+        
+        if not self.cached_users:
+            self.hasUsers = False
+            if not self.lastHadUser:
+                self.lastHadUser = datetime.now()
+        else:
+            self.hasUsers    = True
+            self.lastHadUser = None
+    
+    def set_decayed(self):
+        ''' Child File (or space) has been deleted, set as Decayed & recur to parents '''
+        #Order of operations assertions get_alive_users was called on this object this session
+        assert not self.cached_users is None
+        assert len(self.cached_users) == 0
+
+        if not self.inDecay:       self.inDecay       = True
+        if not self.firstFileDrop: self.firstFileDrop = datetime.now()
+
+        for namedSpace in self.inSpaces:
+            namedSpace.pSpace.set_decayed()
+        
+        # for namedFile in self.myFiles:
+        #     namedFile.set_decayed()
+        #     # namedFile is supposed to be cascade deleted anyway, right?
+
+
+    # @hook
+    def on_delete(self, safe:bool=True):
+        ''' '''
+        if safe:
+            now = Date.now()
+            assert not self.cached_users is None
+            assert len(self.cached_users) == 0
+            assert self.lastHadUser
+            assert now > self.lastHadUse
+            if self.inDecay:
+                assert self.firstFileDrop
+                assert now > self.firstFileDrop
+
+        for namedSpace in self.inSpaces:
+            namedSpace.space.set_decayed
+
 
 class asc_Space_NamedFile(Base):
     __tablename__ = 'asc_space_namedfile'
@@ -118,11 +206,12 @@ class asc_Space_NamedFile(Base):
     cFileId     : Mapped[str|None] = mapped_column(ForeignKey('files.id'))
     cFileIdCopy : Mapped[str|None] = mapped_column()
 
-    pSpace : Mapped[Space] = relationship(back_populates='myFiles')
-    cFile  : Mapped[File ] = relationship(back_populates='inSpaces')
+    pSpace      : Mapped[Space]    = relationship(back_populates='myFiles')
+    cFile       : Mapped[File ]    = relationship(back_populates='inSpaces')
 
     def __repr__(self):
         return f"< NamedSpace Object : {self.cName} from file '{self.cFile.id}' >"
+
 
 class File(Base):
     __tablename__ = 'files'
@@ -130,17 +219,55 @@ class File(Base):
     id  = Column(String, primary_key=True)
     hid = Column(String)
 
-    inSpaces : Mapped[list[asc_Space_NamedFile]] = relationship(back_populates="cFile")
+    inSpaces    : Mapped[list[asc_Space_NamedFile]] = relationship(back_populates="cFile")
 
+    hasUsers    : Mapped[bool]      = mapped_column(default=True)
+    lastHadUser : Mapped[Date|None] = mapped_column(default=None)
 
-
-
-
-
+    ### Unmapped temporary variables ###
     
+    cached_users: list[Export|View]
 
+    def get_alive_users(self):
+        ret = []
+        for namedFile in self.inSpaces:
+            ret.extend(namedFile.pSpace.get_alive_users())
+        ret = list(set(ret))
+        self.cached_users = ret
 
+        self.enact_user_count()
 
+        return ret
+    
+    def enact_user_count(self):
+        ''' Set results of user count observation '''
+        #TODO: Determine if needs optimization!
+
+        if self.cached_users is None:
+            self.get_alive_users()
+        
+        if not self.cached_users:
+            self.hasUsers = False
+            if not self.lastHadUser:
+                self.lastHadUser = datetime.now()
+        else:
+            self.hasUsers    = True
+            self.lastHadUser = None
+
+    def on_delete(self, safe:bool=True):
+        ''' Setting decay on parent spaces on deletion and asserting usual situation '''
+        
+        if safe:
+            now = Date.now()
+            assert not self.cached_users is None
+            assert len(self.cached_users) == 0
+            assert self.lastHadUser
+            assert now > self.lastHadUse
+            assert now > self.firstFileDrop
+
+        for namedFile in self.inSpaces:
+            namedFile.cFileIdCopy = self.id
+            namedFile.space.set_decayed()
 
 
 

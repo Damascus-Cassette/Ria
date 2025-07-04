@@ -119,8 +119,10 @@ class settings_interface(settings_dict_base):
             _strict = False
             _required = False
 
-            file   = i_g(str,default="0h00m")
-            space  = i_g(str,default="0h00m")
+            file_no_users   = i_g(str,default="48h00m")  #24  hours after no users, file is deleted from disk & db. Parent spaces w/a are 'decayed' but recoverable
+
+            space_decay     = i_g(str,default="24h00m")  #24  hours after in decay, space is removed.
+            space_no_users  = i_g(str,default="128h00m") #128 hours after no users, space is removed. Otherwise still recoverable
             
-            view   = i_g(str,default="24h00m")
-            export = i_g(str,default="24h00m")
+            view   = i_g(str,default="24h00m") #24 hours after a session is closed.
+
