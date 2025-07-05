@@ -160,6 +160,29 @@ class asc_Space_NamedSpace(Base):
         return f"< NamedSpace Object : {self.cName} from space '{self.cSpace.id}' >"
 
 
+class asc_Space_NamedFile(Base):
+    __tablename__ = 'asc_space_namedfile'
+    _use_merge = True
+
+    #### Parents ####
+    pSpaceId    : Mapped[str]      = mapped_column(ForeignKey('spaces.id', ondelete="CASCADE"), primary_key=True) 
+    pSpace      : Mapped[Space]    = relationship(back_populates='myFiles')
+        #Receive cascade to delete self, do **NOT** pass to cSpace (Deletion of named files)
+    
+    #### Children ####
+    cName       : Mapped[str]      = mapped_column(primary_key=True)
+    cFileId     : Mapped[str|None] = mapped_column(ForeignKey('files.id'))
+    cFile       : Mapped[File ]    = relationship(back_populates='inSpaces')
+
+    #### Data ####
+    cFileIdCopy : Mapped[str|None] = mapped_column()
+    hasUsers    : Mapped[bool]     = mapped_column(default = True)
+
+    #### Property Methods ####
+    def __repr__(self):
+        return f"< NamedSpace Object : {self.cName} from file '{self.cFile.id}' >"
+
+
 class Space(Base):
     __tablename__ = 'spaces'
     _use_merge = True
@@ -175,7 +198,7 @@ class Space(Base):
     #### Children ####
     myFiles       : Mapped[list[asc_Space_NamedFile]]  = relationship(back_populates="pSpace", cascade="all, delete", passive_deletes=True)
     mySpaces      : Mapped[list[asc_Space_NamedSpace]] = relationship(back_populates="pSpace", foreign_keys=[asc_Space_NamedSpace.pSpaceId], cascade="all, delete", passive_deletes=True)
-        #Cascade delete *only* namedSpaces and namedFiles, **Not** actual spaces.
+        #Cascade should delete *only* namedSpaces and namedFiles, **Not** actual Spaces|Files.
     
     #### Data ####
     lastHadUser   : Mapped[date|None] = mapped_column(default = None)
@@ -273,29 +296,6 @@ class Space(Base):
 
         for namedSpace in self.inSpaces:
             namedSpace.space.set_decayed()
-
-
-class asc_Space_NamedFile(Base):
-    __tablename__ = 'asc_space_namedfile'
-    _use_merge = True
-
-    #### Parents ####
-    pSpaceId    : Mapped[str]      = mapped_column(ForeignKey('spaces.id', ondelete="CASCADE"), primary_key=True) 
-    pSpace      : Mapped[Space]    = relationship(back_populates='myFiles')
-        #Receive cascade to delete self, do **NOT** pass to cSpace (Deletion of named files)
-    
-    #### Children ####
-    cName       : Mapped[str]      = mapped_column(primary_key=True)
-    cFileId     : Mapped[str|None] = mapped_column(ForeignKey('files.id'))
-    cFile       : Mapped[File ]    = relationship(back_populates='inSpaces')
-
-    #### Data ####
-    cFileIdCopy : Mapped[str|None] = mapped_column()
-    hasUsers    : Mapped[bool]     = mapped_column(default = True)
-
-    #### Property Methods ####
-    def __repr__(self):
-        return f"< NamedSpace Object : {self.cName} from file '{self.cFile.id}' >"
 
 
 class File(Base):
