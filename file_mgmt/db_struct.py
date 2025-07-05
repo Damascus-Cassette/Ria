@@ -59,12 +59,12 @@ class Import(Base):
     mySessionId   : Mapped[int]         = mapped_column(ForeignKey('sessions.id', ondelete="CASCADE"))
     mySession     : Mapped[Session]     = relationship(back_populates = 'myImports') 
 
-    myUserId      : Mapped[str |None]   = mapped_column(ForeignKey('users.id', ondelete="CASCADE"))
-    myUser        : Mapped[User|None]   = relationship(back_populates='myImports')
+    myUserId      : Mapped[str |None]   = mapped_column(ForeignKey('users.id',    ondelete="CASCADE"))
+    myUser        : Mapped[User|None]   = relationship(back_populates = 'myImports')
 
     #### Children ####
     mySpaceId     : Mapped[str]         = mapped_column(ForeignKey('spaces.id'))
-    mySpace       : Mapped[Space]       = relationship(back_populates='inImports')
+    mySpace       : Mapped[Space]       = relationship(back_populates = 'inImports')
         #Spaces are not deleted when an Import is deleted
 
     #### Data ####
@@ -80,12 +80,12 @@ class Export(Base):
     mySessionId : Mapped[int]       = mapped_column(ForeignKey('sessions.id', ondelete="CASCADE"))
     mySession   : Mapped[Session]   = relationship(back_populates = 'myExports') 
 
-    myUserId    : Mapped[str |None] = mapped_column(ForeignKey('users.id', ondelete="CASCADE"))
-    myUser      : Mapped[User|None] = relationship(back_populates='myExports')
+    myUserId    : Mapped[str |None] = mapped_column(ForeignKey('users.id',    ondelete="CASCADE"))
+    myUser      : Mapped[User|None] = relationship(back_populates = 'myExports')
     
     #### Children ####
     mySpaceId   : Mapped[str]       = mapped_column(ForeignKey('spaces.id'))
-    mySpace     : Mapped[Space]     = relationship(back_populates='inExports')
+    mySpace     : Mapped[Space]     = relationship(back_populates = 'inExports')
         #Spaces are not deleted when an export disappears
         
     #### Data ####
@@ -121,7 +121,7 @@ class View(Base):
 
     #### Children ####
     mySpaceId   : Mapped[str|None]     = mapped_column(ForeignKey('spaces.id'))
-    mySpace     : Mapped[Space|None]   = relationship(back_populates='inViews')
+    mySpace     : Mapped[Space|None]   = relationship(back_populates = 'inViews')
         #Spaces are not deleted when an export disappears
 
     #### Property Methods ####
