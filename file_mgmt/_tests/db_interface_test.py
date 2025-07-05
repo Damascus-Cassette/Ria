@@ -2,6 +2,7 @@ from ..settings     import settings_interface
 from ..db_interface import db_interface
 import os
 import pytest
+from sqlalchemy import inspect
 
 @pytest.fixture
 def db_fp():
@@ -106,3 +107,60 @@ def test_usercounts(dbi:db_interface):
         assert space.inDecay
         assert space.firstFileDrop
 
+# def test_session_isOpen_behavior():
+#     ...
+
+def test_deletion_behavior(dbi:db_interface):
+    ''' Test cascade deletion behavior of both users & spaces '''
+    with dbi.session_cm(commit = True) as sqla_session:
+        user = dbi.repo_user.make(id='Deletion_TestUser', hid='Deletion_TestUser')        
+        session = dbi.repo_Session.make(hid='Deletion_TestSession', user=user)
+
+        space      = dbi.repo_Space.base()
+
+        file       = dbi.repo_File.base()
+        file.id    = 'RandomID_Standin_2'
+
+        named_file = dbi.repo_NamedFile.base()
+        named_file.cName  = 'NamedFile.txt'
+        named_file.cFile  = file
+        named_file.pSpace = space
+
+        dbi.repo_Space.set_id(space)
+
+        with dbi.repo_cm(User=user, Session=session):
+            export = dbi.repo_Export.from_space(space, hid='ExportName')
+            
+            dbi.repo_Export.create(export)
+
+        assert not inspect(export).deleted
+        assert not inspect(session).deleted
+        assert not inspect(user).deleted
+        assert not inspect(named_file).deleted
+
+        file.get_alive_users()
+        assert file.hasUsers
+
+        # sqla_session.delete(user)
+        dbi.repo_user.delete(user)
+        sqla_session.flush()
+
+        assert inspect(user).deleted
+        assert inspect(session).deleted
+        assert inspect(export).deleted
+        assert not inspect(named_file).deleted
+
+        file.get_alive_users()
+        assert not file.hasUsers
+
+        assert not inspect(space).deleted
+        assert not inspect(named_file).deleted
+        assert not inspect(file).deleted
+
+        dbi.repo_Space.delete(space)
+        # sqla_session.delete(space)
+        sqla_session.flush()
+
+        assert inspect(space).deleted
+        assert inspect(named_file).deleted
+        assert not inspect(file).deleted

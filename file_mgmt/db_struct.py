@@ -21,9 +21,9 @@ class User(Base):
     id  = Column(String, primary_key=True)
     hid = Column(String)    
 
-    mySessions: Mapped[list[Session]] = relationship(back_populates='myUser')
-    myExports : Mapped[list[Export]]  = relationship(back_populates='myUser')
-
+    mySessions: Mapped[list[Session]] = relationship(back_populates='myUser', cascade="all, delete", passive_deletes=True)
+    myExports : Mapped[list[Export]]  = relationship(back_populates='myUser', cascade="all, delete", passive_deletes=True)
+        #TODO TEST: passive_deletes may prevent a ORM Hook event from triggering because it's not loading the objects?
 
 class Session(Base):
     __tablename__ = 'sessions'
@@ -32,11 +32,11 @@ class Session(Base):
 
     isOpen    : Mapped[bool]         = mapped_column(default=True)
     
-    myUserId  : Mapped[str]          = mapped_column(ForeignKey('users.id'))
+    myUserId  : Mapped[str]          = mapped_column(ForeignKey('users.id', ondelete="CASCADE"))
     myUser    : Mapped[User]         = relationship(back_populates='mySessions')
 
-    myExports : Mapped[list[Export]] = relationship(back_populates='mySession')
-    myViews   : Mapped[list[View]]   = relationship(back_populates='mySession')
+    myExports : Mapped[list[Export]] = relationship(back_populates='mySession', cascade="all, delete", passive_deletes=True)
+    myViews   : Mapped[list[View]]   = relationship(back_populates='mySession', cascade="all, delete", passive_deletes=True)
 
 
 
@@ -47,20 +47,19 @@ class Export(Base):
     
     mySpaceId   : Mapped[str]       = mapped_column(ForeignKey('spaces.id'))
     mySpace     : Mapped[Space]     = relationship(back_populates='inExports')
+        #Spaces are not deleted when an export disappears
 
     location    : Mapped[str]       = mapped_column()
+    onDisk      : Mapped[bool] = Column(Boolean, default=False)
+        #TODO: Tracked Location/s may need to be deleted?
+        #TODO: Consider tracking same Exports resulting from multiple sessions? Edge case
 
-    mySessionId : Mapped[int]       = mapped_column(ForeignKey('sessions.id'))
+    mySessionId : Mapped[int]       = mapped_column(ForeignKey('sessions.id', ondelete="CASCADE"))
     mySession   : Mapped[Session]   = relationship(back_populates = 'myExports') 
 
-    myUserId    : Mapped[str |None] = mapped_column(ForeignKey('users.id'))
+    myUserId    : Mapped[str |None] = mapped_column(ForeignKey('users.id', ondelete="CASCADE"))
     myUser      : Mapped[User|None] = relationship(back_populates='myExports')
 
-    onDisk      : Mapped[bool] = Column(Boolean, default=False)
-
-    #TODO: Consider tracking same Exports resulting from multiple sessions? Edge case
-
-    # isAlive     : ClassVar[bool] = True
     @property
     def isAlive(self)->bool:
         return not inspect(self).deleted
@@ -78,8 +77,10 @@ class View(Base):
     
     mySpaceId   : Mapped[str|None]     = mapped_column(ForeignKey('spaces.id'))
     mySpace     : Mapped[Space|None]   = relationship(back_populates='inViews')
+        #Spaces are not deleted when an export disappears
 
-    mySessionId : Mapped[int]          = mapped_column(ForeignKey('sessions.id'))
+
+    mySessionId : Mapped[int]          = mapped_column(ForeignKey('sessions.id', ondelete="CASCADE"))
     mySession   : Mapped[Session]      = relationship(back_populates = 'myViews') 
 
     @property
@@ -91,7 +92,9 @@ class asc_Space_NamedSpace(Base):
     __tablename__ = 'asc_space_namedspace'
     _use_merge = True
 
-    pSpaceId = mapped_column(String, ForeignKey('spaces.id'), primary_key=True)  
+    pSpaceId = mapped_column(String, ForeignKey('spaces.id', ondelete="CASCADE"), primary_key=True)
+        #Receive cascade to delete self, do **NOT** pass to cSpace (Deletion of named spaces)
+  
     cName    = mapped_column(String                         , primary_key=True)
     cSpaceId = mapped_column(String, ForeignKey('spaces.id' ,)                )
     
@@ -107,8 +110,10 @@ class Space(Base):
     _use_merge = True
     id  = Column(String, primary_key=True, default=None)
 
-    myFiles       : Mapped[list[asc_Space_NamedFile]]  = relationship(back_populates="pSpace")
-    mySpaces      : Mapped[list[asc_Space_NamedSpace]] = relationship(back_populates="pSpace", foreign_keys=[asc_Space_NamedSpace.pSpaceId])
+    myFiles       : Mapped[list[asc_Space_NamedFile]]  = relationship(back_populates="pSpace", cascade="all, delete", passive_deletes=True)
+    mySpaces      : Mapped[list[asc_Space_NamedSpace]] = relationship(back_populates="pSpace", foreign_keys=[asc_Space_NamedSpace.pSpaceId], cascade="all, delete", passive_deletes=True)
+        #Cascade delete *only* namedSpaces and namedFiles, **Not** actual spaces.
+ 
     inSpaces      : Mapped[list[asc_Space_NamedSpace]] = relationship(back_populates="cSpace", foreign_keys=[asc_Space_NamedSpace.cSpaceId])
 
     inExports     : Mapped[list[Export]]              = relationship(back_populates="mySpace")
@@ -203,9 +208,9 @@ class asc_Space_NamedFile(Base):
     __tablename__ = 'asc_space_namedfile'
     _use_merge = True
 
-    pSpaceId    : Mapped[str]      = mapped_column(ForeignKey('spaces.id'), primary_key=True) 
+    pSpaceId    : Mapped[str]      = mapped_column(ForeignKey('spaces.id', ondelete="CASCADE"), primary_key=True) 
+        #Receive cascade to delete self, do **NOT** pass to cSpace (Deletion of named files)
     cName       : Mapped[str]      = mapped_column(primary_key=True)
-
     cFileId     : Mapped[str|None] = mapped_column(ForeignKey('files.id'))
     cFileIdCopy : Mapped[str|None] = mapped_column()
 
