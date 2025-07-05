@@ -21,8 +21,10 @@ class User(Base):
     id  = Column(String, primary_key=True)
     hid = Column(String)    
 
+    #### Children ####
     mySessions: Mapped[list[Session]] = relationship(back_populates='myUser', cascade="all, delete", passive_deletes=True)
     myExports : Mapped[list[Export]]  = relationship(back_populates='myUser', cascade="all, delete", passive_deletes=True)
+    myImports : Mapped[list[Import]]  = relationship(back_populates='myUser', cascade="all, delete", passive_deletes=True)
         #TODO TEST: passive_deletes may prevent a ORM Hook event from triggering because it's not loading the objects?
 
 class Session(Base):
@@ -30,39 +32,78 @@ class Session(Base):
     id  = Column(Integer, primary_key=True)
     hid = Column(String)    
 
-    isOpen    : Mapped[bool]         = mapped_column(default=True)
     
+    #### Parents ####
     myUserId  : Mapped[str]          = mapped_column(ForeignKey('users.id', ondelete="CASCADE"))
     myUser    : Mapped[User]         = relationship(back_populates='mySessions')
 
+    #### Children ####
+    myImports : Mapped[list[Import]] = relationship(back_populates='mySession', cascade="all, delete", passive_deletes=True)
     myExports : Mapped[list[Export]] = relationship(back_populates='mySession', cascade="all, delete", passive_deletes=True)
     myViews   : Mapped[list[View]]   = relationship(back_populates='mySession', cascade="all, delete", passive_deletes=True)
+    
+    #### Data ####
+    isOpen    : Mapped[bool]         = mapped_column(default=True)
+    
+    #### State Propagation Methods ####
+    def on_isOpen_change(self):
+        for view in self.myViews:
+            view.on_user_change()
 
+class Import(Base):
+    __tablename__ = 'imports'
+    id  = Column(Integer, primary_key=True)
+    hid = Column(String)    
+    
+    #### Parents ####
+    mySessionId   : Mapped[int]         = mapped_column(ForeignKey('sessions.id', ondelete="CASCADE"))
+    mySession     : Mapped[Session]     = relationship(back_populates = 'myImports') 
 
+    myUserId      : Mapped[str |None]   = mapped_column(ForeignKey('users.id', ondelete="CASCADE"))
+    myUser        : Mapped[User|None]   = relationship(back_populates='myImports')
 
+    #### Children ####
+    mySpaceId     : Mapped[str]         = mapped_column(ForeignKey('spaces.id'))
+    mySpace       : Mapped[Space]       = relationship(back_populates='inImports')
+        #Spaces are not deleted when an Import is deleted
+
+    #### Data ####
+    sessionClosed : Mapped[date|None]   = mapped_column()
+    isAlive       : Mapped[bool]        = mapped_column(default = True)
+    
 class Export(Base):
     __tablename__ = 'exports'
     id  = Column(Integer, primary_key=True)
     hid = Column(String)    
     
-    mySpaceId   : Mapped[str]       = mapped_column(ForeignKey('spaces.id'))
-    mySpace     : Mapped[Space]     = relationship(back_populates='inExports')
-        #Spaces are not deleted when an export disappears
-
-    location    : Mapped[str]       = mapped_column()
-    onDisk      : Mapped[bool] = Column(Boolean, default=False)
-        #TODO: Tracked Location/s may need to be deleted?
-        #TODO: Consider tracking same Exports resulting from multiple sessions? Edge case
-
+    #### Parents ####
     mySessionId : Mapped[int]       = mapped_column(ForeignKey('sessions.id', ondelete="CASCADE"))
     mySession   : Mapped[Session]   = relationship(back_populates = 'myExports') 
 
     myUserId    : Mapped[str |None] = mapped_column(ForeignKey('users.id', ondelete="CASCADE"))
     myUser      : Mapped[User|None] = relationship(back_populates='myExports')
+    
+    #### Children ####
+    mySpaceId   : Mapped[str]       = mapped_column(ForeignKey('spaces.id'))
+    mySpace     : Mapped[Space]     = relationship(back_populates='inExports')
+        #Spaces are not deleted when an export disappears
+        
+    #### Data ####
+    location    : Mapped[str]       = mapped_column()
+    onDisk      : Mapped[bool]      = Column(Boolean, default=False)
+        #TODO: Tracked Location/s may need to be deleted?
+        #TODO: Consider tracking same Exports resulting from multiple sessions? Edge case
 
+    #### Property Methods ####
     @property
     def isAlive(self)->bool:
         return not inspect(self).deleted
+
+    #### State Propagation Methods ####
+    def on_create(self):
+        self.mySpace.set_users()
+    def on_delete(self):
+        self.mySpace.set_users()
 
 class View(Base):
     ''' 
@@ -70,37 +111,51 @@ class View(Base):
     Files being linked to are not guaranteed to exist after session closes, as they are assumed to be transitory (in progress) files.
     Invalidated views 
     '''
-
     __tablename__ = 'views'
     id  = Column(Integer, primary_key=True)
     hid = Column(String)    
-    
+
+    #### Parents ####
+    mySessionId : Mapped[int]          = mapped_column(ForeignKey('sessions.id', ondelete="CASCADE"))
+    mySession   : Mapped[Session]      = relationship(back_populates = 'myViews') 
+
+    #### Children ####
     mySpaceId   : Mapped[str|None]     = mapped_column(ForeignKey('spaces.id'))
     mySpace     : Mapped[Space|None]   = relationship(back_populates='inViews')
         #Spaces are not deleted when an export disappears
 
-
-    mySessionId : Mapped[int]          = mapped_column(ForeignKey('sessions.id', ondelete="CASCADE"))
-    mySession   : Mapped[Session]      = relationship(back_populates = 'myViews') 
-
+    #### Property Methods ####
     @property
     def isAlive(self)->bool:
         return self.mySession.isOpen and not inspect(self).deleted
+
+    #### State Propagation Methods ####
+    def on_create(self):
+        self.mySpace.set_users()
+    def on_delete(self):
+        self.mySpace.set_users()
+    def on_session_change(self):
+        self.mySpace.set_users()
 
 
 class asc_Space_NamedSpace(Base):
     __tablename__ = 'asc_space_namedspace'
     _use_merge = True
 
+    #### Parents ####
     pSpaceId = mapped_column(String, ForeignKey('spaces.id', ondelete="CASCADE"), primary_key=True)
+    pSpace   : Mapped[Space] = relationship(back_populates='mySpaces',foreign_keys=[pSpaceId])
         #Receive cascade to delete self, do **NOT** pass to cSpace (Deletion of named spaces)
-  
-    cName    = mapped_column(String                         , primary_key=True)
-    cSpaceId = mapped_column(String, ForeignKey('spaces.id' ,)                )
     
-    pSpace : Mapped[Space] = relationship(back_populates='mySpaces',foreign_keys=[pSpaceId])
-    cSpace : Mapped[Space] = relationship(back_populates='inSpaces',foreign_keys=[cSpaceId])
+    #### Children ####
+    cName    : Mapped[str]   = mapped_column( primary_key=True)
+    cSpaceId : Mapped[str]   = mapped_column( ForeignKey('spaces.id'))
+    cSpace   : Mapped[Space] = relationship(back_populates='inSpaces',foreign_keys=[cSpaceId])
 
+    #### Data ####
+    hasUsers : Mapped[bool]  = mapped_column(default = True)
+
+    #### Property Methods ####
     def __repr__(self):
         return f"< NamedSpace Object : {self.cName} from space '{self.cSpace.id}' >"
 
@@ -110,24 +165,52 @@ class Space(Base):
     _use_merge = True
     id  = Column(String, primary_key=True, default=None)
 
+    #### Parents ####
+    inSpaces      : Mapped[list[asc_Space_NamedSpace]] = relationship(back_populates="cSpace", foreign_keys=[asc_Space_NamedSpace.cSpaceId])
+
+    inImports     : Mapped[list[Import]]               = relationship(back_populates="mySpace")
+    inExports     : Mapped[list[Export]]               = relationship(back_populates="mySpace")
+    inViews       : Mapped[list[View]]                 = relationship(back_populates="mySpace")
+
+    #### Children ####
     myFiles       : Mapped[list[asc_Space_NamedFile]]  = relationship(back_populates="pSpace", cascade="all, delete", passive_deletes=True)
     mySpaces      : Mapped[list[asc_Space_NamedSpace]] = relationship(back_populates="pSpace", foreign_keys=[asc_Space_NamedSpace.pSpaceId], cascade="all, delete", passive_deletes=True)
         #Cascade delete *only* namedSpaces and namedFiles, **Not** actual spaces.
- 
-    inSpaces      : Mapped[list[asc_Space_NamedSpace]] = relationship(back_populates="cSpace", foreign_keys=[asc_Space_NamedSpace.cSpaceId])
-
-    inExports     : Mapped[list[Export]]              = relationship(back_populates="mySpace")
-    inViews       : Mapped[list[View]]                = relationship(back_populates="mySpace")
-
-    hasUsers      : Mapped[bool]      = mapped_column(default = True)
+    
+    #### Data ####
     lastHadUser   : Mapped[date|None] = mapped_column(default = None)
-
     inDecay       : Mapped[bool]      = mapped_column(default = False)
     firstFileDrop : Mapped[date|None] = mapped_column(default = None)
 
-    ### Unmapped temporary variables ###
+    ### Property Methods ###
+    @property
+    def hasUsers(self)-> bool:
+        return (any([x.hasUsers for x in self.inSpaces]) 
+                or any([x.isAlive for x in self.myExports]) 
+                or any([x.isAlive for x in self.myImports]) 
+                or any([x.isAlive for x in self.myViews]))
 
+
+    #### Session Exclusive Data ####
     cached_users  : ClassVar[list[Export|View]] = None
+
+    #### State Propagation Methods ####
+    def set_user(self, chain = None):
+        ''' Propagate user count [down] on update '''
+        ''' Optimization of not calling recur child on remove user if has any users cannot be done, as may reference it's self  '''
+        if chain is None: chain = [self]
+        elif self in chain: return
+
+        set_to = self.hasUsers
+
+        for namedFile in self.myFiles:
+            namedFile.hasUsers = set_to
+            namedFile.cFile.set_user()
+        for namedSpace in self.mySpaces:
+            namedSpace.hasUsers = set_to
+            namedSpace.cSpace.set_user(chain=chain)
+
+        self.enact_user_state()
 
     def verify_state(self):
         if self.hasUsers:
@@ -138,7 +221,7 @@ class Space(Base):
             assert self.inDecay and self.firstFileDrop
     
     def get_alive_users(self, chain=None)->list[Export|View]:
-        ''' Recur through spaces to return 'alive' Exports & Views ('Users' of this space) '''
+        ''' [Upward Recursion] Recur through spaces to return 'alive' Exports & Views ('Users' of this space) '''
         ret = []
         if chain is None: chain = [self]
         else: chain.append(self)
@@ -157,21 +240,15 @@ class Space(Base):
 
     def enact_user_count(self):
         ''' Set results of user count observation '''
-        #TODO: Determine if needs optimization!
 
-        if self.cached_users is None:
-            self.get_alive_users()
-        
-        if not self.cached_users:
-            self.hasUsers = False
+        if not self.hasUsers:
             if not self.lastHadUser:
                 self.lastHadUser = datetime.now()
         else:
-            self.hasUsers    = True
             self.lastHadUser = None
     
     def set_decayed(self):
-        ''' Child File (or space) has been deleted, set as Decayed & recur to parents '''
+        ''' [Upward Recursion] Child File (or space) has been deleted, set as Decayed & recur to parents '''
         #Order of operations assertions get_alive_users was called on this object this session
         assert not self.cached_users is None
         assert len(self.cached_users) == 0
@@ -181,13 +258,7 @@ class Space(Base):
 
         for namedSpace in self.inSpaces:
             namedSpace.pSpace.set_decayed()
-        
-        # for namedFile in self.myFiles:
-        #     namedFile.set_decayed()
-        #     # namedFile is supposed to be cascade deleted anyway, right?
 
-
-    # @hook
     def on_delete(self, safe:bool=True):
         ''' '''
         if safe:
@@ -201,22 +272,28 @@ class Space(Base):
                 assert now > self.firstFileDrop
 
         for namedSpace in self.inSpaces:
-            namedSpace.space.set_decayed
+            namedSpace.space.set_decayed()
 
 
 class asc_Space_NamedFile(Base):
     __tablename__ = 'asc_space_namedfile'
     _use_merge = True
 
+    #### Parents ####
     pSpaceId    : Mapped[str]      = mapped_column(ForeignKey('spaces.id', ondelete="CASCADE"), primary_key=True) 
+    pSpace      : Mapped[Space]    = relationship(back_populates='myFiles')
         #Receive cascade to delete self, do **NOT** pass to cSpace (Deletion of named files)
+    
+    #### Children ####
     cName       : Mapped[str]      = mapped_column(primary_key=True)
     cFileId     : Mapped[str|None] = mapped_column(ForeignKey('files.id'))
-    cFileIdCopy : Mapped[str|None] = mapped_column()
-
-    pSpace      : Mapped[Space]    = relationship(back_populates='myFiles')
     cFile       : Mapped[File ]    = relationship(back_populates='inSpaces')
 
+    #### Data ####
+    cFileIdCopy : Mapped[str|None] = mapped_column()
+    hasUsers    : Mapped[bool]     = mapped_column(default = True)
+
+    #### Property Methods ####
     def __repr__(self):
         return f"< NamedSpace Object : {self.cName} from file '{self.cFile.id}' >"
 
@@ -227,16 +304,23 @@ class File(Base):
     id  = Column(String, primary_key=True)
     hid = Column(String)
 
+    #### Parents ####
     inSpaces    : Mapped[list[asc_Space_NamedFile]] = relationship(back_populates="cFile")
 
-    hasUsers    : Mapped[bool]      = mapped_column(default=True)
+    #### Data ####
     lastHadUser : Mapped[date|None] = mapped_column(default=None)
 
-    ### Unmapped temporary variables ###
+    #### Property Methods #####
+    @property
+    def hasUsers(self):
+        return any([x.hasUsers for x in self.inSpaces]) or any([x.isAlive for x in self.myExports]) or any([x.isAlive for x in self.myViews])
     
+    ### Unmapped temporary variables ###
     cached_users: ClassVar[list[Export|View]]
 
+    ### State Propigation Methods ###
     def get_alive_users(self):
+        ''' [Upward Recursion] '''
         ret = []
         for namedFile in self.inSpaces:
             ret.extend(namedFile.pSpace.get_alive_users())
@@ -249,17 +333,11 @@ class File(Base):
     
     def enact_user_count(self):
         ''' Set results of user count observation '''
-        #TODO: Determine if needs optimization!
 
-        if self.cached_users is None:
-            self.get_alive_users()
-        
-        if not self.cached_users:
-            self.hasUsers = False
+        if not self.hasUsers:
             if not self.lastHadUser:
                 self.lastHadUser = datetime.now()
         else:
-            self.hasUsers    = True
             self.lastHadUser = None
 
     def on_delete(self, safe:bool=True):
@@ -275,9 +353,6 @@ class File(Base):
         for namedFile in self.inSpaces:
             namedFile.cFileIdCopy = self.id
             namedFile.pSpace.set_decayed()
-
-
-
 
 
 
@@ -303,9 +378,6 @@ if __name__ == '__main__':
 
     _user = User(id = 'Job_Boal', hid='Job_Boal')
     _user.mySessions.append(_session)
-    
-
-
 
     session.add_all([_file,_space,_asc_Space_NamedFile])
     session.commit()
