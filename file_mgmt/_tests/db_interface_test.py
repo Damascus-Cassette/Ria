@@ -20,43 +20,68 @@ def test_dp():
 
 @pytest.fixture
 def dbi(db_fp):
-    return db_interface({'database':{'db_path':db_fp}})
-
-def test_import(dbi):
-    print(dbi)
-
-def test_file_space_export_creation(dbi,test_fp):
+    dbi = db_interface({'database':{'db_path':db_fp}})
     with dbi.session_cm():
-        print(dbi.c_session.get())
-
         user        = dbi.repo_user.make(id='TestUser', hid='TestUser')
         dbi.repo_user.create(user)
 
         session     = dbi.repo_Session.make(hid='TestSession', user=user)
         dbi.repo_Session.create(session)
+    dbi.context.Session.set(session)
+    dbi.context.User.set(user)
+    return dbi
 
-        with dbi.repo_cm(User=user, Session=session):
-            space = dbi.repo_Space.base()
-            named_file = dbi.repo_NamedFile.store(filepath     = test_fp,
-                                                filename     = os.path.split(test_fp)[1],
-                                                space        = None,
-                                                repl_symlink = False,
-                                                do_remove    = False)
-            space.myFiles.append(named_file)
+def test_file_space_export_creation(dbi,test_fp):
+    with dbi.session_cm(commit = False):
+        # with dbi.repo_cm(User=user, Session=session):
+            #Already taken care of by database start and manual context setting
 
-            dbi.repo_Space.set_id(space)
-            # dbi.repo_Space.create(space)
-            # dbi.repo_NamedFile.create(named_file) #implicity created in space create?
+        space = dbi.repo_Space.base()
+        named_file = dbi.repo_NamedFile.store(filepath     = test_fp,
+                                            filename     = os.path.split(test_fp)[1],
+                                            space        = None,
+                                            repl_symlink = False,
+                                            do_remove    = False)
+        space.myFiles.append(named_file)
 
-            export = dbi.repo_Export.from_space(space, hid='ExportName')
-            dbi.repo_Export.create(export)
+        dbi.repo_Space.set_id(space)
 
-            # dbi.repo_NamedFile.create(named_file)
-                # commit(space) implicitly commits myFiles. SO this throws errors
-                # space.myFiles
-            
-            # space.myFiles.append(named_file)
+        export = dbi.repo_Export.from_space(space, hid='ExportName')
 
-            # nSpace = dbi.repo_Space.as_named(space,'NamedSpace')
+        dbi.repo_Export.create(export)
 
-            # export = session.export_namedSpace(nSpace)
+
+def test_usercounts(dbi:db_interface):
+    with dbi.session_cm(commit = False):
+        space      = dbi.repo_Space.base()
+
+        file       = dbi.repo_File.base()
+        file.id    = 'RandomID_Standin'
+
+        named_file = dbi.repo_NamedFile.base()
+        named_file.cName  = 'NamedFile.txt'
+        named_file.cFile  = file
+        named_file.pSpace = space
+
+        dbi.repo_Space.set_id(space)
+
+        file.get_alive_users()
+
+        assert not file.cached_users
+        assert not file.hasUsers
+
+        assert not space.hasUsers
+        assert not space.inDecay
+        assert not space.firstFileDrop
+
+        export = dbi.repo_Export.from_space(space, hid='ExportName')
+        # dbi.repo_Export.create(export)
+        file.get_alive_users()
+
+        assert file.cached_users
+        assert file.hasUsers
+
+        assert space.cached_users
+        assert space.hasUsers
+
+

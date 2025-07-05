@@ -199,7 +199,10 @@ class db_interface():
         return tuple(ret)
 
     @contextmanager
-    def session_cm(self,*args,**kwargs):
+    def session_cm(self,commit = True):
+        #Consider passing out dont_commit (changes local do_commit varaible) function?
+        #Consider also allowing committing & dumping the database when errors occur.
+
         if not getattr(self,'engine',None):
             self._load_db()
 
@@ -211,14 +214,25 @@ class db_interface():
                 _savepoint = ongoing_session.begin_nested()
                 token2 = self.c_savepoint.set(_savepoint)
                 yield ongoing_session
-                _savepoint.commit()
+
+                if commit: 
+                    _savepoint.commit()
+                else:      
+                    _savepoint.rollback()
+
             else:
                 print('Creating New Session!')
                 session = Session(bind=self.engine, expire_on_commit = False)
                 token_1 = self.c_session.set(session)
                 yield session
-                session.commit()
-                session.close()
+                
+                if commit: 
+                    session.commit()
+                    session.close()
+                else: 
+                    session.rollback()
+                    
+                    
                 
         except:
             if ongoing_session:
