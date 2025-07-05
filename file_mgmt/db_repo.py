@@ -180,10 +180,12 @@ class repo_File(repo_interface_base):
         session = cls.db_interface.c_session.get()
         uid = fu.get_uid(filepath)
 
-        if existing := session.query(cls.base).filter_by(id=uid).first() and existing.verify_on_disk():
-            return existing
-        elif existing:
-            log.log(existing.id, " exists in db, but is not on disk! Uploading")
+        if existing := session.query(cls.base).filter_by(id=uid).first(): 
+            if cls.verify_on_disk(existing):
+                return existing
+            else:
+                print(existing.id, " exists in db, but is not on server disk! Uploading")
+                # log.log(existing.id, " exists in db, but is not on disk! Uploading")
 
         file = cls.base()
         

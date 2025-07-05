@@ -21,18 +21,24 @@ def test_dp():
 @pytest.fixture
 def dbi(db_fp):
     dbi = db_interface({'database':{'db_path':db_fp}})
-    with dbi.session_cm():
-        user        = dbi.repo_user.make(id='TestUser', hid='TestUser')
-        dbi.repo_user.create(user)
+    with dbi.session_cm() as sqla_session:
+        
+        from ..db_struct import User,Session
 
-        session     = dbi.repo_Session.make(hid='TestSession', user=user)
-        dbi.repo_Session.create(session)
-    dbi.context.Session.set(session)
-    dbi.context.User.set(user)
+        if not (user := sqla_session.query(User).filter_by(id = 'TestUser').first()):
+            user = dbi.repo_user.make(id='TestUser', hid='TestUser')
+            dbi.repo_user.create(user)
+
+        if not (session := sqla_session.query(Session).filter_by(hid = 'TestSession').first()):
+            session = dbi.repo_Session.make(hid='TestSession', user=user)
+            dbi.repo_Session.create(session)
+
+        dbi.context.Session.set(session)
+        dbi.context.User.set(user)
     return dbi
 
 def test_file_space_export_creation(dbi,test_fp):
-    with dbi.session_cm(commit = False):
+    with dbi.session_cm(commit = True):
         # with dbi.repo_cm(User=user, Session=session):
             #Already taken care of by database start and manual context setting
 
@@ -52,7 +58,7 @@ def test_file_space_export_creation(dbi,test_fp):
 
 
 def test_usercounts(dbi:db_interface):
-    with dbi.session_cm(commit = False):
+    with dbi.session_cm(commit = True) as sqla_session:
         space      = dbi.repo_Space.base()
 
         file       = dbi.repo_File.base()
@@ -75,7 +81,7 @@ def test_usercounts(dbi:db_interface):
         assert not space.firstFileDrop
 
         export = dbi.repo_Export.from_space(space, hid='ExportName')
-        # dbi.repo_Export.create(export)
+        dbi.repo_Export.create(export)
         file.get_alive_users()
 
         assert file.cached_users
@@ -84,4 +90,19 @@ def test_usercounts(dbi:db_interface):
         assert space.cached_users
         assert space.hasUsers
 
+        dbi.repo_Export.delete(export)
+        sqla_session.flush()
+
+        file.get_alive_users()
+        assert not file.cached_users
+        assert not file.hasUsers
+
+        assert not space.hasUsers
+        assert not space.inDecay
+        assert not space.firstFileDrop
+        
+        dbi.repo_File.delete(file) #safe=False
+        assert not space.hasUsers 
+        assert space.inDecay
+        assert space.firstFileDrop
 

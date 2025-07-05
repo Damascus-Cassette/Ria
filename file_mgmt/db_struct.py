@@ -1,9 +1,11 @@
 from __future__ import annotations
 from sqlalchemy import (Column, Boolean, ForeignKey, Integer, String, create_engine, Table)
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker, Mapped, mapped_column
-from sqlalchemy.types import Date
+# from sqlalchemy.types import DateTime
+from typing import ClassVar
+from sqlalchemy import inspect
 
-import datetime
+from datetime import date,datetime
 
 if __name__ == '__main__':
     db_url = 'sqlite:///database.db'
@@ -58,9 +60,10 @@ class Export(Base):
 
     #TODO: Consider tracking same Exports resulting from multiple sessions? Edge case
 
-    isAlive   : bool = True
-        #Immutable, if session exists, must be true
-
+    # isAlive     : ClassVar[bool] = True
+    @property
+    def isAlive(self)->bool:
+        return not inspect(self).deleted
 
 class View(Base):
     ''' 
@@ -81,7 +84,7 @@ class View(Base):
 
     @property
     def isAlive(self)->bool:
-        return self.mySession.isOpen
+        return self.mySession.isOpen and not inspect(self).deleted
 
 
 class asc_Space_NamedSpace(Base):
@@ -111,15 +114,15 @@ class Space(Base):
     inExports     : Mapped[list[Export]]              = relationship(back_populates="mySpace")
     inViews       : Mapped[list[View]]                = relationship(back_populates="mySpace")
 
-    hasUsers      : Mapped[bool]          = mapped_column(default = True)
-    lastHadUser   : Mapped[Date|None] = mapped_column(default = None)
+    hasUsers      : Mapped[bool]      = mapped_column(default = True)
+    lastHadUser   : Mapped[date|None] = mapped_column(default = None)
 
-    inDecay       : Mapped[bool]          = mapped_column(default = False)
-    firstFileDrop : Mapped[Date|None] = mapped_column(default = None)
+    inDecay       : Mapped[bool]      = mapped_column(default = False)
+    firstFileDrop : Mapped[date|None] = mapped_column(default = None)
 
     ### Unmapped temporary variables ###
 
-    cached_users  : list[Export|View] = None
+    cached_users  : ClassVar[list[Export|View]] = None
 
     def verify_state(self):
         if self.hasUsers:
@@ -138,8 +141,8 @@ class Space(Base):
         for namedSpace in self.inSpaces:
             if (_space := namedSpace.pSpace) not in chain:
                 ret.extend(_space.get_alive_users(chain))
-        ret.extend(filter(self.inExports, lambda x: x.isAlive))
-        ret.extend(filter(self.inViews  , lambda x: x.isAlive))
+        ret.extend(filter(lambda x: x.isAlive, self.inExports))
+        ret.extend(filter(lambda x: x.isAlive, self.inViews  ))
         ret = list(set(ret))
         self.cached_users = ret
 
@@ -183,11 +186,11 @@ class Space(Base):
     def on_delete(self, safe:bool=True):
         ''' '''
         if safe:
-            now = Date.now()
+            now = datetime.now()
             assert not self.cached_users is None
             assert len(self.cached_users) == 0
             assert self.lastHadUser
-            assert now > self.lastHadUse
+            assert now > self.lastHadUser
             if self.inDecay:
                 assert self.firstFileDrop
                 assert now > self.firstFileDrop
@@ -222,11 +225,11 @@ class File(Base):
     inSpaces    : Mapped[list[asc_Space_NamedFile]] = relationship(back_populates="cFile")
 
     hasUsers    : Mapped[bool]      = mapped_column(default=True)
-    lastHadUser : Mapped[Date|None] = mapped_column(default=None)
+    lastHadUser : Mapped[date|None] = mapped_column(default=None)
 
     ### Unmapped temporary variables ###
     
-    cached_users: list[Export|View]
+    cached_users: ClassVar[list[Export|View]]
 
     def get_alive_users(self):
         ret = []
@@ -256,18 +259,17 @@ class File(Base):
 
     def on_delete(self, safe:bool=True):
         ''' Setting decay on parent spaces on deletion and asserting usual situation '''
-        
+
         if safe:
-            now = Date.now()
+            now = datetime.now()
             assert not self.cached_users is None
             assert len(self.cached_users) == 0
             assert self.lastHadUser
-            assert now > self.lastHadUse
-            assert now > self.firstFileDrop
+            assert now > self.lastHadUser
 
         for namedFile in self.inSpaces:
             namedFile.cFileIdCopy = self.id
-            namedFile.space.set_decayed()
+            namedFile.pSpace.set_decayed()
 
 
 

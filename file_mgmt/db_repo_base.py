@@ -71,8 +71,11 @@ class repo_interface_base():
         return obj
     
     @transaction
-    def delete(cls,obj)->None:
+    def delete(cls,obj, *args,**kwargs)->None:
         assert isinstance(obj,cls.base)
+
+        if func := getattr(obj,'on_delete',None):
+            func(*args,**kwargs)
 
         session = cls.c_session.get()
         session.delete(obj)
