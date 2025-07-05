@@ -6,10 +6,14 @@ from functools   import wraps
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-
 from .settings       import settings_interface
+
 from .db_struct      import Base
+from .db_struct      import mount_hooks
+
 from .db_repo_base   import repo_interface_base,_transaction
+
+from .db_repo        import context as repos_context
 from .db_repo        import (
         repo_user,
         repo_NamedFile,
@@ -19,7 +23,6 @@ from .db_repo        import (
         repo_Export,
         repo_Session,
         )
-from .db_repo import context as repos_context
 
 class _unset:...
 
@@ -223,6 +226,8 @@ class db_interface():
             else:
                 print('Creating New Session!')
                 session = Session(bind=self.engine, expire_on_commit = False)
+                mount_hooks(session)
+                
                 token_1 = self.c_session.set(session)
                 yield session
                 

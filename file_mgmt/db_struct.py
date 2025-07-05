@@ -355,6 +355,34 @@ class File(Base):
             namedFile.pSpace.set_decayed()
 
 
+#### EVENT HOOKS ####
+
+from sqlalchemy import event
+
+def mount_hooks(sqla_session):
+    ''' Create hooks to propagate complex object states '''
+
+    @event.listens_for(Session, 'after_flush')
+    def emit_state_changes(sqla_session, ctx):
+        ''' Session handler to emit state changes on deleted objects '''
+        ''' UNKNOWN: Is the reference still in the relationships?    '''
+
+        for inst in sqla_session.created:
+            if isinstance(inst, (User,Session,Import,Export,View,Space)):
+                if func := hasattr(inst,'on_creation',None):
+                    func()
+
+        for inst in sqla_session.deleted:
+            if isinstance(inst, (User,Session,Import,Export,View,Space)):
+                if func := hasattr(inst,'on_delete',None):
+                    func()
+
+        for inst in sqla_session.updated:
+            if isinstance(inst, (User,Session,Import,Export,View,Space)):
+                if func := hasattr(inst,'on_delete',None):
+                    func()
+
+
 
 if __name__ == '__main__':
     Base.metadata.create_all(engine)
