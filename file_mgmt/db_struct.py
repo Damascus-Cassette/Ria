@@ -45,10 +45,28 @@ class Session(Base):
     #### Data ####
     isOpen    : Mapped[bool]         = mapped_column(default=True)
     
-    #### State Propagation Methods ####
-    def on_isOpen_change(self):
-        for view in self.myViews:
-            view.on_user_change()
+    #### Events ####
+    def before_update(self):
+        # Check for attribute change to update propigation
+        # Usefull: https://stackoverflow.com/questions/43813451/how-can-you-automatically-check-if-one-or-more-attribute-is-modified-in-sqlalche
+        insp = inspect(self)
+
+        if insp.attrs.isOpen.history.has_changes():
+            for v in self.myViews:
+                v.on_session_isOpen_change()
+            for i in self.myImports:
+                i.on_session_isOpen_change()
+            for e in self.myExports:
+                e.on_session_isOpen_change()
+                    
+    def after_deletion(self):
+        for v in self.myViews:
+            v.on_session_isOpen_change()
+        for i in self.myImports:
+            i.on_session_isOpen_change()
+        for e in self.myExports:
+            e.on_session_isOpen_change()    
+        
 
 class Import(Base):
     __tablename__ = 'imports'
@@ -71,6 +89,10 @@ class Import(Base):
     sessionClosed : Mapped[date|None]   = mapped_column()
     isAlive       : Mapped[bool]        = mapped_column(default = True)
     
+    def on_session_isOpen_change():
+        
+        ...
+
 class Export(Base):
     __tablename__ = 'exports'
     id  = Column(Integer, primary_key=True)
@@ -94,16 +116,25 @@ class Export(Base):
         #TODO: Tracked Location/s may need to be deleted?
         #TODO: Consider tracking same Exports resulting from multiple sessions? Edge case
 
+    #### TEMP PROPERTY METHODS ####
+    marked_for_delete : ClassVar[bool] = False 
+
     #### Property Methods ####
     @property
     def isAlive(self)->bool:
-        return not inspect(self).deleted
+        i = inspect(self)
+        #TODO: i.deleted and i.was_deleted are not showing true after flush where object was deleted?
+        return not (i.deleted or i.was_deleted or self.marked_for_delete)
 
-    #### State Propagation Methods ####
+    #### Events ####
     def on_create(self):
         self.mySpace.set_users()
     def on_delete(self):
+        print('ON_DELETE HOOK CALLED FOR EXPORT')
+        self.marked_for_delete = True
         self.mySpace.set_users()
+    def on_session_isOpen_change():    
+        ...
 
 class View(Base):
     ''' 
@@ -129,14 +160,13 @@ class View(Base):
     def isAlive(self)->bool:
         return self.mySession.isOpen and not inspect(self).deleted
 
-    #### State Propagation Methods ####
+    #### Events ####
     def on_create(self):
         self.mySpace.set_users()
     def on_delete(self):
         self.mySpace.set_users()
-    def on_session_change(self):
+    def on_session_isOpen_change(self):
         self.mySpace.set_users()
-
 
 class asc_Space_NamedSpace(Base):
     __tablename__ = 'asc_space_namedspace'
@@ -208,80 +238,20 @@ class Space(Base):
     ### Property Methods ###
     @property
     def hasUsers(self)-> bool:
-        return (any([x.hasUsers for x in self.inSpaces]) 
-                or any([x.isAlive for x in self.myExports]) 
-                or any([x.isAlive for x in self.myImports]) 
-                or any([x.isAlive for x in self.myViews]))
+        print('ANY OF self.inSpaces:',any([x.hasUsers for x in self.inSpaces]))
+        print('ANY OF self.inExports:',any([x.isAlive for x in  self.inExports]))
+        print('ANY OF self.inImports:',any([x.isAlive for x in  self.inImports]))
+        print('ANY OF self.inViews:',any([x.isAlive for x in  self.inViews]))
+        return (   any([x.hasUsers for x in self.inSpaces]) 
+                or any([x.isAlive  for x in self.inExports]) 
+                or any([x.isAlive  for x in self.inImports]) 
+                or any([x.isAlive  for x in self.inViews]))
 
 
     #### Session Exclusive Data ####
     cached_users  : ClassVar[list[Export|View]] = None
 
-    #### State Propagation Methods ####
-    def set_user(self, chain = None):
-        ''' Propagate user count [down] on update '''
-        ''' Optimization of not calling recur child on remove user if has any users cannot be done, as may reference it's self  '''
-        if chain is None: chain = [self]
-        elif self in chain: return
-
-        set_to = self.hasUsers
-
-        for namedFile in self.myFiles:
-            namedFile.hasUsers = set_to
-            namedFile.cFile.set_user()
-        for namedSpace in self.mySpaces:
-            namedSpace.hasUsers = set_to
-            namedSpace.cSpace.set_user(chain=chain)
-
-        self.enact_user_state()
-
-    def verify_state(self):
-        if self.hasUsers:
-            assert not self.lastHadUser
-            assert not (self.inDecay or self.firstFileDrop)
-        else:
-            assert self.lastHadUser
-            assert self.inDecay and self.firstFileDrop
-    
-    def get_alive_users(self, chain=None)->list[Export|View]:
-        ''' [Upward Recursion] Recur through spaces to return 'alive' Exports & Views ('Users' of this space) '''
-        ret = []
-        if chain is None: chain = [self]
-        else: chain.append(self)
-
-        for namedSpace in self.inSpaces:
-            if (_space := namedSpace.pSpace) not in chain:
-                ret.extend(_space.get_alive_users(chain))
-        ret.extend(filter(lambda x: x.isAlive, self.inExports))
-        ret.extend(filter(lambda x: x.isAlive, self.inViews  ))
-        ret = list(set(ret))
-        self.cached_users = ret
-
-        self.enact_user_count()
-
-        return ret
-
-    def enact_user_count(self):
-        ''' Set results of user count observation '''
-
-        if not self.hasUsers:
-            if not self.lastHadUser:
-                self.lastHadUser = datetime.now()
-        else:
-            self.lastHadUser = None
-    
-    def set_decayed(self):
-        ''' [Upward Recursion] Child File (or space) has been deleted, set as Decayed & recur to parents '''
-        #Order of operations assertions get_alive_users was called on this object this session
-        assert not self.cached_users is None
-        assert len(self.cached_users) == 0
-
-        if not self.inDecay:       self.inDecay       = True
-        if not self.firstFileDrop: self.firstFileDrop = datetime.now()
-
-        for namedSpace in self.inSpaces:
-            namedSpace.pSpace.set_decayed()
-
+    #### Events ####
     def on_delete(self, safe:bool=True):
         ''' '''
         if safe:
@@ -297,6 +267,81 @@ class Space(Base):
         for namedSpace in self.inSpaces:
             namedSpace.space.set_decayed()
 
+    #### State Propagation Methods ####
+    def set_users(self, chain = None):
+        ''' Propagate user count [down] on update '''
+        ''' Optimization of not calling recur child on remove user if has any users cannot be done, as may reference it's self  '''
+        if chain is None: chain = [self]
+        elif self in chain: return
+
+        set_to = self.hasUsers
+        print('SET USER VALUE:', set_to)
+
+        for namedFile in self.myFiles:
+            namedFile.hasUsers = set_to
+            namedFile.cFile.set_users()
+        for namedSpace in self.mySpaces:
+            namedSpace.hasUsers = set_to
+            namedSpace.cSpace.set_users(chain=chain)
+
+        self.enact_user_state()
+
+    def enact_user_state(self):
+        ''' Set results of user count observation '''
+
+        if not self.hasUsers:
+            if not self.lastHadUser:
+                self.lastHadUser = datetime.now()
+        else:
+            self.lastHadUser = None
+
+    def set_decayed(self):
+        ''' [Upward Recursion] Child File (or space) has been deleted, set as Decayed & recur to parents '''
+        #Order of operations assertions get_alive_users was called on this object this session
+        assert not self.cached_users is None
+        assert len(self.cached_users) == 0
+
+        if not self.inDecay:       self.inDecay       = True
+        if not self.firstFileDrop: self.firstFileDrop = datetime.now()
+
+        for namedSpace in self.inSpaces:
+            namedSpace.pSpace.set_decayed()
+
+    def verify_state(self):
+        if self.hasUsers:
+            assert not self.lastHadUser
+            assert not (self.inDecay or self.firstFileDrop)
+        else:
+            assert self.lastHadUser
+            assert self.inDecay and self.firstFileDrop
+    
+    #TODO: Re-encorperate [upwards recursion] method of returning users that sets users on the [backswing recursion]
+    # def get_alive_users(self, chain=None)->list[Export|View]:
+        # ''' [Upward Recursion] Recur through spaces to return 'alive' Exports & Views ('Users' of this space) '''
+        # ret = []
+        # if chain is None: chain = [self]
+        # else: chain.append(self)
+
+        # for namedSpace in self.inSpaces:
+        #     if (_space := namedSpace.pSpace) not in chain:
+        #         ret.extend(_space.get_alive_users(chain))
+        # ret.extend(filter(lambda x: x.isAlive, self.inExports))
+        # ret.extend(filter(lambda x: x.isAlive, self.inViews  ))
+        # ret = list(set(ret))
+        # self.cached_users = ret
+
+        # self.enact_user_count()
+
+        # return ret
+        
+    # def enact_user_count(self):
+        # ''' Set results of user count observation '''
+
+        # if not self.hasUsers:
+        #     if not self.lastHadUser:
+        #         self.lastHadUser = datetime.now()
+        # else:
+        #     self.lastHadUser = None
 
 class File(Base):
     __tablename__ = 'files'
@@ -312,34 +357,13 @@ class File(Base):
 
     #### Property Methods #####
     @property
-    def hasUsers(self):
-        return any([x.hasUsers for x in self.inSpaces]) or any([x.isAlive for x in self.myExports]) or any([x.isAlive for x in self.myViews])
-    
+    def hasUsers(self)-> bool:
+        return any([x.hasUsers for x in self.inSpaces])
+
     ### Unmapped temporary variables ###
     cached_users: ClassVar[list[Export|View]]
 
-    ### State Propigation Methods ###
-    def get_alive_users(self):
-        ''' [Upward Recursion] '''
-        ret = []
-        for namedFile in self.inSpaces:
-            ret.extend(namedFile.pSpace.get_alive_users())
-        ret = list(set(ret))
-        self.cached_users = ret
-
-        self.enact_user_count()
-
-        return ret
-    
-    def enact_user_count(self):
-        ''' Set results of user count observation '''
-
-        if not self.hasUsers:
-            if not self.lastHadUser:
-                self.lastHadUser = datetime.now()
-        else:
-            self.lastHadUser = None
-
+    #### Events ####
     def on_delete(self, safe:bool=True):
         ''' Setting decay on parent spaces on deletion and asserting usual situation '''
 
@@ -354,34 +378,108 @@ class File(Base):
             namedFile.cFileIdCopy = self.id
             namedFile.pSpace.set_decayed()
 
+    ### State Propigation Methods ###
+    def set_users(self):
+        if not self.hasUsers:
+            if not self.lastHadUser:
+                self.lastHadUser = datetime.now()
+        else:
+            self.lastHadUser = None
+    
+    #TODO: Re-encorperate [upwards recursion] method of returning users that sets users on the [backswing recursion]
+    # def get_alive_users(self):
+        # ''' [Upward Recursion] '''
+        # ret = []
+        # for namedFile in self.inSpaces:
+        #     ret.extend(namedFile.pSpace.get_alive_users())
+        # ret = list(set(ret))
+        # self.cached_users = ret
+
+        # self.enact_user_count()
+
+        # return ret
+    
+    # def enact_user_count(self):
+        # ''' Set results of user count observation '''
+
+        # if not self.hasUsers:
+        #     if not self.lastHadUser:
+        #         self.lastHadUser = datetime.now()
+        # else:
+        #     self.lastHadUser = None
+
+
 
 #### EVENT HOOKS ####
 
+
 from sqlalchemy import event
 
-def mount_hooks(sqla_session):
-    ''' Create hooks to propagate complex object states '''
 
-    @event.listens_for(Session, 'after_flush')
-    def emit_state_changes(sqla_session, ctx):
-        ''' Session handler to emit state changes on deleted objects '''
-        ''' UNKNOWN: Is the reference still in the relationships?    '''
+# @event.listens_for(User, 'delete')
+@event.listens_for(Export,  'delete')
+@event.listens_for(Import,  'delete')
+@event.listens_for(Session, 'delete')
+def event_start_usercount_update(target, value, oldvalue, initiator):
+    ...
 
-        for inst in sqla_session.created:
-            if isinstance(inst, (User,Session,Import,Export,View,Space)):
-                if func := hasattr(inst,'on_creation',None):
-                    func()
+@event.listens_for(Export.mySpace,  'set')
+@event.listens_for(Import.mySpace,  'set')
+@event.listens_for(Session.mySpace, 'set')
+def event_start_usercount_update(target, value, oldvalue, initiator):    
+    ...
 
-        for inst in sqla_session.deleted:
-            if isinstance(inst, (User,Session,Import,Export,View,Space)):
-                if func := hasattr(inst,'on_delete',None):
-                    func()
+@event.listens_for(Session.isOpen,  'set')
+def event_start_usercount_update(target, value, oldvalue, initiator):
+    ...
 
-        for inst in sqla_session.updated:
-            if isinstance(inst, (User,Session,Import,Export,View,Space)):
-                if func := hasattr(inst,'on_delete',None):
-                    func()
+@event.listens_for(File,  'delete')
+def event_start_set_decay():
+    ...
 
+# @event.listens_for(User.mySessions, 'append')
+# def user 
+# @event.listens_for(User.myImports,  'append')
+# def user 
+# @event.listens_for(User.myExports,  'append')
+# def user 
+
+
+# def mount_hooks(sqla_session):
+#     ''' Create hooks to propagate complex object states '''
+
+#     @event.listens_for(sqla_session, 'before_flush')
+#     def emit_state_changes_before_flush(sqla_session, ctx, instances):
+
+#         for inst in sqla_session.dirty:
+#             # if isinstance(inst, (User,Session,Import,Export,View,Space)):
+#             if func := getattr(inst,'before_update',None):
+#                 func()
+#         # sqla_session.set_committed_value()
+
+#     @event.listens_for(sqla_session, 'after_flush')
+#     def emit_state_changes_after_flush(sqla_session, ctx):
+#         ''' Session handler to emit state changes on deleted objects '''
+#         # ''' UNKNOWN: Is the reference still in the relationships?    '''
+
+#         _savepoint = sqla_session.begin_nested()
+#         try:
+#             for inst in sqla_session.deleted:
+#                 # if isinstance(inst, (User,Session,Import,Export,View,Space)):
+#                 if func := getattr(inst,'on_delete',None):
+#                     func()
+#             for inst in sqla_session.new:
+#                 # if isinstance(inst, (User,Session,Import,Export,View,Space)):
+#                 if func := getattr(inst,'on_create',None):
+#                     func()
+#             for inst in sqla_session.dirty:
+#                 # if isinstance(inst, (User,Session,Import,Export,View,Space)):
+#                 if func := getattr(inst,'after_update',None):
+#                     func()
+#             _savepoint.commit()
+#         except:
+#             _savepoint.rollback()
+#             raise
 
 
 if __name__ == '__main__':

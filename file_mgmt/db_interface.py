@@ -226,9 +226,9 @@ class db_interface():
             else:
                 print('Creating New Session!')
                 session = Session(bind=self.engine, expire_on_commit = False)
-                mount_hooks(session)
-                
                 token_1 = self.c_session.set(session)
+                # mount_hooks(session)
+                
                 yield session
                 
                 if commit: 
