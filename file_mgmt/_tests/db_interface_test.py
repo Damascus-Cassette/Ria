@@ -208,3 +208,26 @@ def test_deletion_behavior(dbi:db_interface):
         assert inspect(space).deleted
         assert inspect(named_file).deleted
         assert not inspect(file).deleted
+
+# def test_struct_generic(dbi:db_interface):
+#     # Come back to this later, I'm not feeling it today 
+#     from ..test_utils import Test_Root
+#     root = Test_Root('FolderTest1', 'T1')
+
+#     root('/folder/struct/file.txt'    , file_contents = 'The same Data')
+#     root('/struct/folder/othefile.txt', file_contents = 'The same Data')
+#     root('/struct/folder/otherfolder' )
+#     root('/struct/folder/otherfolder', 'file3.txt', file_contents = 'DifferentFileData' )
+
+#     path = root.make_on_disk(symlink=False,Junction=False) #
+
+#     with dbi.session_cm(commit = True) as sqla_session:
+        
+#         space = dbi.repo_Space.base()
+
+#         space.store(path,symlink=False,Junction=False)
+#         root.verify_folder_structure(symlink=False,Junction=False)
+#         root.verify_pattern(sqla_session)
+        
+#         dbi.repo_Space.set_id(space)
+
