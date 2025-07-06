@@ -1,4 +1,4 @@
-from .settings_base import settings_dict_base, input_base, input_context_formatted
+from .settings_base.settings_base import settings_dict_base, input_base, input_context_formatted
 
 import string
 
