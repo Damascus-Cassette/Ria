@@ -29,3 +29,6 @@ class main():
     def do_something_callback_error():
         ...
     
+    @order
+    def order_from_server():
+        ...
