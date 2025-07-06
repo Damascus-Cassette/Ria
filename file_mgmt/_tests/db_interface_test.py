@@ -64,7 +64,7 @@ def test_export_space_only(dbi:db_interface):
 
         assert not space.hasUsers
 
-        export = dbi.repo_Export.from_space(space, hid='ExportName')
+        export = dbi.repo_Export.from_space(space, hid='ExportName_55')
         dbi.repo_Export.create(export)
 
         assert space.hasUsers
@@ -85,26 +85,31 @@ def test_export_space_and_file(dbi:db_interface):
         named_file.cFile  = file
         named_file.pSpace = space
         dbi.repo_Space.set_id(space)
-
+        
+        print('CREATING EXPORT')
         export = dbi.repo_Export.from_space(space, hid='ExportName')
         dbi.repo_Export.create(export)
+        print('CREATED EXPORT')
 
         assert file.hasUsers
         assert space.hasUsers
 
+        print('DELETING EXPORT')
         sqla_session.delete(export)
         sqla_session.flush()
+        print('DELETED EXPORT')
 
-        assert not file.hasUsers
+        assert inspect(export).deleted or inspect(export).was_deleted
+
         assert not space.hasUsers
+        assert not file.hasUsers
 
 def test_usercounts(dbi:db_interface):
-    return
     with dbi.session_cm(commit = True) as sqla_session:
         space      = dbi.repo_Space.base()
 
         file       = dbi.repo_File.base()
-        file.id    = 'RandomID_Standin'
+        file.id    = 'RandomID_Standin_55'
 
         named_file = dbi.repo_NamedFile.base()
         named_file.cName  = 'NamedFile.txt'
@@ -151,7 +156,6 @@ def test_usercounts(dbi:db_interface):
 def test_deletion_behavior(dbi:db_interface):
     ''' Test cascade deletion behavior of both users & spaces '''
     with dbi.session_cm(commit = True) as sqla_session:
-        return 
     
         user = dbi.repo_user.make(id='Deletion_TestUser', hid='Deletion_TestUser')        
         session = dbi.repo_Session.make(hid='Deletion_TestSession', user=user)

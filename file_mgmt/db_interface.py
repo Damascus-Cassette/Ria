@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 from .settings       import settings_interface
 
 from .db_struct      import Base
-from .db_struct      import mount_hooks
 
 from .db_repo_base   import repo_interface_base,_transaction
 
@@ -227,7 +226,6 @@ class db_interface():
                 print('Creating New Session!')
                 session = Session(bind=self.engine, expire_on_commit = False)
                 token_1 = self.c_session.set(session)
-                # mount_hooks(session)
                 
                 yield session
                 

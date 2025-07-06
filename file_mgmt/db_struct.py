@@ -89,9 +89,13 @@ class Import(Base):
     sessionClosed : Mapped[date|None]   = mapped_column()
     isAlive       : Mapped[bool]        = mapped_column(default = True)
     
-    def on_session_isOpen_change():
-        
-        ...
+    #### Temp Data ####
+    marked_for_delete : ClassVar[bool] = False
+
+    #### Events ####
+    def on_delete(self):
+        self.marked_for_delete = True
+        self.mySpace.set_users()
 
 class Export(Base):
     __tablename__ = 'exports'
@@ -116,25 +120,20 @@ class Export(Base):
         #TODO: Tracked Location/s may need to be deleted?
         #TODO: Consider tracking same Exports resulting from multiple sessions? Edge case
 
-    #### TEMP PROPERTY METHODS ####
-    marked_for_delete : ClassVar[bool] = False 
-
+    #### Temp Data ####
+    marked_for_delete : ClassVar[bool] = False
+    
     #### Property Methods ####
     @property
     def isAlive(self)->bool:
         i = inspect(self)
-        #TODO: i.deleted and i.was_deleted are not showing true after flush where object was deleted?
-        return not (i.deleted or i.was_deleted or self.marked_for_delete)
+        return not (i.deleted or i.was_deleted) and not self.marked_for_delete
 
     #### Events ####
-    def on_create(self):
-        self.mySpace.set_users()
     def on_delete(self):
-        print('ON_DELETE HOOK CALLED FOR EXPORT')
         self.marked_for_delete = True
         self.mySpace.set_users()
-    def on_session_isOpen_change():    
-        ...
+
 
 class View(Base):
     ''' 
@@ -155,15 +154,20 @@ class View(Base):
     mySpace     : Mapped[Space|None]   = relationship(back_populates = 'inViews')
         #Spaces are not deleted when an export disappears
 
+    #### Temp Data ####
+    marked_for_delete : ClassVar[bool] = False
+
     #### Property Methods ####
     @property
     def isAlive(self)->bool:
-        return self.mySession.isOpen and not inspect(self).deleted
+        i = inspect(self)
+        return self.mySession.isOpen and not (i.deleted or i.was_deleted) and not self.marked_for_delete
 
     #### Events ####
     def on_create(self):
         self.mySpace.set_users()
     def on_delete(self):
+        self.marked_for_delete = True
         self.mySpace.set_users()
     def on_session_isOpen_change(self):
         self.mySpace.set_users()
@@ -248,16 +252,12 @@ class Space(Base):
                 or any([x.isAlive  for x in self.inViews]))
 
 
-    #### Session Exclusive Data ####
-    cached_users  : ClassVar[list[Export|View]] = None
-
     #### Events ####
     def on_delete(self, safe:bool=True):
         ''' '''
         if safe:
             now = datetime.now()
-            assert not self.cached_users is None
-            assert len(self.cached_users) == 0
+            assert not self.hasUsers
             assert self.lastHadUser
             assert now > self.lastHadUser
             if self.inDecay:
@@ -298,9 +298,7 @@ class Space(Base):
     def set_decayed(self):
         ''' [Upward Recursion] Child File (or space) has been deleted, set as Decayed & recur to parents '''
         #Order of operations assertions get_alive_users was called on this object this session
-        assert not self.cached_users is None
-        assert len(self.cached_users) == 0
-
+        assert not self.hasUsers
         if not self.inDecay:       self.inDecay       = True
         if not self.firstFileDrop: self.firstFileDrop = datetime.now()
 
@@ -358,10 +356,10 @@ class File(Base):
     #### Property Methods #####
     @property
     def hasUsers(self)-> bool:
+        print('File.inSpaces:', [(x.hasUsers,x.pSpace) for x in self.inSpaces])
         return any([x.hasUsers for x in self.inSpaces])
 
-    ### Unmapped temporary variables ###
-    cached_users: ClassVar[list[Export|View]]
+
 
     #### Events ####
     def on_delete(self, safe:bool=True):
@@ -369,8 +367,7 @@ class File(Base):
 
         if safe:
             now = datetime.now()
-            assert not self.cached_users is None
-            assert len(self.cached_users) == 0
+            assert not self.hasUsers
             assert self.lastHadUser
             assert now > self.lastHadUser
 
@@ -380,6 +377,7 @@ class File(Base):
 
     ### State Propigation Methods ###
     def set_users(self):
+        print('SET USERS CALLED: self.hasUsers = ', self.hasUsers)
         if not self.hasUsers:
             if not self.lastHadUser:
                 self.lastHadUser = datetime.now()
@@ -415,71 +413,30 @@ class File(Base):
 
 from sqlalchemy import event
 
+@event.listens_for(Export,  'after_delete')
+@event.listens_for(Import,  'after_delete')
+@event.listens_for(View,    'after_delete')
+def event_start_usercount_update(mapper, connection, target:Export|Import|Session, ):
+    #target.marked_for_delete = True
+    target.on_delete()
 
-# @event.listens_for(User, 'delete')
-@event.listens_for(Export,  'delete')
-@event.listens_for(Import,  'delete')
-@event.listens_for(Session, 'delete')
+@event.listens_for(Export.mySpace,  'append')
+@event.listens_for(View.mySpace,    'append')
+@event.listens_for(Import.mySpace,  'append')
 def event_start_usercount_update(target, value, oldvalue, initiator):
-    ...
-
-@event.listens_for(Export.mySpace,  'set')
-@event.listens_for(Import.mySpace,  'set')
-@event.listens_for(Session.mySpace, 'set')
-def event_start_usercount_update(target, value, oldvalue, initiator):    
-    ...
+    target.mySpace.set_users()
 
 @event.listens_for(Session.isOpen,  'set')
 def event_start_usercount_update(target, value, oldvalue, initiator):
-    ...
+    if value != oldvalue:
+        target.mySpace.set_users()
 
-@event.listens_for(File,  'delete')
-def event_start_set_decay():
-    ...
-
-# @event.listens_for(User.mySessions, 'append')
-# def user 
-# @event.listens_for(User.myImports,  'append')
-# def user 
-# @event.listens_for(User.myExports,  'append')
-# def user 
+@event.listens_for(Space,  'after_delete')
+@event.listens_for(File,   'after_delete')
+def event_start_set_decay(mapper, connection, target:File|Space):
+    target.on_delete()
 
 
-# def mount_hooks(sqla_session):
-#     ''' Create hooks to propagate complex object states '''
-
-#     @event.listens_for(sqla_session, 'before_flush')
-#     def emit_state_changes_before_flush(sqla_session, ctx, instances):
-
-#         for inst in sqla_session.dirty:
-#             # if isinstance(inst, (User,Session,Import,Export,View,Space)):
-#             if func := getattr(inst,'before_update',None):
-#                 func()
-#         # sqla_session.set_committed_value()
-
-#     @event.listens_for(sqla_session, 'after_flush')
-#     def emit_state_changes_after_flush(sqla_session, ctx):
-#         ''' Session handler to emit state changes on deleted objects '''
-#         # ''' UNKNOWN: Is the reference still in the relationships?    '''
-
-#         _savepoint = sqla_session.begin_nested()
-#         try:
-#             for inst in sqla_session.deleted:
-#                 # if isinstance(inst, (User,Session,Import,Export,View,Space)):
-#                 if func := getattr(inst,'on_delete',None):
-#                     func()
-#             for inst in sqla_session.new:
-#                 # if isinstance(inst, (User,Session,Import,Export,View,Space)):
-#                 if func := getattr(inst,'on_create',None):
-#                     func()
-#             for inst in sqla_session.dirty:
-#                 # if isinstance(inst, (User,Session,Import,Export,View,Space)):
-#                 if func := getattr(inst,'after_update',None):
-#                     func()
-#             _savepoint.commit()
-#         except:
-#             _savepoint.rollback()
-#             raise
 
 
 if __name__ == '__main__':
