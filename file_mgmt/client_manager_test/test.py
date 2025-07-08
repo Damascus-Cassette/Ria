@@ -4,7 +4,7 @@ import inspect
 from types import FunctionType
 from typing import Self
 
-class wrapper():
+class api():
     @classmethod
     def construct(cls,inst,router):
         for k in dir(inst):
@@ -13,14 +13,14 @@ class wrapper():
                 v.add_api_route(inst,router)
 
     @classmethod
-    def get(cls,path, *args,**kwargs):
+    def _wrapper(cls,base, method, path, *args,**kwargs):
         def wrapper(func):
-            if isinstance(func,cls._base):
+            if issubclass(func.__class__,cls._base):
                 chain = func
                 func  = func.func
-            else:
+            else: 
                 chain = None
-            return cls._base(func,path,method='GET',_chain=chain,*args,**kwargs)
+            return base(func,path,method=method,_chain=chain,*args,**kwargs)
         return wrapper
 
     class _base():
@@ -33,6 +33,7 @@ class wrapper():
             self.chain  = _chain
         
         def create_wrapped(self,inst)->FunctionType:
+
             #TODO: Allow for nested wrappers via a recursive search & execution of create_wrapped?
             
             sig = inspect.signature(self.func)            
@@ -59,28 +60,36 @@ class wrapper():
             args, kwargs = self.api_route_args(inst)
             router.add_api_route(*args, **kwargs)
             if self.chain:
-                self.chain.add_api_route(self,inst,router)
+                self.chain.add_api_route(inst,router)
 
+        def __call__(self,*args,**kwargs):
+            raise Exception('_BASE HAS BEEN CALLED')
 
-        def __call__(self):
+    @classmethod
+    def get(cls,path, *args,**kwargs):
+        cls._wrapper(cls._get,'GET',path, *args, **kwargs)
+
+    class _get(_base):
+        def __call__(self,*args,**kwargs):
             ''' Call method via connection object or lamda '''
             raise Exception('NOT PART OF TEST YET')
+
 
 class Hello:
     def __init__(self, name: str):
         self.name = name
         self.router = APIRouter()
-        wrapper.construct(self,self.router)
+        api.construct(self,self.router)
 
     def construct_path(self,function):
         return '/'+function.__name__
 
-    @wrapper.get('/')
-    @wrapper.get(construct_path)
+    @api.get('/')
+    @api.get(construct_path)
     def hello(self):
         return {"Hello": self.name}
     
-    @wrapper.get(construct_path)
+    @api.get(construct_path)
     def other_func(self):
         return "NOTHING FOR YOU HERE"
 
