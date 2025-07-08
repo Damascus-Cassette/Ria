@@ -2,6 +2,7 @@ from fastapi import FastAPI, APIRouter
 import functools
 import inspect
 from types import FunctionType
+from typing import Self
 
 class wrapper():
     @classmethod
@@ -14,16 +15,22 @@ class wrapper():
     @classmethod
     def get(cls,path, *args,**kwargs):
         def wrapper(func):
-            return cls._base(func,path,method='GET',*args,**kwargs)
+            if isinstance(func,cls._base):
+                chain = func
+                func  = func.func
+            else:
+                chain = None
+            return cls._base(func,path,method='GET',_chain=chain,*args,**kwargs)
         return wrapper
 
     class _base():
-        def __init__(self,func,path,method,*args,**kwargs):
+        def __init__(self,func,path,method,_chain:Self=None,*args,**kwargs):
             self.func = func
             self.path = path
             self.method = method
             self.args = args
             self.kwargs = kwargs
+            self.chain  = _chain
         
         def create_wrapped(self,inst)->FunctionType:
             #TODO: Allow for nested wrappers via a recursive search & execution of create_wrapped?
@@ -51,6 +58,9 @@ class wrapper():
         def add_api_route(self, inst:object, router:APIRouter):
             args, kwargs = self.api_route_args(inst)
             router.add_api_route(*args, **kwargs)
+            if self.chain:
+                self.chain.add_api_route(self,inst,router)
+
 
         def __call__(self):
             ''' Call method via connection object or lamda '''
@@ -65,7 +75,7 @@ class Hello:
     def construct_path(self,function):
         return '/'+function.__name__
 
-    # @wrapper.get('/')
+    @wrapper.get('/')
     @wrapper.get(construct_path)
     def hello(self):
         return {"Hello": self.name}
