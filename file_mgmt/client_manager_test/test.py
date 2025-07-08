@@ -19,38 +19,39 @@ class connection():
     user     : str|None
     password : str|None
 
-    def __init__(self,host,port,subroute='',user=None,password=None):
+    def __init__(self,host,port,subroute='',mode='http://' ,user=None,password=None):
         self.host     = host
         self.port     = port
         self.subroute = subroute
         self.user     = user
         self.password = password
+        self.mode = mode
     
-    def _format_kwargs(self,**kwargs):
-        if not kwargs:
-            return ''
-        ret = ''
-        for k,v in kwargs.items():
-            ret.append('?{k}={v}')
-        return '?'+ret
+    # def _format_kwargs(self,kwargs):
+    #     if not kwargs:
+    #         return ''
+    #     ret = ''
+    #     for k,v in kwargs.items():
+    #         ret.append('?{k}={v}')
+    #     return '?'+ret
     
-    def _construct_path(self,subpath,f_kwargs):
-        f_kwargs = self._format_kwargs(f_kwargs)
-        return self.host+':'+self.port+subpath+'?'+f_kwargs
+    def _construct_path(self,subpath):
+        # f_kwargs = self._format_kwargs(f_kwargs)
+        return self.mode + self.host+':'+self.port+subpath
 
     def get(self,subpath,f_kwargs,**kwargs):
         assert not kwargs #Custom implimentations may want kwargs
-        path = self._construct_path(subpath,f_kwargs)
+        path = self._construct_path(subpath)
         
-        if self.user: return requests.get(path,auth=(self.user,self.password))
-        else:         return requests.get(path)
+        if self.user: return requests.get(path,params=f_kwargs,auth=(self.user,self.password))
+        else:         return requests.get(path,params=f_kwargs)
 
     def post(self,subpath,f_kwargs,data,**kwargs):
         assert not kwargs #Custom implimentations may want kwargs
         path = self._construct_path(subpath,f_kwargs)
         
-        if self.user: return requests.post(path,data=data,auth=(self.user,self.password))
-        else:         return requests.post(path,data=data)
+        if self.user: return requests.post(path,params=f_kwargs,data=data,auth=(self.user,self.password))
+        else:         return requests.post(path,params=f_kwargs,data=data)
 
 class api():
     @classmethod
@@ -127,31 +128,52 @@ class api():
             
             k_from_args = {}
             for x in args:
-                param = func_params.pop[0]
+                param = func_params.pop(0)
                 assert param.kind != inspect._ParameterKind.KEYWORD_ONLY
                 assert param.name not in kwargs.keys()
                 k_from_args[param.name] = x
 
             kwargs = kwargs|k_from_args
 
-            path_keys = string.Formatter.parse('',self.path)
+            path_keys = [x[1] for x in string.Formatter.parse('',self.path) if x[1]]
 
             #pop out and use path keys            
             f_dict = {}
-            for key in path_keys: 
-                f_dict[key] = kwargs.pop[key]
+            for key in path_keys:
+                
+                f_dict[key] = kwargs.pop(key)
             path = self.path.format(f_dict)
 
             #Pop out what are to be path vars            
             f_kwargs = {}
-            for k,v in kwargs.items: 
+            for k,v in kwargs.items(): 
                 if k in func_params.keys():
-                    f_dict[k] = kwargs.pop[k]
+                    f_dict[k] = kwargs.pop(k)
 
             #Rest are assumed to be args for the connection objec            
             r_kwargs = kwargs
             return path, f_kwargs, r_kwargs
 
+        def format_data_from_response(self,response):
+            '''Format w/a, check if json compatable first'''
+            #TODO: FUCGLY AS FUCK
+
+            sig = inspect.signature(self.func)
+            ret_anno = sig.return_annotation
+            
+            try:
+                value = response.json()
+                try:
+                    if ret_anno is not inspect._empty:
+                        value = ret_anno(value)
+                    else:
+                        value = value
+                except:
+                    value = response.json()
+            except:
+                value = response.content 
+            finally:
+                return value 
 
         def __call__(self,*args,**kwargs):
             raise Exception('_BASE HAS BEEN CALLED')
@@ -167,16 +189,26 @@ class api():
 
     class _get(_base):
         def __call__(self,connection,*args,**kwargs):
+            response, f_data = self.call(connection, *args,**kwargs)
+            return f_data
+
+        def call(self, connection, /, *args,**kwargs)->requests.Response:
             subpath, f_kwargs, r_kwargs = self.format_args_kwargs(*args,**kwargs)
-            return connection.get(subpath,f_kwargs, **r_kwargs)
+            response = connection.get(subpath,f_kwargs, **r_kwargs)
+            return response, self.format_data_from_response(response)
 
     class _post(_base):
         def __call__(self, connection, data, /, *args,**kwargs):
+            response, f_data = self.call(connection, data, *args,**kwargs)
+            return f_data
+
+        def call(self, connection, data, /, *args,**kwargs)->requests.Response:
             subpath, f_kwargs, r_kwargs = self.format_args_kwargs(*args,**kwargs)
-            return connection.post(subpath,f_kwargs,data=data, **r_kwargs)
+            response = connection.post(subpath,f_kwargs,data=data, **r_kwargs)
+            return response, self.format_data_from_response(response)
 
 
-class Hello:#
+class Hello:
     def __init__(self, name: str, con):
         self.name = name
         self.router = APIRouter()
