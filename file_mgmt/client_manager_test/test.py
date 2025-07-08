@@ -158,12 +158,12 @@ class api():
 
 
     @classmethod
-    def get(cls,path, *args,**kwargs):
-        cls._wrapper(cls._get,'GET',path, *args, **kwargs)
+    def get(cls, path, *args,**kwargs):
+        return cls._wrapper(cls._get,'GET',path, *args, **kwargs)
 
     @classmethod
     def post(cls, path, *args,**kwargs):
-        cls._wrapper(cls._post,'POST',path, *args, **kwargs)
+        return cls._wrapper(cls._post,'POST',path, *args, **kwargs)
 
     class _get(_base):
         def __call__(self,connection,*args,**kwargs):
@@ -177,10 +177,10 @@ class api():
 
 
 class Hello:#
-    connection : connection
-    def __init__(self, name: str, connection):
+    def __init__(self, name: str, con):
         self.name = name
         self.router = APIRouter()
+        self.connection = con
         api.construct(self,self.router)
 
     def construct_path(self,function):
@@ -210,16 +210,15 @@ app = FastAPI()
 if sys.argv[-1] == 'a':
     name     = 'Instance_A'
     settings = {'host':"127.0.0.1", 'port':8003}
-    con      = connection('127.0.0.0', '8002')
+    con      = connection('127.0.0.1', '8002')
 else:
     name     = 'Instance_B'
-    settings = {'host':"127.0.0.0", 'port':8002}
+    settings = {'host':"127.0.0.1", 'port':8002}
     con      = connection('127.0.0.1', '8003')
 
+import uvicorn
 hello = Hello(name,con)
 app.include_router(hello.router)
 uvicorn.run(app, **settings)
 
 
-
-import uvicorn
