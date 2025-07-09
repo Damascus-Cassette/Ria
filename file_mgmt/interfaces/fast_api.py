@@ -22,7 +22,6 @@ class Manager(net_io):
     @api.put('/file/store')
     def store_file():
         ...
-
     @api.get('/file/i/{file_id}')
     def get_file_info(file_id):
         ...
