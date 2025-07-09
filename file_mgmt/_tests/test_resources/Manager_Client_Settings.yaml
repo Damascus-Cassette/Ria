@@ -1,0 +1,87 @@
+
+manager:
+  Database:
+    db_standard: sqlite
+    db_root: "N://Database/"
+    db_net : "N://Database/"
+
+    Services:
+      cleanup_period: 12
+      verify_files: True
+
+    Dirs:
+      view: ./views
+      store: ./store
+      export: ./export
+      logs: ./log/{type}
+
+    Filepaths:
+      view: "{user}/{session}/{uuid_short}/{uuid}"
+      view_log: "{user}/{session}/{uuid_short}/{uuid}.log"
+      
+      store: "{uuid_short}/{uuid}.blob"
+      store_log: "{uuid_short}/{uuid}.log"
+      
+      export: "{user}/{Session}/exports/{uuid}/"
+      export_log: "{user}/{Session}/exports/{uuid}.log"
+      
+      export_junction: "{user}/{Session}/exports/{name}/" #Auto links it by name to this location. Untracked junction.
+
+    Timeout:   #Hours from 0 users to deletion
+      file:   "128h00m"
+      view:   "128h00m"
+      space:  "128h00m"
+      export: "128h00m"
+
+
+client:
+
+  ID:
+    username  :
+    password  :
+    subuser_id:
+
+  Database:
+    network_enabled  : True # If the database should be exposed as a server, allows callbacks from Manager instance for more updates
+    caching_database : True
+    manager_database : "localhost:3001"
+    manager_drive    : "//localhost:3001/N/" #Netshared drive exposure
+
+    Services:
+      cleanup_period: 12
+      verify_files: True
+
+    ### In a chaching database, below refers to local structure.
+    ### Logs are not utilized locally, but rather the manager logs everything internally.
+    ### Timeout is generally expected to be shorter than the manager's and can be 0.
+    ###   Timeout ofc only affects locally cached copys
+
+    Dirs:
+      view: "./views"
+      store: "./store"
+      export: "./export"
+      logs: "./log/{type}"
+      
+    Filepaths:
+      view: "{user}/{session}/{uuid_short}/{uuid}"
+      
+      store: "{uuid_short}/{uuid}.blob"
+      
+      export: "{user}/{Session}/exports/{uuid}/"
+      
+      export_junction: "{user}/{Session}/exports/{name}/" #Auto links it by name to this location. Untracked junction.
+
+    Timeout:   #Hours from 0 users to deletion, (local cache) & (local db) only.
+      file:   "24h00m"
+      view:   "24h00m"
+      space:  "24h00m"
+      export: "24h00m"
+
+    Caching:
+
+      always_localize: 
+        - "*.blend"
+        - "*.png
+      always_foreign:
+        - "*.log"
+      
