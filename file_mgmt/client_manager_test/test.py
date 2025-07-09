@@ -26,17 +26,8 @@ class connection():
         self.user     = user
         self.password = password
         self.mode = mode
-    
-    # def _format_kwargs(self,kwargs):
-    #     if not kwargs:
-    #         return ''
-    #     ret = ''
-    #     for k,v in kwargs.items():
-    #         ret.append('?{k}={v}')
-    #     return '?'+ret
-    
+     
     def _construct_path(self,subpath):
-        # f_kwargs = self._format_kwargs(f_kwargs)
         return self.mode + self.host+':'+self.port+subpath
 
     def get(self,subpath,f_kwargs,**kwargs):
@@ -54,15 +45,17 @@ class connection():
         else:         return requests.post(path,params=f_kwargs,data=data)
 
 class api():
+
     @classmethod
     def construct(cls,inst,router):
         for k in dir(inst):
             v = getattr(inst,k)
             if isinstance(v,cls._base):
                 v.add_api_route(inst,router)
+                setattr(inst, k, v.create_wrapped(inst))
 
     @classmethod
-    def _wrapper(cls,base, method, path, *args,**kwargs):
+    def _wrapper(cls, base, method, path, *args, **kwargs):
         def wrapper(func):
             if issubclass(func.__class__,cls._base):
                 chain = func
@@ -179,6 +172,7 @@ class api():
             raise Exception('_BASE HAS BEEN CALLED')
 
 
+
     @classmethod
     def get(cls, path, *args,**kwargs):
         return cls._wrapper(cls._get,'GET',path, *args, **kwargs)
@@ -208,7 +202,16 @@ class api():
             return response, self.format_data_from_response(response)
 
 
-class Hello:
+class net_io():
+    def __init_subclass__(cls):
+        api_attrs={}
+        for k in dir(cls):
+            v = getattr(cls,k)
+            if isinstance(v,api._base):
+                api_attrs[k] = v
+        setattr(cls,'api',type('api_object',(object,),api_attrs))
+
+class Hello(net_io):
     def __init__(self, name: str, con):
         self.name = name
         self.router = APIRouter()
@@ -229,11 +232,9 @@ class Hello:
 
     @api.get('/echo_test')
     def echo_connection(self):
-        cls = self.__class__
-
         return {
             'FROM_INST' : self.name,
-            'CALLED'    : cls.who_am_i(self.connection)
+            'CALLED'    : self.api.who_am_i(self.connection)
             }
         
 import sys
