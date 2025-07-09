@@ -2,17 +2,23 @@
 manager:
   Database:
     db_standard: sqlite
-    db_root: "N://Database/"
-    db_net : "N://Database/"
+    db_root: "D://Database/"
+    db_net : "D://Database/data/"
+    db_as  : "S:"
+
+    caching_database : False
+
+    network_enabled  : True # If the database should be exposed as a server, allows callbacks from Manager instance for more updates
+    network_port     : 8001
 
     Services:
       cleanup_period: 12
       verify_files: True
 
     Dirs:
-      view   : ./views
-      store  : ./store
-      export : ./export
+      view   : ./data/views
+      store  : ./data/store
+      export : ./data/export
       logs   : ./log/{type}
 
     Filepaths:
@@ -34,20 +40,46 @@ manager:
       export : "128h00m"
 
 
+cache:
+  #Sub-Manager instance that caches from a primary manger
+
+  Database:
+    db_standard: sqlite                # Local DB Type
+    db_root    : "D://Database/"       # Local DB Location
+    db_net     : "D://Database/data/"  # DB as Netshare
+    db_net_as  : "S:"                  # DB Netshare Mapp Name
+    
+    caching_database : True # This DB is a caching database. 
+
+    network_enabled  : True # If the database should be exposed as a server, allows callbacks from Manager instance for more updates
+    network_port     : 8002
+
+    manager_database : "localhost:8001"
+    manager_netdrive_f : "//localhost:8001/S/" #Netshared drive
+    manager_netdrive_l : "E:/"                 #Netshared drive mounted locally
+    # manager_drive    : "N:/"                    #If the manager's drive is local/direct connection
+
+
 client:
 
-  id: ""
+  user_id : "Subuser"
+  primary_user: False
+    #This indicates this instance is a sub-user which in the full deployment reqs perms to act under a user.
+    #First sign on of a subuser will send a hardware key, which the server will store for validation.
 
   use_local_caching  : True #Telling the client to use a local db for caching. Otherwise uses just uses manager drive
-  manager_database   : "localhost:3001"
-  manager_drive      : "//localhost:3001/N/" 
+  manager_database   : "localhost:8002"
+  manager_drive      : "//localhost:8002/N/" 
 
-  ### In a caching database, below refers to local structure, otherwise they are not used.
+  ### In a caching database, below refers to local structure, otherwise they are not used
   Database:
-    network_enabled  : True # If the database should be exposed as a server, allows callbacks from Manager instance for more updates
     caching_database : True
-    manager_database : "localhost:3001"
-    manager_drive    : "//localhost:3001/N/" #Netshared drive exposure
+
+    network_enabled  : True # If the database should be exposed as a server, allows callbacks from Manager instance for more updates
+    network_port     : 8005
+    
+    manager_database : "localhost:8002"
+    manager_drive    : "//localhost:8002/N/" #Netshared drive exposure
 
     Services:
       cleanup_period: 12
@@ -57,7 +89,7 @@ client:
     ### Timeout is generally expected to be shorter than the manager's and can be 0.
     ###   Timeout ofc only affects locally cached copys
 
-    Caching:
+    Caching:            #rules for caching files on disk to this instance. Will have to be changed if a caching entity.
       always_localize: 
         - "*.blend"
         - "*.png
@@ -71,9 +103,9 @@ client:
       logs   : ./log/{type}
 
     Filepaths:
-      view       : "{user}/{session}/{uuid_short}/{uuid}"
-      store      : "{uuid_short}/{uuid}.blob"
-      export     : "{user}/{Session}/exports/{uuid}/"
+      view   : "{user}/{session}/{uuid_short}/{uuid}"
+      store  : "{uuid_short}/{uuid}.blob"
+      export : "{user}/{Session}/exports/{uuid}/"
       export_junction: "{user}/{Session}/exports/{name}/" #Auto links it by name to this location. Untracked junction.
 
     Timeout:   #Hours from 0 users to deletion
