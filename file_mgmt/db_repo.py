@@ -74,8 +74,16 @@ class space_utils:
 
 fu = file_utils
 su = space_utils
+ 
+class _shared_io:
+    @classmethod
+    def manage(cls):
+        ...
+    @classmethod
+    def get_info(cls):
+        ...
 
-class repo_user(repo_interface_base):
+class repo_user(_shared_io):
     base=User
 
     @classmethod
@@ -86,7 +94,7 @@ class repo_user(repo_interface_base):
         # cls.create(inst)
         return inst
 
-class repo_NamedSpace(repo_interface_base):
+class repo_NamedSpace(_shared_io):
     base=asc_Space_NamedSpace
 
     @classmethod
@@ -122,12 +130,7 @@ class repo_NamedSpace(repo_interface_base):
         # cls.create(nSpace_inst)
         return nSpace_inst
 
-    def on_remove(obj):
-        ''' Removes file reference '''
-        #TODO: Hook into on pre-removal from db
-        obj.remove_target(obj)
-
-class repo_NamedFile(repo_interface_base):
+class repo_NamedFile(_shared_io):
     base=asc_Space_NamedFile
 
     @classmethod
@@ -171,8 +174,8 @@ class repo_NamedFile(repo_interface_base):
         ''' Removes file reference '''
         #TODO: Hook into on pre-removal from db
         obj.remove_target(obj)
-        
-class repo_File(repo_interface_base):
+
+class repo_File(_shared_io):
     base=File
 
     @transaction
@@ -217,7 +220,7 @@ class repo_File(repo_interface_base):
         with cls.db_interface.repo_cm(File=file):
             return cls.db_interface.settings.database.filepaths.store
 
-class repo_Space(repo_interface_base):
+class repo_Space(_shared_io):
     base=Space
 
     @classmethod
@@ -281,7 +284,7 @@ class repo_Space(repo_interface_base):
         ''' Place space on disk at directory path. If folder exists, throw error'''
         #TODO
 
-class repo_Export(repo_interface_base):
+class repo_Export(_shared_io):
     base=Export
 
     @classmethod
@@ -317,7 +320,7 @@ class repo_Export(repo_interface_base):
         _repo_Space.place_on_disk(export.mySpace, export.location)
         cls.modify(export,onDisk=True)
 
-class repo_Session(repo_interface_base):
+class repo_Session(_shared_io):
     base=Session
 
     @classmethod
