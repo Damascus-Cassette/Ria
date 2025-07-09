@@ -2,3 +2,6 @@ flask
 sqlalchemy
 pyyaml
 pytest
+uvicorn
+fastapi
+requests
