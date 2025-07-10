@@ -228,10 +228,8 @@ class repo_File(_shared_io):
     @classmethod
     def expose(cls, file, fp, localize=False):
         from_path = cls.path(file)
-        if not localize:
-            file_utils.make_symlink(from_path,fp)
-        else:
-            file_utils.copy(from_path,fp)
+        if not localize: file_utils.make_symlink(from_path,fp)
+        else:            file_utils.copy(from_path,fp)
 
 class repo_Space(_shared_io):
     base=Space
@@ -294,25 +292,24 @@ class repo_Space(_shared_io):
     
     @classmethod
     def expose(cls,space, dp, chain=None, localize=False):
-        #Recursion function, called on all child folders with child dp
+        '''Recursion Exposure of folder structure w/ or w/out symlinks, called on all child folders with child dp'''
 
         if chain is None              : chain = {} #Chain here is first instance of space on disc. Junction to that location.
         elif space.id in chain.keys() : space_utils.create_junction(chain.keys[space.id],dp)
         else                          : chain[space.id] = dp
 
-
         for namedSpace in space.mySpaces:
-            _name   = namedSpace.cName
+            _name  = namedSpace.cName
             _space = namedSpace.cSpace
-            _child_path = os.path.join(dp,_name)
-            cls.expose(_space,_child_path,chain=chain,localize=localize)
+            _path  = os.path.join(dp,_name)
+            cls.expose(_space, _path, chain=chain, localize=localize)
 
         _repo_File = cls.db_interface.repo_File 
         for namedFile in space.myFiles:
             _name = namedFile.cName
             _file = namedFile.cFile
             _path = os.path.join(dp,_name)
-            _repo_File.expose(_space,_child_path,localize=localize) 
+            _repo_File.expose(_file,_path, localize=localize) 
         
         return dp
         
@@ -348,7 +345,9 @@ class repo_Export(_shared_io):
         return export
     
     @classmethod
-    def place_on_disk(cls,export)->str:
+    def expose(cls,export)->str:
+        with cls.db_interface.repo_cm(Export=export):
+            return cls.db_interface.settings.database.filepaths.export
         _repo_Space = cls.db_interface.repo_Space
         dp = _repo_Space.expose(export.mySpace, export.location)
         cls.modify(export,onDisk=True)
