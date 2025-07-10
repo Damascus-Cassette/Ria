@@ -39,9 +39,6 @@ class Manager(net_io):
         ''' Generic 1st level info of space (myNames, mySpaces, myFiles, inX) '''
 
     @api.get('/space/{space_id}/d')
-    def space_data(self,space_id)->itenerary:
-        ''' Same as space_iten '''
-
     @api.get('/space/{space_id}/iten/data')
     def space_iten_base(self,space_id,)->itenerary:
         ''' Iten of space and all children '''
@@ -49,19 +46,17 @@ class Manager(net_io):
     @api.get('/space/{space_id}/iten/diff')
     def space_iten_dif(self,space_id,iten:itenerary)->itenerary:
         ''' Dif iten submitted and return files & spaces not on this server '''
-        
+
 
     @api.put('/files/store')
     def file_store(self,file_id, upload:UploadFile):
         ''' Upload file to this server, validate upload '''
-
     @api.get('/file/{file_id}/i/')
     def file_info(self,file_id):
         ''' Info on file ID, including names and spaces '''
-
     @api.get('/file/{file_id}/d/')
     def file_data(self,file_id):
-        ''' File address for downloading. Error (or placeholder) if decayed '''
+        ''' File address for downloading. Error if gone or placeholder if decayed '''
 
 
     @api.post("/users/io")

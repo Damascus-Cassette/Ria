@@ -79,8 +79,13 @@ class _shared_io:
     @classmethod
     def manage(cls):
         ...
+
     @classmethod
     def get_info(cls):
+        ...
+
+    @classmethod
+    def get_iten(cls):
         ...
 
 class repo_user(_shared_io):
@@ -220,6 +225,14 @@ class repo_File(_shared_io):
         with cls.db_interface.repo_cm(File=file):
             return cls.db_interface.settings.database.filepaths.store
 
+    @classmethod
+    def expose(cls, file, fp, localize=False):
+        from_path = cls.path(file)
+        if not localize:
+            file_utils.make_symlink(from_path,fp)
+        else:
+            file_utils.copy(from_path,fp)
+
 class repo_Space(_shared_io):
     base=Space
 
@@ -280,9 +293,29 @@ class repo_Space(_shared_io):
         return space.id
     
     @classmethod
-    def place_on_disk(cls,space,dp):
-        ''' Place space on disk at directory path. If folder exists, throw error'''
-        #TODO
+    def expose(cls,space, dp, chain=None, localize=False):
+        #Recursion function, called on all child folders with child dp
+
+        if chain is None              : chain = {} #Chain here is first instance of space on disc. Junction to that location.
+        elif space.id in chain.keys() : space_utils.create_junction(chain.keys[space.id],dp)
+        else                          : chain[space.id] = dp
+
+
+        for namedSpace in space.mySpaces:
+            _name   = namedSpace.cName
+            _space = namedSpace.cSpace
+            _child_path = os.path.join(dp,_name)
+            cls.expose(_space,_child_path,chain=chain,localize=localize)
+
+        _repo_File = cls.db_interface.repo_File 
+        for namedFile in space.myFiles:
+            _name = namedFile.cName
+            _file = namedFile.cFile
+            _path = os.path.join(dp,_name)
+            _repo_File.expose(_space,_child_path,localize=localize) 
+        
+        return dp
+        
 
 class repo_Export(_shared_io):
     base=Export
@@ -315,10 +348,11 @@ class repo_Export(_shared_io):
         return export
     
     @classmethod
-    def place_on_disk(cls,export)->None:
+    def place_on_disk(cls,export)->str:
         _repo_Space = cls.db_interface.repo_Space
-        _repo_Space.place_on_disk(export.mySpace, export.location)
+        dp = _repo_Space.expose(export.mySpace, export.location)
         cls.modify(export,onDisk=True)
+        return dp
 
 class repo_Session(_shared_io):
     base=Session
