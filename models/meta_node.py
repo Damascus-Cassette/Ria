@@ -91,7 +91,7 @@ class struct_meta_socket_cont(BaseModel):
 
     def __init__(self, *args, **kwargs):
         self.super().__init__(*args,**kwargs)
-        
+        self.sockets
         
 
     sockets : list[meta_socket]

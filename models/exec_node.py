@@ -3,7 +3,6 @@ from contextvars import ContextVar
 from contextlib import contextmanager
 from typing import Self, Any
 
-session = ContextVar(default=None)
 
 
 class exec_socket(BaseModel):
