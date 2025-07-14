@@ -7,7 +7,7 @@ from typing import _GenericAlias
 
 class _defaultdict(dict):
     def __missing__(self,key):
-        res = self[key] = ContextVar('key',default=None)
+        res = self[key] = ContextVar(key,default=None)
         return res
 
 context : _defaultdict[ContextVar['flat_ref_col']] = _defaultdict()
@@ -94,7 +94,6 @@ class flat_ref[T,key]:
         return data_key
     
     def _import_(self,inst,ref:str):    
-        print(ref)
         # assert isinstance(ref,str)
 
         col = context[self.key].get()#.data[ref]
@@ -103,8 +102,8 @@ class flat_ref[T,key]:
 
         col.delayed_references.append(_import_func_) 
 
-    def _import_delayed_(self,inst, col : flat_ref_col, data:str):
-        setattr(inst,self.attr,col.data[data])
+    def _import_delayed_(self,inst, col : flat_ref_col, ref:str):
+        setattr(inst,self.attr,col.data[ref])
 
 class BaseModel:
     ''' Model to inherit  '''
@@ -117,6 +116,7 @@ class BaseModel:
     # __duck_typing  : bool = False
 
     def _export_(self)->dict:
+        self._localize_cols_()
         ret={}
         with ExitStack() as stack:
             for k,v in self.__colls.items():
@@ -133,34 +133,48 @@ class BaseModel:
                 if val:=getattr(self,k,None):
                     ret[k]=v._export_(val)
 
-        for k,v in self.__colls.items():
-            ret[k]=v._export_()
-        
-        return ret
+            for k,v in self.__colls.items():
+                ret[k]=v._export_()
+            
+            return ret
             
     def _import_(self,data:dict):
         ''' Load data onto self, recur as req '''
+        self._localize_cols_()
+        data_keys = data.keys()
         with ExitStack() as stack:
             for k,v in self.__colls.items():
                 stack.enter_context(v.in_context())
+
+            for k,v in self.__colls.items():
+                if k not in data_keys: continue
+                val = data[k]
+                v._import_(val)
+
             for k,v in self.__fields.items():
+                if k not in data_keys: continue
                 val = data[k]
                 ty = self.__annotations__[k]
 
                 if   isinstance(ty,GenericAlias):
                     setattr(self,k,val)
 
+                elif ty is Self:
+                    obj = self._import_root_(val)
+                    setattr(self, k, obj)
+
+                elif issubclass(ty,BaseModel):
+                    obj = ty._import_root_(val)
+                    setattr(self, k, obj)
+
                 elif issubclass(ty,flat_ref):
                     ty._import_(val)
 
-                elif issubclass(ty,BaseModel):
-                    obj = ty()
-                    obj._import_(val)
-                    setattr(self, k, obj)
                 else:
                     setattr(self,k,ty(val))
 
             for k,v in self.__refs.items():
+                if k not in data_keys: continue
                 val = data[k]
                 if not val:
                     continue
@@ -170,18 +184,20 @@ class BaseModel:
                 v._import_delayed_()
 
     @classmethod
-    def _import_root_(cls,data):
+    def _import_root_(cls,data:dict|None):
+        if data is None:
+            return None 
         inst = cls()
         inst._import_(data)
-        return inst 
+        return inst
 
     def _localize_cols_(self):
-        self.__cols = {}
+        self.__colls = {}
         for k,v in self.__base_colls.items():
             ty, key = get_generic_args(v)
             key = key.__forward_arg__
             obj = v.__origin__(self,k,ty,key)
-            self.__cols[k]=obj
+            self.__colls[k]=obj
 
     def __init_subclass__(cls):
         cls.__fields = {}
@@ -191,11 +207,10 @@ class BaseModel:
         ''' instance each flat_ref_col '''
         for k,v in cls.__annotations__.items():
             if isinstance(v,_GenericAlias):
-                print(v)
 
                 if issubclass(v.__origin__, flat_ref_col):
                     cls.__base_colls[k] = v
-                    
+
                 elif issubclass(v.__origin__, flat_ref):
                     ty, key = get_generic_args(v)
                     key = key.__forward_arg__
@@ -235,7 +250,7 @@ obj.a_struct = A()
 
 print(val_a := obj._export_() )
 
-# obj_b  = A._import_root_(val_a)
+obj_b  = A._import_root_(val_a)
 
-# print(val_b := obj_b._export_() )
+print(val_b := obj_b._export_() )
 # assert val_a == val_b
