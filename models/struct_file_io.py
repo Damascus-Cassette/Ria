@@ -37,7 +37,11 @@ class flat_ref[key,*T]:
     
     def _export_(self,src_data):
         # elif isinstance(val,model):
-        data_key = hash(src_data)
+        if func:=getattr(src_data,'_export_coll_id_',None):
+            data_key = func(src_data)
+        else:
+            data_key = hash(src_data)
+
         context[self.key].get().data[data_key] = src_data
         return data_key
 
@@ -197,7 +201,10 @@ class model:
             self._import_cols_(data)
             self._import_fields_(data)
             self._import_refs_(data)
-        
+
+    def _export_coll_id_(self):
+        return hash(self)  
+    
     def _export_(self)->dict:
         ret = {}
         self._localize_cols_()
@@ -269,12 +276,14 @@ class model:
                 ret[k] = src[k]
         return ret
 
+#TODO: Create model that's compatable with lists/dir and acts as a collection.
+#Customized _import_/_export_ required.
 
 if __name__ == '__main__':
     
     class B(model):
         name   : str
-        b_ref  : flat_ref['b_coll',Self] = None
+        b_ref  : flat_ref['b_coll'] = None
 
     class A(model):
         name   : str
