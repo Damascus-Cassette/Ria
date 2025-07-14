@@ -238,6 +238,7 @@ class A(BaseModel):
     # b_struct : flat_ref[Self,'b_coll'] = B()
     b_struct : B
     a_struct : Self
+    
     def __init__(self):
         b = B()
         b.name = 'B1'
