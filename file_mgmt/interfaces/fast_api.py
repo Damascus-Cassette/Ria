@@ -36,7 +36,7 @@ class Manager(net_io):
 
     @api.get('/space/{space_id}/i')
     def space_info(self,space_id):
-        ''' Generic 1st level info of space (myNames, mySpaces, myFiles, inX) '''
+        ''' Generic 1st level info of space (mySpaces, myFiles, inX) '''
 
     @api.get('/space/{space_id}/d')
     @api.get('/space/{space_id}/iten/data')
