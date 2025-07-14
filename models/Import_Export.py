@@ -175,22 +175,27 @@ class BaseModel:
         inst._import_(data)
         return inst 
 
+    def _localize_cols_(self):
+        self.__cols = {}
+        for k,v in self.__base_colls.items():
+            ty, key = get_generic_args(v)
+            key = key.__forward_arg__
+            obj = v.__origin__(self,k,ty,key)
+            self.__cols[k]=obj
+
     def __init_subclass__(cls):
         cls.__fields = {}
         cls.__refs   = {}
-        cls.__colls  = {}
+        cls.__base_colls = {}
 
         ''' instance each flat_ref_col '''
         for k,v in cls.__annotations__.items():
             if isinstance(v,_GenericAlias):
                 print(v)
-                if issubclass(v.__origin__, flat_ref_col):
-                    # cls.__fields[k] =v
-                    ty, key = get_generic_args(v)
-                    key = key.__forward_arg__
-                    obj = v.__origin__(cls,k,ty,key)
-                    cls.__colls[k] = obj
 
+                if issubclass(v.__origin__, flat_ref_col):
+                    cls.__base_colls[k] = v
+                    
                 elif issubclass(v.__origin__, flat_ref):
                     ty, key = get_generic_args(v)
                     key = key.__forward_arg__
