@@ -38,7 +38,7 @@ class flat_ref[key,*T]:
         self.type_chain = collapse_type_chain(inst,ty)
     
     def _export_(self,src_data):
-        # elif isinstance(val,model):
+        # elif isinstance(val,BaseModel):
         if func:=getattr(src_data,'_export_coll_id_',None):
             data_key = func(src_data)
         else:
@@ -203,7 +203,7 @@ class flat_col[key,*T]:
 
     
 
-class model:
+class BaseModel:
     __export_cls_vars__ : bool = False
     #does not export unset/deleted variables
 
@@ -308,7 +308,7 @@ class model:
         for k,v in self.__fields.items():
             if k in data.keys():
                 existing = getattr(self,k,None)
-                if issubclass(existing.__class__,model) or hasattr(existing,'_import_'):
+                if issubclass(existing.__class__,BaseModel) or hasattr(existing,'_import_'):
                     existing._import_(data[k])
                 elif func:=getattr(existing, '__flat_col_import_incorperate__',None):
                     func(data[k])                
@@ -320,7 +320,7 @@ class model:
                     raise Exception ('TODO: add functionality')
                 elif existing:
                     raise Exception(f'Attempting to import ontop of existing structure that does not support import explicitly! {existing}')
-                elif issubclass(v,model) or hasattr(v,'_import_from_data_'):
+                elif issubclass(v,BaseModel) or hasattr(v,'_import_from_data_'):
                     setattr(self,k,v._import_from_data_(data[k]))
                 else:
                     setattr(self,k,data[k])
@@ -357,7 +357,7 @@ class model:
             elif src[k] is _unset: continue
             
             d = src[k]
-            if isinstance(d,model) or hasattr(d,'_export_'):
+            if isinstance(d,BaseModel) or hasattr(d,'_export_'):
                 ret[k] = d._export_()
             elif isinstance(d,list) or getattr(d,'__flat_col_list__',False):
                 ret[k] = [x if not hasattr(d,'_export_') else x._export_() for x in d]
@@ -367,12 +367,12 @@ class model:
                 ret[k] = src[k]
         return ret
 
-#TODO: Create model that's compatable with lists/dir and acts as a collection.
+#TODO: Create BaseModel that's compatable with lists/dir and acts as a collection.
 #Customized _import_/_export_ required.
 
 if __name__ == '__main__':
     
-    class B(model):
+    class B(BaseModel):
         def _export_coll_id_(self,coll):
             assert self.name
             return f'< {self.name} >'
@@ -380,7 +380,7 @@ if __name__ == '__main__':
         name   : str
         b_ref  : flat_ref['b_col'] = None
 
-    class A(model):
+    class A(BaseModel):
         def _export_coll_id_(self,coll):
             assert self.name
             return f'< {self.name} >'
