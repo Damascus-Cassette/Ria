@@ -1,4 +1,4 @@
-from .exec_node import exec_node, exec_socket
+from ._exec_node import exec_node, exec_socket
 from . import context
 
 from pydantic import BaseModel
@@ -109,7 +109,7 @@ class meta_node_collection(BaseModel):
 
 
 class _example_meta_nodes:
-    from .exec_node import _exec_node_examples
+    from ._exec_node import _exec_node_examples
 
     class example_meta_node(meta_node):
         ...
