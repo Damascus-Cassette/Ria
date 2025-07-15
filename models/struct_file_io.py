@@ -15,11 +15,18 @@ context : dict[ContextVar] = _defaultdict()
 
 class _unset:...
 
-def collapse_type_chain(inst,ty)->list:
+class defered_archtype:
+    ''' Class to construct lists with after intial structure definition '''
+    types : list[Any]
+
+def collapse_type_chain(ty)->list:
     res = []
     for x in ty:
         if x.__class__ is UnionType:
             for e in x.__args__:
+                res.extend(collapse_type_chain(e))
+        if issubclass(x,defered_archtype):
+            for e in x.types:
                 res.extend(collapse_type_chain(e))
         else:
             res.append(x)
@@ -35,7 +42,7 @@ class flat_ref[key,*T]:
         self.inst = inst
         self.attr = attr
         self.key   = key.__forward_arg__
-        self.type_chain = collapse_type_chain(inst,ty)
+        self.type_chain = collapse_type_chain(ty)
     
     def _export_(self,src_data):
         # elif isinstance(val,BaseModel):
@@ -69,7 +76,7 @@ class flat_col[key,*T]:
         self.inst = inst
         self.attr = attr
         self.key   = key.__forward_arg__
-        self.type_chain = collapse_type_chain(inst,ty)
+        self._type_chain = ty
         
         self.data = {}
         self.import_defered = []
@@ -77,6 +84,10 @@ class flat_col[key,*T]:
 
         if len(ty)>1: self.type_fallback = ty[-1]
         else:         self.type_fallback = None
+
+    @property
+    def type_chain(self):
+        return [x for x in collapse_type_chain(self._type_chain)]
 
     @contextmanager
     def _import_context_(self):
