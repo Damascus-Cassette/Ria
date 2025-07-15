@@ -304,9 +304,23 @@ class model:
                 v._import_(data[k])
 
     def _import_fields_(self,data):
+        #TODO: Consider
         for k,v in self.__fields.items():
             if k in data.keys():
-                if issubclass(v,model):
+                existing = getattr(self,k,None)
+                if issubclass(existing.__class__,model) or hasattr(existing,'_import_'):
+                    existing._import_(data[k])
+                elif func:=getattr(existing, '__flat_col_import_incorperate__',None):
+                    func(data[k])                
+                elif getattr(existing, '__flat_col_dict__',None) or isinstance(existing,(OrderedDict,defaultdict,dict)):
+                    #TODO get method from flat_col
+                    raise Exception ('TODO: add functionality')
+                elif getattr(existing, '__flat_col_list__',None) or isinstance(existing,(list)):
+                    #TODO get method from flat_col
+                    raise Exception ('TODO: add functionality')
+                elif existing:
+                    raise Exception(f'Attempting to import ontop of existing structure that does not support import explicitly! {existing}')
+                elif issubclass(v,model) or hasattr(v,'_import_from_data_'):
                     setattr(self,k,v._import_from_data_(data[k]))
                 else:
                     setattr(self,k,data[k])
@@ -342,8 +356,13 @@ class model:
             if k not in src.keys(): continue
             elif src[k] is _unset: continue
             
-            if isinstance(src[k],model):
-                ret[k] = src[k]._export_()
+            d = src[k]
+            if isinstance(d,model) or hasattr(d,'_export_'):
+                ret[k] = d._export_()
+            elif isinstance(d,list) or getattr(d,'__flat_col_list__',False):
+                ret[k] = [x if not hasattr(d,'_export_') else x._export_() for x in d]
+            elif isinstance(d,dict) or getattr(d,'__flat_col_dict__',False):
+                ret[k] = {k:v if not hasattr(d,'_export_') else v._export_() for k,v in d.items()}
             else:
                 ret[k] = src[k]
         return ret
