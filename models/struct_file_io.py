@@ -2,7 +2,9 @@ from typing import get_args, Any, Self, Callable
 from types import UnionType
 from contextlib  import contextmanager, ExitStack
 from contextvars import ContextVar
-from typing import Self
+from typing import Self, ForwardRef
+
+from collections import OrderedDict,defaultdict
 
 class _defaultdict(dict):
     def __missing__(self,key):
@@ -29,10 +31,10 @@ class flat_ref[key,*T]:
         key, *ty = get_args(generic)
         return cls(inst,attr,key,*ty)
 
-    def __init__(self,inst,attr,key,*ty):
+    def __init__(self,inst,attr,key:ForwardRef,*ty):
         self.inst = inst
         self.attr = attr
-        self.key   = key
+        self.key   = key.__forward_arg__
         self.type_chain = collapse_type_chain(inst,ty)
     
     def _export_(self,src_data):
@@ -63,10 +65,10 @@ class flat_col[key,*T]:
         key, *ty = get_args(generic)
         return cls(inst,attr,key,*ty)
     
-    def __init__(self,inst,attr,key,*ty):
+    def __init__(self,inst,attr,key:ForwardRef,*ty):
         self.inst = inst
         self.attr = attr
-        self.key   = key
+        self.key   = key.__forward_arg__
         self.type_chain = collapse_type_chain(inst,ty)
         
         self.data = {}
@@ -100,12 +102,14 @@ class flat_col[key,*T]:
 
     def _import_(self,data):
         ret = {}
+        if attr_data := getattr(self.inst,self.key,None):
+            self.import_incorperate_attr_data(attr_data,src_data=data)
         for k,v in data.items():
             ret[k] = self._import_indv_(v)
         self.data = ret
-        print(f'Col Import: {ret}')
+
         return ret
-        
+    
     def _import_indv_(self,value):
         for ty in self.type_chain:
             if func := getattr(ty,'_match_ref_type_'):
@@ -116,19 +120,87 @@ class flat_col[key,*T]:
             else:
                 return ty(value)
         raise Exception('No Types were defined on col!')
-            
 
-    def _export_(self)->dict:
-        ret = {}
-        for k,v in self.data.items():
-            val=v._export_()
-            if val is _unset: continue
-            else: ret[k]=val
-        return ret
-
-    import_defered : list[Callable]
+    import_defered : list[Callable]    
     def _import_defered_(self):
         for x in self.import_defered: x()
+
+    def import_incorperate_attr_data(self,attr_data,import_data):
+        if func:=getattr(attr_data,'__flat_col_import_incorperate__',None):
+            func(self)
+        elif (isinstance(attr_data,(dict, defaultdict, OrderedDict)) or getattr(attr_data, '__flat_col_dict__',False)):
+            self.import_incorperate_dict_like(attr_data, import_data)
+        elif (isinstance(attr_data,(list,tuple,set)) or getattr(attr_data, '__flat_col_list__',False)): 
+            self.import_incorperate_list_like(attr_data, import_data)
+        else:
+            raise Exception(f'Could not incorperate data to {attr_data} from {import_data}!')
+
+    def import_incorperate_dict_like(self,attr_data,src_data:dict):
+        for k,v in src_data.items():
+            if k in attr_data.keys():
+                raise Exception(f'Trying to double import {k} on {attr_data}')
+            attr_data[k] = v
+
+    def import_incorperate_list_like(self,attr_data,src_data:dict):
+        for k,v in self.src_data.items():
+            if v in attr_data:
+                raise Exception(f'Trying to double import {k} on {attr_data}')
+            attr_data.append(k)     
+
+
+    def _export_(self,attr_data=None)->dict:
+        ret = {}
+        if attr_data:
+            self.export_incorperate_attr_data(attr_data)
+        for k,v in self.data_generator(self.data):
+            val=v._export_()
+            ret[k]=val
+        return ret
+
+    def data_generator(self, data:dict, used_keys=None):
+        ''' Iterate over dict keys, yielding any new results per iteration. '''
+        if used_keys is None: used_keys = []
+        for k in [x for x in data.keys()]:
+            if k in used_keys: continue
+            used_keys.append(k)
+            yield k, data[k]
+        if len(data.keys()) > len(used_keys):
+            for x in self.data_generator(data,used_keys):
+                yield x
+
+    def export_incorperate_attr_data(self,attr_data):
+        if func:=getattr(attr_data,'__flat_col_export_incorperate__',None):
+            func(self)
+        elif (isinstance(attr_data,(dict, defaultdict, OrderedDict)) or getattr(attr_data, '__flat_col_dict__',False)):
+            self.export_incorperate_dict_like(attr_data)
+        elif (isinstance(attr_data,(list,tuple,set)) or getattr(attr_data, '__flat_col_list__',False)): 
+            self.export_incorperate_list_like(attr_data)
+        else:
+            raise Exception(f'Could not incorperate data from src {attr_data}!')
+
+    def export_incorperate_dict_like(self,data):
+        for k,v in data.items():
+            if k in self.data.keys():
+                if self.data[k] is not v:
+                    raise Exception(f'Two Referenced Entities are not the same but have the same key! {k} : {self.data[k]} != {v}')
+                continue
+            self.data[k] = v
+    
+    def export_incorperate_list_like(self,data):
+        for item in data:
+            if func:=getattr(item,'_export_coll_id_',None):
+                k = func(item)
+            else:
+                k = hash(item)
+            
+            if k in self.data.keys():
+                if self.data[k] is not k:
+                    raise Exception(f'Two Referenced Entities are not the same but have the same key! {k} : {self.data[k]} != {item}')
+                continue
+            self.data[k] = item
+
+
+
     
 
 class model:
@@ -202,7 +274,7 @@ class model:
             self._import_fields_(data)
             self._import_refs_(data)
 
-    def _export_coll_id_(self):
+    def _export_coll_id_(self,coll):
         return hash(self)  
     
     def _export_(self)->dict:
@@ -282,13 +354,23 @@ class model:
 if __name__ == '__main__':
     
     class B(model):
+        def _export_coll_id_(self,coll):
+            assert self.name
+            return f'< {self.name} >'
+        
         name   : str
-        b_ref  : flat_ref['b_coll'] = None
+        b_ref  : flat_ref['b_col'] = None
 
     class A(model):
+        def _export_coll_id_(self,coll):
+            assert self.name
+            return f'< {self.name} >'
+        
         name   : str
-        b_coll : flat_col['b_coll',B]
-        b_ref  : B
+        b_col  : flat_col['b_col',B]
+        b_ref  : flat_ref['b_col',B]
+        # b_ref  : B  
+            #Partially flat, stores first inst on object, rest in bin
 
     
     a1_inst = A()
@@ -297,11 +379,18 @@ if __name__ == '__main__':
     a1_inst.b_ref.name = 'b1_inst'
     a1_inst.b_ref.b_ref = B()
     a1_inst.b_ref.b_ref.name = 'b2_inst'
-
+    b3 = B()
+    b3.name = 'b3_inst'
+    a1_inst.b_ref.b_ref.b_ref = b3
+    a1_inst.b_col = [b3]
+        # After _import_ this is filled with all users foudn via the _export_ walk.
+        # Since this is greedy by default, consider cross-bin references using a global bin ID or similar and structurally allow a backup greedy bin.
+            # Would require a structural re-factor    
+    
     a1_val = a1_inst._export_()
     print(a1_val)
     a2_inst = A._import_from_data_(a1_val)
-    print('br_ef:',a2_inst.b_ref)
+    # print('br_ef:',a2_inst.b_ref)
     print(a2_inst._export_())
 
     
