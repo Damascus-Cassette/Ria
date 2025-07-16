@@ -272,8 +272,8 @@ class _test:
     class test_graph_out(subgraph_int_reps):
         out_sockets  = [struct_socket_group.construct('a',set_id='{sub_graph.uuid}_out', types=[Any])   ]
         
-    class subgraph_rep(exec_node):
-        graph_ref    : flat_ref['subgraph'] = _unset
+    class subgraph_rep(base_node):
+        graph_ref    : flat_ref['subgraph'] = _unset #type:ignore
         in_sockets   = [struct_socket_group.construct('a',set_id='{sub_graph.uuid}_in',  types=[Any]) ]
         out_sockets  = [struct_socket_group.construct('a',set_id='{sub_graph.uuid}_out', types=[Any]) ]
         
