@@ -389,7 +389,7 @@ if __name__ == '__main__':
             return f'< {self.name} >'
         
         name   : str
-        b_ref  : flat_ref['b_col'] = None
+        b_ref  : flat_ref['b_col'] = None #type:ignore
 
     class A(BaseModel):
         def _export_coll_id_(self,coll):
@@ -397,8 +397,8 @@ if __name__ == '__main__':
             return f'< {self.name} >'
         
         name   : str
-        b_col  : flat_col['b_col',B]
-        b_ref  : flat_ref['b_col',B]
+        b_col  : flat_col['b_col',B] #type:ignore
+        b_ref  : flat_ref['b_col',B] #type:ignore
         # b_ref  : B  
             #Partially flat, stores first inst on object, rest in bin
 
