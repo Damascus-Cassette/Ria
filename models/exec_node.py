@@ -1,4 +1,4 @@
-from .base_node import base_socket, base_node, base_node_set
+from .base_node import base_socket, base_node, base_node_set, base_node_collection
 from typing import Self, Any
 from .struct_file_io import flat_ref, flat_col
 
@@ -37,3 +37,16 @@ class exec_node(base_node):
 # class exec_node_set(base_node_set):
 #     ''' exec node sets do not seem usefull at the moment, but as the bases are the same it should be somewhats straightforward to impliment later'''
 #     ...
+
+
+class exec_node_collection(base_node_collection):
+    nodes: flat_col['exec_nodes']
+
+    def __init__(self):
+        self.nodes = []
+        self.context()
+    def _import_(self,data):
+        with self.context.register():
+            self.super()._import_(data)
+    
+
