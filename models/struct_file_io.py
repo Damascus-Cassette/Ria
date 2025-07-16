@@ -134,7 +134,6 @@ class flat_col[key=_unset,*bases]():
         return cls(container = container, key = key, types = types)
 
 
-
 class BaseModel:
     __io_orig_fields__ : dict[str,str]
 
@@ -152,6 +151,9 @@ class BaseModel:
     _io_ducktyping_  : bool
     _io_whitelist_   : list[str]
     _io_blacklist_   : list[str]
+
+    def _io_bin_id_(self):
+        return hash(self)  
 
     @classmethod
     def __io_fields__(cls,existing_inst=None):
@@ -226,11 +228,11 @@ class BaseModel:
         self.__io_attach_refs__()
         with ExitStack() as stack:
             for k,v in self.__io_refs__.items():
-                stack.enter_context(v.enter_context)
+                stack.enter_context(v.enter_context())
             for k,v in self.__io_cols__.items():
-                stack.enter_context(v.enter_context)
+                stack.enter_context(v.enter_context())
             for k,v in self.__io_bins__.items():
-                stack.enter_context(v.enter_context)
+                stack.enter_context(v.enter_context())
             yield
 
     @contextmanager
