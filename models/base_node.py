@@ -7,7 +7,7 @@ class _unset:...
 #Following are primary for meta_nodes interactions, but can be usefull in exec_nodes
 
 class base_socket_refs(BaseModel):
-    node   : flat_ref['exec_node', exec_node]
+    node   : flat_ref['base_node', Any] 
     socket : str
 
     context = context.construct(include=['root_graph','sub_graph','node','socket_coll','socket_group','socket'])
@@ -227,6 +227,27 @@ class base_node_set(base_node):
     def create()->list[base_node]:
         ''' Create Indvidual respencing each min/max of selected set '''
         ...
+
+class base_node_collection[base_node](BaseModel):
+    __file_io_dict_like__ = True
+        #TODO: doublecheck
+
+    @classmethod
+    def construct():
+        return type('node_collection',)
+        ...
+
+    def __init__(self):
+        self.data = {}
+    
+    def __get_item__(self)->base_node:
+        ...
+
+    def __set_item__(self,key,item:base_node)->None:
+        ...
+
+class base_node_set_collection():
+    ...
 
 
 class _test:

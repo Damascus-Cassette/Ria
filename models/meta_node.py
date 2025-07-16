@@ -1,8 +1,10 @@
 from .base_node import base_socket, base_node, base_node_set
+from .struct_file_io import flat_col, flat_ref
 from typing import Self, Any
 
 class meta_socket(base_socket):
-    ...
+    node   : flat_ref['meta_node', base_node] #type:ignore
+
 class meta_node(base_node):
     Node_Id : str
     Version : str

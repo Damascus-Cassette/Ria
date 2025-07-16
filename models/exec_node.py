@@ -1,8 +1,10 @@
 from .base_node import base_socket, base_node, base_node_set
 from typing import Self, Any
+from .struct_file_io import flat_ref, flat_col
 
 class exec_socket(base_socket):
-    ...
+    node   : flat_ref['exec_node', base_node]
+
 class exec_node(base_node):
     #### Constructed Values ####
     Node_Id : str
