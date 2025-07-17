@@ -33,6 +33,9 @@ def collapse_type_chain(ty)->list:
 #     'allows references across bins, operates in the same way as flat_ref otherwise'
 #     ...
 
+class io[*types](Generic(*types)):
+    ...
+
 class flat_col[key,*bt](Generic(*bt)):
     '''Collection notation, blind to what bins are importing as. if hasattr(inst.attr,'_import|export|append_col_') it is used instead of the generic interface with reference to the bin to add items to '''
     inst  : Any
@@ -253,10 +256,27 @@ class flat_bin[key,*t](Generic(key,*t)):
         for x in self.data:
             assert hasattr(x,'__io_in_col__')
 
-
-
     def _import_(self,data):
-        ...
+        ret = {}
+        if attr_data := getattr(self.inst,self.key,None):
+            self.import_incorperate_attr_data(attr_data,src_data=data)
+        for k,v in data.items():
+            ret[k] = self._import_indv_(v)
+        self.data = ret
+
+        return ret
+    
+    def _import_indv_(self,value):
+        for ty in self.type_chain:
+            if func := getattr(ty,'__io_bin_match_ref__'):
+                if func(value):
+                    return ty._io_bin_import_from_data_(value)
+                else:
+                    continue
+            else:
+                return ty(value)
+        raise Exception('No Types were defined on col!')
+                        
     def _append_(self,):
         ...
 
@@ -301,6 +321,18 @@ class BaseModel:
     _io_export_defaults_ : bool = False
     _io_whitelist_       : list[str] = None
     _io_blacklist_       : list[str] = None
+        
+    _io_strict_           : bool = True
+        #Requires generic attributes to be types with the generic 'io'
+
+    @classmethod
+    def __io_bin_match_ref__(cls,data):
+        return True
+    @classmethod
+    def _io_bin_import_from_data_(cls,data):
+        inst = cls()
+        inst._import_(data=data)
+        return inst
 
     def __io_fields__(self,filter_default=False)->dict:
         ''' Returns dict of fields to export or import, filter whitelist, blacklist, and export_defaults (via) '''
@@ -325,6 +357,28 @@ class BaseModel:
 
     def _io_bin_name_(self):
         return hash(self)
+    
+
+    def __init_subclass__(cls):
+        cls.__io_orig_fields__ = {}
+        cls.__io_orig_bins__   = {}
+        cls.__io_orig_cols__   = {}
+        cls.__io_orig_refs__   = {}
+        for k,v in cls.__annotations__.items():
+            if src := getattr(v,'__origin__',None):
+                if   issubclass(src,flat_ref):
+                    cls.__io_orig_refs__[k]=v
+                elif issubclass(src,flat_col):
+                    cls.__io_orig_cols__[k]=v
+                elif issubclass(src,flat_bin):
+                    cls.__io_orig_bins__[k]=v
+                elif issubclass(src,io):
+                    cls.__io_orig_fields__[k]=v
+                elif not getattr(cls,'_io_strict_',True):
+                    cls.__io_orig_fields__[k]=v
+
+            elif not getattr(cls,'_io_strict_',True):
+                cls.__io_orig_fields__[k]=v
 
     def __io_attach__(self):
         self.__io_bins__ = {}
@@ -453,3 +507,37 @@ class BaseModel:
                 ret[k] = d
         return ret
 
+if __name__ == '__main__':
+    class defered_items(defered_archtype):...
+
+    class test_item(BaseModel):
+        _io_strict_ = True
+        name : io[str] = None
+        ref  : flat_ref[Self] = None
+
+    class test_col(dict,BaseModel):
+        _io_dict_like_ = True
+        _io_bin_name_  = 'base_bin'
+
+    class test_root(BaseModel):
+        col : flat_col[test_col]
+        bin : flat_bin['base_bin',defered_items]
+        
+        def setup(self):
+            col = test_col()
+            col['a'] = test_item()
+            col['b'] = test_item()
+            col['b'].ref = test_item()
+
+    defered_items.types.append(test_item)
+
+    root_a = test_root()
+    root_a.setup()
+
+    root_a_rep = root_a._export_()
+
+    root_b = test_root()
+    root_b = root_a._import_(root_a_rep)
+    root_b_rep = root_b._export_()
+
+    assert root_a_rep == root_b_rep
