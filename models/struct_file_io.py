@@ -1,6 +1,6 @@
 from typing import ForwardRef,Generic
 from typing import Any, Self
-from types  import UnionType
+from types  import UnionType, GenericAlias
 
 from contextlib  import contextmanager, ExitStack
 from contextvars import ContextVar
@@ -46,6 +46,9 @@ class flat_col[key,*bt]:
     key   : str
     _type : Any
 
+    def _io_bin_id_(self,bin):
+        return hash(self)
+
     @classmethod
     def from_generic_alias(cls,inst,attr,genericA):
         key, *_type   = genericA.__args__
@@ -53,8 +56,8 @@ class flat_col[key,*bt]:
         if isinstance(key,ForwardRef):
             key = key.__forward_arg__
         else:
-            key = getattr (key,'__flat_bin_key__',key.__name__)
-            _type = list(_type).insert(0,key)
+            key = getattr (key,'_io_bin_name_',key.__name__)
+            _type = key
         
         return cls(inst=inst,attr=attr,key=key,_type=_type)
 
@@ -69,7 +72,7 @@ class flat_col[key,*bt]:
 
         _bin = context[self.key].get() 
 
-        if inst:=getattr(self.inst, self.attr,_unset) is _unset:
+        if (inst:=getattr(self.inst, self.attr,_unset)) is _unset:
             if func := getattr(self._type,'_io_cls_import_raw_data_',None):
                 inst , data = func(self.data, _bin)
                 self.data = data
@@ -89,35 +92,38 @@ class flat_col[key,*bt]:
         self.io_like_import(inst)
 
     def _export_(self)->dict:
-        if inst := getattr(self.inst,self.attr,_unset) is _unset:
-            return
 
-        _bin = context[self.key].get() 
+        if (inst := getattr(self.inst,self.attr,_unset)) is _unset:
+            return _unset
+
         
+        _bin = context[self.key].get()
+
         if func:=getattr(inst,'_io_export_raw_data_',None):
             return func(self.data, _bin)
         else:
-            return self.io_like_export(inst)
+            return self.io_like_export(inst,_bin)
+        
 
     def io_like_export(self,inst,_bin)->dict:
         ret = {}
-        if getattr(inst,'_io_dict_like_',False) or isinstance(inst,(dict,OrderedDict,defaultdict)) or (hasattr(inst,'__get_item__') and hasattr(inst,'__set_item__')):
+        if getattr(inst,'_io_dict_like_',False) or isinstance(inst,(dict,OrderedDict,defaultdict)) or (hasattr(inst,'__getitem__') and hasattr(inst,'__setitem__')):
             for k,v in inst.items():
-                ref_key = _bin.set_data(self,v)
+                ref_key = _bin.add_data(self,v)
                 ret[k] = ref_key
         elif getattr(inst,'_io_list_like_',False) or isinstance(inst,(list)):
             for v in inst:
-                ref_key = _bin.set_data(self,v)
+                ref_key = _bin.add_data(self,v)
                 ret[k] = ref_key
         else:
             raise Exception('Criteria not met for collection! Must have _io_dict|list_like_ or relvent methods ')
-        
+        return ret
     def _append_(self):
         ...
     
     @staticmethod
     def io_like_import( data, inst):
-        if getattr(inst,'_io_dict_like_',False) or isinstance(inst,(dict,OrderedDict,defaultdict)) or (hasattr(inst,'__get_item__') and hasattr(inst,'__set_item__')):
+        if getattr(inst,'_io_dict_like_',False) or isinstance(inst,(dict,OrderedDict,defaultdict)) or (hasattr(inst,'__getitem__') and hasattr(inst,'__setitem__')):
             for k,v in data.items():
                 inst[k] = v
         elif getattr(inst,'_io_list_like_',False) or isinstance(inst,(list)):
@@ -136,13 +142,14 @@ class flat_ref[key,*t]:
 
     @classmethod
     def from_generic_alias(cls,inst,attr,genericA):
-        key, *_type   = genericA.__args__
+        key, *types   = genericA.__args__
     
         if isinstance(key,ForwardRef):
             key = key.__forward_arg__
         else:
-            key = getattr (key,'__flat_bin_key__',key.__name__)
-            types = tuple(list(types).insert(0,key))
+            key = getattr (key,'_io_bin_name_',key.__name__)
+            types = list(types)
+            types.insert(0,key)
         if not types:
             types = (Any,)
 
@@ -186,8 +193,9 @@ class flat_bin[key,*t]:
         if isinstance(key,ForwardRef):
             key = key.__forward_arg__
         else:
-            key = getattr (key,'__flat_bin_key__',key.__name__)
-            types = tuple(list(types).insert(0,key))
+            key = getattr (key,'_io_bin_name_',key.__name__)
+            types = list(types)
+            types.insert(0,key)
         if not types:
             types = (Any,)
 
@@ -210,10 +218,13 @@ class flat_bin[key,*t]:
         assert not getattr(item,'__io_in_bin__',None)
         item.__io_in_bin__ = self
         
-        val = getattr(item,'__io_in_col__',[])
-        item.__io_in_col__ = val.append(col._io_bin_name_)
+        _val = getattr(item,'__io_in_col__',[])
+        item.__io_in_col__ = _val.append(col._io_bin_id_)
         
-        key = getattr(item,'_io_bin_name_',hash(item))
+        if func:=getattr(item,'_io_bin_id_',None):
+            key = func(self)
+        else:
+            key = hash(item)
 
         if key in self.data.keys():
             raise Exception(f'Bin ({self.inst} : {self.key}) Contains two items by the same key of {key} with different instances')
@@ -249,12 +260,12 @@ class flat_bin[key,*t]:
             if mode in ['export']:          self.assert_all_from_collections()
         except:
             raise
-        finally:
-            context[self.key].reset(t)
+        context[self.key].reset(t)
     
     def assert_all_from_collections(self):
-        for x in self.data:
-            assert hasattr(x,'__io_in_col__')
+        for k,v in self.data.items():
+            if not hasattr(v,'__io_in_col__'):
+                raise Exception(f"{v}, WAS NOT NOTED TO BE IN A COL")
 
     def _import_(self,data):
         ret = {}
@@ -283,8 +294,7 @@ class flat_bin[key,*t]:
     def _export_(self)->dict:
         ret = {}
         for k,v in self.data_generator(self.data):
-            val=v._export_()
-            ret[k]=val
+            ret[k]=v._export_()
         return ret
 
     def data_generator(self, data:dict, used_keys=None):
@@ -297,7 +307,6 @@ class flat_bin[key,*t]:
         if len(data.keys()) > len(used_keys):
             for x in self.data_generator(data,used_keys):
                 yield x
-
 
 
 class BaseModel:
@@ -319,8 +328,8 @@ class BaseModel:
         # Data field must be untyped or blacklisted
 
     _io_export_defaults_ : bool = False
-    _io_whitelist_       : list[str] = None
-    _io_blacklist_       : list[str] = None
+    _io_whitelist_       : list[str]
+    _io_blacklist_       : list[str]
         
     _io_strict_           : bool = True
         #Requires generic attributes to be types with the generic 'io'
@@ -335,17 +344,17 @@ class BaseModel:
         return inst
 
     def __io_fields__(self,filter_default=False)->dict:
-        ''' Returns dict of fields to export or import, filter whitelist, blacklist, and export_defaults (via) '''
+        ''' Returns dict of {attr:type} to export or import, filter whitelist, blacklist, and export_defaults (via) '''
         
         ret = {}
 
         blacklist = getattr(self,'_io_blacklist_',[])
-        if whitelist:=getattr(self,'_io_whitelist_',None) is not None:
-            for k,v in self.__io_orig_fields__:
+        if (whitelist:=getattr(self,'_io_whitelist_',None) )is not None:
+            for k,v in self.__io_orig_fields__.items():
                 if k in whitelist and not k in blacklist:
                     ret[k] = v
         else:
-            for k,v in self.__io_orig_fields__:
+            for k,v in self.__io_orig_fields__.items():
                 if not k in blacklist:
                     ret[k] = v
         
@@ -353,9 +362,19 @@ class BaseModel:
             _d = self.__dict__.keys()
             ret = {k:v for k,v in ret.items() if k in _d}
 
+        #Need to unwrap any IO types here, as this returns base types.
+        _ret = ret
+        ret={}
+        for k,v in ret.items():
+            if getattr(v,'__origin__',None) is io:
+                v : GenericAlias
+                ret[k] = v.__args__[0]
+            else:
+                ret[k] = v
+
         return ret
 
-    def _io_bin_name_(self):
+    def _io_bin_id_(self,bin):
         return hash(self)
     
 
@@ -394,14 +413,13 @@ class BaseModel:
     @contextmanager
     def __enter_context__(self,mode='export'):
         self.__io_attach__()
-        try:
-            with ExitStack() as stack:
-                for v in self.__io_bins__.values():
-                    stack.enter_context(v._context_(mode=mode))
-            yield
-        except: 
-            raise
-        finally: 
+        with ExitStack() as stack:
+            for v in self.__io_bins__.values():
+                stack.enter_context(v._context_(mode=mode))
+            try:
+                yield
+            except: 
+                raise 
             return
 
     def _import_(self,data):
@@ -416,20 +434,7 @@ class BaseModel:
             elif getattr(self, '_io_list_like_',None) and '_DATA_' in data.keys():
                 for v in data.pop('_DATA_'): self.append(v)
 
-    def _export_(self):
-        ret = {}
-        with self.__enter_context__(mode='export'):     #Enters into bin's context
-            ret = ret|(a:=self._export_cols_())
-            print('_export_cols_ result:',a)
-            ret = ret|(a:=self._export_refs_())
-            print('_export_refs_ result:',a)
-            ret = ret|(a:=self._export_fields_())
-            print('_export_fields_ result:',a)
-            ret = ret|(a:=self._export_bins_())              #Resolve bin's export items
-            print('_export_bins_ result:',a)
-            raise Exception('Got Here')
-        return ret
-        
+
     def _append_(self):
         with self.__enter_context__(mode='append'):
             ...
@@ -479,6 +484,19 @@ class BaseModel:
             else:
                 setattr(self,k,v(data[k]))
 
+    def _export_(self):
+        ret = {}
+        with self.__enter_context__(mode='export'):     #Enters into bin's context
+            ret = ret|(a:=self._export_cols_())
+            # print('_export_cols_ result:',a)
+            ret = ret|(a:=self._export_refs_())
+            # print('_export_refs_ result:',a)
+            ret = ret|(a:=self._export_fields_())
+            # print('_export_fields_ result:',a)
+            ret = ret|(a:=self._export_bins_())              #Resolve bin's export items
+            # print('_export_bins_ result:',a)
+        return ret
+
     def _export_bins_(self):
         ret = {}
         for k,v in self.__io_bins__.items():
@@ -493,19 +511,21 @@ class BaseModel:
     
     def _export_refs_(self):
         ret = {}
-        src = self._export_data_source_()
-        for k,v in self.__refs.items():
-            if k not in src.keys(): continue
-            elif src[k] is _unset: continue
-            ret[k] = v._export_(src[k])
+        for k,v in self.__io_fields__().items():
+            ret[k] = v._export_()
+        # src = self._export_data_source_()
+        # for k,v in self.__refs.items():
+        #     if k not in src.keys(): continue
+        #     elif src[k] is _unset: continue
+        #     ret[k] = v._export_(src[k])
         # if ret:
         #     raise Exception(f'Exported refs {ret}')
         return ret
 
-    def __export_fields__(self):
-        ret = []
+    def _export_fields_(self):
+        ret = {}
         for k,v in self.__io_fields__(self._io_export_defaults_).items():
-            if d:=getattr(self,k,_unset) is _unset: continue
+            if (d:=getattr(self,k,_unset)) is _unset: continue
             if isinstance(d,BaseModel) or hasattr(d,'_export_'):
                 ret[k] = d._export_()
             elif isinstance(d,list):
@@ -520,24 +540,37 @@ if __name__ == '__main__':
     class defered_items(defered_archtype):...
 
     class test_item(BaseModel):
+        def _export_(self):
+            raise Exception(self.__io_fields__())
+            ...
         _io_bin_name_ = 'base_bin'
-        _io_strict_ = True
+        # _io_strict_ = True
         name : io[str] = None
         ref  : flat_ref[Self] = None
 
-    class test_col(dict,BaseModel):
+    class test_col(BaseModel):
         _io_bin_name_  = 'base_bin'
         _io_dict_like_ = True
+
+        def __init__(self):
+            self._data = {}
+        def __setitem__(self,key,item):
+            self._data[key] = item
+        def __getitem__(self,key):
+            return self._data[key]
+        def items(self):
+            return self._data.items()
 
     class test_root(BaseModel):
         col : flat_col[test_col]
         bin : flat_bin['base_bin',defered_items]
         
         def setup(self):
-            col = test_col()
-            col['a'] = test_item()
-            col['b'] = test_item()
-            col['b'].ref = test_item()
+            self.col = test_col()
+            self.col['a'] = test_item()
+            self.col['b'] = test_item()
+            self.col['b'].ref = self.col['a']
+
 
     defered_items.types.append(test_item)
 
