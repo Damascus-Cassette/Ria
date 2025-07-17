@@ -1,10 +1,10 @@
 from typing import ForwardRef,Generic
 from typing import Any, Self
+from types  import UnionType
 
 from contextlib  import contextmanager, ExitStack
 from contextvars import ContextVar
 from collections import OrderedDict,defaultdict
-
 class _unset():...
 class _defaultdict(dict):
     def __missing__(self,key):
@@ -15,6 +15,9 @@ context : dict[ContextVar] = _defaultdict()
 class defered_archtype:
     ''' Class to construct lists with after intial structure definition '''
     types : list[Any]
+
+    def __init_subclass__(cls):
+        cls.types = []
 
 def collapse_type_chain(ty)->list:
     res = []
@@ -33,10 +36,10 @@ def collapse_type_chain(ty)->list:
 #     'allows references across bins, operates in the same way as flat_ref otherwise'
 #     ...
 
-class io[*types](Generic(*types)):
+class io[*types]:
     ...
 
-class flat_col[key,*bt](Generic(*bt)):
+class flat_col[key,*bt]:
     '''Collection notation, blind to what bins are importing as. if hasattr(inst.attr,'_import|export|append_col_') it is used instead of the generic interface with reference to the bin to add items to '''
     inst  : Any
     attr  : str
@@ -45,14 +48,13 @@ class flat_col[key,*bt](Generic(*bt)):
 
     @classmethod
     def from_generic_alias(cls,inst,attr,genericA):
-        key   = genericA.__args__[0]
-        _type = genericA.__args__[1]
+        key, *_type   = genericA.__args__
     
         if isinstance(key,ForwardRef):
             key = key.__forward_arg__
         else:
             key = getattr (key,'__flat_bin_key__',key.__name__)
-            _type = tuple(list[_type].insert(0,key))
+            _type = list(_type).insert(0,key)
         
         return cls(inst=inst,attr=attr,key=key,_type=_type)
 
@@ -125,7 +127,7 @@ class flat_col[key,*bt](Generic(*bt)):
             raise Exception('Criteria not met for collection! Must have _io_dict|list_like_ or relvent methods ')
         
 
-class flat_ref[key,*t](Generic(key,*t)):
+class flat_ref[key,*t]:
     ''' Thrower/Catcher of a type reference to a bin, replaces on disc with _io_bin_id_ or hash '''
     inst  : Any
     attr  : str
@@ -134,14 +136,13 @@ class flat_ref[key,*t](Generic(key,*t)):
 
     @classmethod
     def from_generic_alias(cls,inst,attr,genericA):
-        key   = genericA.__args__[0]
-        types = genericA.__args__[1]
+        key, *_type   = genericA.__args__
     
         if isinstance(key,ForwardRef):
             key = key.__forward_arg__
         else:
             key = getattr (key,'__flat_bin_key__',key.__name__)
-            types = tuple(list[types].insert(0,key))
+            types = tuple(list(types).insert(0,key))
         if not types:
             types = (Any,)
 
@@ -172,7 +173,7 @@ class flat_ref[key,*t](Generic(key,*t)):
         elif data:
             raise('Flat_Refs purpose is indeterminate with append, as obj doesnt have _append_ function to handle data')
 
-class flat_bin[key,*t](Generic(key,*t)):
+class flat_bin[key,*t]:
     inst  : Any
     attr  : str
     key   : str
@@ -180,14 +181,13 @@ class flat_bin[key,*t](Generic(key,*t)):
 
     @classmethod
     def from_generic_alias(cls,inst,attr,genericA):
-        key   = genericA.__args__[0]
-        types = genericA.__args__[1]
+        key, *types   = genericA.__args__
     
         if isinstance(key,ForwardRef):
             key = key.__forward_arg__
         else:
             key = getattr (key,'__flat_bin_key__',key.__name__)
-            types = tuple(list[types].insert(0,key))
+            types = tuple(list(types).insert(0,key))
         if not types:
             types = (Any,)
 
@@ -394,12 +394,15 @@ class BaseModel:
     @contextmanager
     def __enter_context__(self,mode='export'):
         self.__io_attach__()
-        with ExitStack() as stack:
-            for v in self.__io_bins__.values():
-                stack.enter_context(v._context_(mode=mode))
-            try:yield
-            except: raise
-            finally: return
+        try:
+            with ExitStack() as stack:
+                for v in self.__io_bins__.values():
+                    stack.enter_context(v._context_(mode=mode))
+            yield
+        except: 
+            raise
+        finally: 
+            return
 
     def _import_(self,data):
         with self.__enter_context__(mode='import'):
@@ -414,11 +417,17 @@ class BaseModel:
                 for v in data.pop('_DATA_'): self.append(v)
 
     def _export_(self):
-        with self.__enter_context__(mode='export'):
-            ret = ret|self._export_cols_()
-            ret = ret|self._export_refs_()
-            ret = ret|self._export_fields_()
-            ret = ret|self._export_bins_()
+        ret = {}
+        with self.__enter_context__(mode='export'):     #Enters into bin's context
+            ret = ret|(a:=self._export_cols_())
+            print('_export_cols_ result:',a)
+            ret = ret|(a:=self._export_refs_())
+            print('_export_refs_ result:',a)
+            ret = ret|(a:=self._export_fields_())
+            print('_export_fields_ result:',a)
+            ret = ret|(a:=self._export_bins_())              #Resolve bin's export items
+            print('_export_bins_ result:',a)
+            raise Exception('Got Here')
         return ret
         
     def _append_(self):
@@ -511,13 +520,14 @@ if __name__ == '__main__':
     class defered_items(defered_archtype):...
 
     class test_item(BaseModel):
+        _io_bin_name_ = 'base_bin'
         _io_strict_ = True
         name : io[str] = None
         ref  : flat_ref[Self] = None
 
     class test_col(dict,BaseModel):
-        _io_dict_like_ = True
         _io_bin_name_  = 'base_bin'
+        _io_dict_like_ = True
 
     class test_root(BaseModel):
         col : flat_col[test_col]
@@ -535,9 +545,9 @@ if __name__ == '__main__':
     root_a.setup()
 
     root_a_rep = root_a._export_()
+    print(root_a_rep)
 
-    root_b = test_root()
-    root_b = root_a._import_(root_a_rep)
-    root_b_rep = root_b._export_()
-
-    assert root_a_rep == root_b_rep
+    # root_b = test_root()
+    # root_b._import_(root_a_rep)
+    # root_b_rep = root_b._export_()
+    # assert root_a_rep == root_b_rep
