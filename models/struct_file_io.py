@@ -19,8 +19,11 @@ class defered_archtype:
     def __init_subclass__(cls):
         cls.types = []
 
-def collapse_type_chain(ty)->list:
+def collapse_type_chain(ty:list)->list:
+    print(ty)
     res = []
+    if not isinstance(ty,(tuple,list,set)):
+        return [ty]
     for x in ty:
         if x.__class__ is UnionType:
             for e in x.__args__:
@@ -55,9 +58,14 @@ class flat_col[key,*bt]:
     
         if isinstance(key,ForwardRef):
             key = key.__forward_arg__
+        elif key is Self:
+            key = getattr (inst,'_io_bin_name_',inst.__name__)
+            types = list(types)
+            types.insert(0,inst.__class)
+
         else:
-            key = getattr (key,'_io_bin_name_',key.__name__)
             _type = key
+            key = getattr (key,'_io_bin_name_',key.__name__)
         
         return cls(inst=inst,attr=attr,key=key,_type=_type)
 
@@ -66,6 +74,7 @@ class flat_col[key,*bt]:
         self.attr  = attr
         self.key   = key
         self._type = _type
+        self.data  = {}
 
     def _import_(self,data:dict[str]):
         self._orig_data = data
@@ -78,6 +87,7 @@ class flat_col[key,*bt]:
                 self.data = data
                 setattr(self.inst,self.attr,inst)
                 return
+            
             inst = self._type()
             setattr(self.inst,self.attr,inst)
             
@@ -86,10 +96,10 @@ class flat_col[key,*bt]:
                 return
                 
         for k,v in data.items():
-            self.data[k] = _bin.get_data(v)     
+            self.data[k] = _bin.get_data(v)
                 #Getting the instance imported by the bin
         
-        self.io_like_import(inst)
+        self.io_like_import(self.data,inst)
 
     def _export_(self)->dict:
 
@@ -122,7 +132,7 @@ class flat_col[key,*bt]:
         ...
     
     @staticmethod
-    def io_like_import( data, inst):
+    def io_like_import(data, inst):
         if getattr(inst,'_io_dict_like_',False) or isinstance(inst,(dict,OrderedDict,defaultdict)) or (hasattr(inst,'__getitem__') and hasattr(inst,'__setitem__')):
             for k,v in data.items():
                 inst[k] = v
@@ -146,10 +156,15 @@ class flat_ref[key,*t]:
     
         if isinstance(key,ForwardRef):
             key = key.__forward_arg__
+        elif key is Self:
+            key = getattr (inst,'_io_bin_name_',inst.__class__.__name__)
+            types = list(types)
+            types.insert(0,inst.__class__)
         else:
             key = getattr (key,'_io_bin_name_',key.__name__)
             types = list(types)
             types.insert(0,key)
+
         if not types:
             types = (Any,)
 
@@ -169,10 +184,11 @@ class flat_ref[key,*t]:
 
     def _import_(self,data:str):
         ''' Add import_deferend to attach reference after bin is closed '''
-        col = context[self.key].get()        
+        raise Exception('IMPORT CALLED ON REF')
+        bin = context[self.key].get()
         def import_defered():
-            setattr(self.inst,self.attr,col.get_data(data))
-        col.add_defered(import_defered)
+            setattr(self.inst,self.attr,bin.get_data(data))
+        bin.add_defered(import_defered)
 
     def _append_(self,data):
         if func := getattr(getattr(self.inst, self.attr, None),'_append_',None):
@@ -192,6 +208,11 @@ class flat_bin[key,*t]:
     
         if isinstance(key,ForwardRef):
             key = key.__forward_arg__
+        elif key is Self:
+            key = getattr (inst,'_io_bin_name_',inst.__name__)
+            types = list(types)
+            types.insert(0,inst.__class)
+
         else:
             key = getattr (key,'_io_bin_name_',key.__name__)
             types = list(types)
@@ -243,6 +264,7 @@ class flat_bin[key,*t]:
         return self.data[ref]
 
     def add_defered(self,defered_function):
+        print('CALLED ADD DEFERED')
         self._defered.append(defered_function)
 
     def resolve_defered(self):
@@ -278,7 +300,7 @@ class flat_bin[key,*t]:
         return ret
     
     def _import_indv_(self,value):
-        for ty in self.type_chain:
+        for ty in collapse_type_chain(self.types):
             if func := getattr(ty,'__io_bin_match_ref__'):
                 if func(value):
                     return ty._io_bin_import_from_data_(value)
@@ -365,7 +387,7 @@ class BaseModel:
         #Need to unwrap any IO types here, as this returns base types.
         _ret = ret
         ret={}
-        for k,v in ret.items():
+        for k,v in _ret.items():
             if getattr(v,'__origin__',None) is io:
                 v : GenericAlias
                 ret[k] = v.__args__[0]
@@ -512,7 +534,11 @@ class BaseModel:
     def _export_refs_(self):
         ret = {}
         for k,v in self.__io_fields__().items():
-            ret[k] = v._export_()
+            if (val := getattr(self,k,_unset)) is _unset : continue
+            if func:=getattr(val, '_export_',None):
+                ret[k] = func()
+            else:
+                ret[k] = val
         # src = self._export_data_source_()
         # for k,v in self.__refs.items():
         #     if k not in src.keys(): continue
@@ -540,13 +566,19 @@ if __name__ == '__main__':
     class defered_items(defered_archtype):...
 
     class test_item(BaseModel):
-        def _export_(self):
-            raise Exception(self.__io_fields__())
-            ...
         _io_bin_name_ = 'base_bin'
-        # _io_strict_ = True
-        name : io[str] = None
+        _io_strict_ = True
+        # def _export_(self):
+        #     if not (data:=self.__io_fields__()):
+        #         print(f'GENERATED FIELDS ARE: {data}')
+        #         print(f'SRC  FIELDS ARE: {self.__io_orig_fields__}')
+        #         print(f'SRC  REFS   ARE: {self.__io_orig_refs__}')
+        #         raise Exception()
+        name : io[str]
         ref  : flat_ref[Self] = None
+
+        def _io_bin_id_(self, bin):
+            return self.name
 
     class test_col(BaseModel):
         _io_bin_name_  = 'base_bin'
@@ -571,6 +603,9 @@ if __name__ == '__main__':
             self.col['b'] = test_item()
             self.col['b'].ref = self.col['a']
 
+            self.col['a'].name = 'A'
+            self.col['b'].name = 'B'
+
 
     defered_items.types.append(test_item)
 
@@ -580,7 +615,8 @@ if __name__ == '__main__':
     root_a_rep = root_a._export_()
     print(root_a_rep)
 
-    # root_b = test_root()
-    # root_b._import_(root_a_rep)
-    # root_b_rep = root_b._export_()
+    root_b = test_root()
+    root_b._import_(root_a_rep)
+    root_b_rep = root_b._export_()
+    print(root_b_rep)
     # assert root_a_rep == root_b_rep
