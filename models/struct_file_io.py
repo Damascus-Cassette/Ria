@@ -1,33 +1,20 @@
+from typing import ForwardRef,Generic
+from typing import Any, Self
 
-# This re-write changes some terms
-
-from typing import get_args, Any, Self, Callable
-from types import UnionType
 from contextlib  import contextmanager, ExitStack
 from contextvars import ContextVar
-from typing import Self, ForwardRef
 from collections import OrderedDict,defaultdict
 
-class _unset:...
+class _unset():...
 class _defaultdict(dict):
     def __missing__(self,key):
         ret = self[key] = ContextVar('key', default=None)
         return ret
-
 context : dict[ContextVar] = _defaultdict()
 
 class defered_archtype:
-    Types : list[Any]
-
-    @classmethod
-    def construct(cls,Name):
-        return type(f'{Name}_defered', cls, {'Types':[]})
-    
-    def __init_subclass__(cls):
-        cls.Types = []
-    
-    def __init__():
-        raise Exception('defered_archtype is a container class, construct or inherit instead!')
+    ''' Class to construct lists with after intial structure definition '''
+    types : list[Any]
 
 def collapse_type_chain(ty)->list:
     res = []
@@ -42,96 +29,255 @@ def collapse_type_chain(ty)->list:
             res.append(x)
     return res
 
-class flat_bin[key,*bases]():
-    ''' A context attached bin, iteravily exported on context exit. Each stored object must be in a collection '''
+# class flat_meta_ref():
+#     'allows references across bins, operates in the same way as flat_ref otherwise'
+#     ...
 
-    Strict : bool = True
-
-    defered_refs : list[Callable]
-    data         : dict[str,Any]
+class flat_col[key,*bt](Generic(*bt)):
+    '''Collection notation, blind to what bins are importing as. if hasattr(inst.attr,'_import|export|append_col_') it is used instead of the generic interface with reference to the bin to add items to '''
+    inst  : Any
+    attr  : str
+    key   : str
+    _type : Any
 
     @classmethod
-    def from_union(cls,union:UnionType,container):
-        key  = union.__args__[0]
-        types = union.__args__[1]
-
+    def from_generic_alias(cls,inst,attr,genericA):
+        key   = genericA.__args__[0]
+        _type = genericA.__args__[1]
+    
         if isinstance(key,ForwardRef):
             key = key.__forward_arg__
         else:
             key = getattr (key,'__flat_bin_key__',key.__name__)
+            _type = tuple(list[_type].insert(0,key))
+        
+        return cls(inst=inst,attr=attr,key=key,_type=_type)
 
-        return cls(container = container, key = key, types = types)
+    def __init__(self,*,inst:Any,attr:str,key:str,_type:Any):
+        self.inst  = inst
+        self.attr  = attr
+        self.key   = key
+        self._type = _type
 
-    def __init__(self,*,container,key,types):
-        self.container = container
+    def _import_(self,data:dict[str]):
+        self._orig_data = data
+
+        _bin = context[self.key].get() 
+
+        if inst:=getattr(self.inst, self.attr,_unset) is _unset:
+            if func := getattr(self._type,'_io_cls_import_raw_data_',None):
+                inst , data = func(self.data, _bin)
+                self.data = data
+                setattr(self.inst,self.attr,inst)
+                return
+            inst = self._type()
+            setattr(self.inst,self.attr,inst)
+            
+            if func := getattr(self._type,'_io_import_raw_data_',None):
+                self.data = func(self.data, _bin)
+                return
+                
+        for k,v in data.items():
+            self.data[k] = _bin.get_data(v)     
+                #Getting the instance imported by the bin
+        
+        self.io_like_import(inst)
+
+    def _export_(self)->dict:
+        if inst := getattr(self.inst,self.attr,_unset) is _unset:
+            return
+
+        _bin = context[self.key].get() 
+        
+        if func:=getattr(inst,'_io_export_raw_data_',None):
+            return func(self.data, _bin)
+        else:
+            return self.io_like_export(inst)
+
+    def io_like_export(self,inst,_bin)->dict:
+        ret = {}
+        if getattr(inst,'_io_dict_like_',False) or isinstance(inst,(dict,OrderedDict,defaultdict)) or (hasattr(inst,'__get_item__') and hasattr(inst,'__set_item__')):
+            for k,v in inst.items():
+                ref_key = _bin.set_data(self,v)
+                ret[k] = ref_key
+        elif getattr(inst,'_io_list_like_',False) or isinstance(inst,(list)):
+            for v in inst:
+                ref_key = _bin.set_data(self,v)
+                ret[k] = ref_key
+        else:
+            raise Exception('Criteria not met for collection! Must have _io_dict|list_like_ or relvent methods ')
+        
+    def _append_(self):
+        ...
+    
+    @staticmethod
+    def io_like_import( data, inst):
+        if getattr(inst,'_io_dict_like_',False) or isinstance(inst,(dict,OrderedDict,defaultdict)) or (hasattr(inst,'__get_item__') and hasattr(inst,'__set_item__')):
+            for k,v in data.items():
+                inst[k] = v
+        elif getattr(inst,'_io_list_like_',False) or isinstance(inst,(list)):
+            for k,v in data.items():
+                inst.append(v)
+        else:
+            raise Exception('Criteria not met for collection! Must have _io_dict|list_like_ or relvent methods ')
+        
+
+class flat_ref[key,*t](Generic(key,*t)):
+    ''' Thrower/Catcher of a type reference to a bin, replaces on disc with _io_bin_id_ or hash '''
+    inst  : Any
+    attr  : str
+    key   : str
+    types : tuple[Any]
+
+    @classmethod
+    def from_generic_alias(cls,inst,attr,genericA):
+        key   = genericA.__args__[0]
+        types = genericA.__args__[1]
+    
+        if isinstance(key,ForwardRef):
+            key = key.__forward_arg__
+        else:
+            key = getattr (key,'__flat_bin_key__',key.__name__)
+            types = tuple(list[types].insert(0,key))
+        if not types:
+            types = (Any,)
+
+        return cls(inst=inst,attr=attr,key=key,types=types)
+    
+    def __init__(self,*,inst:Any,attr:str,key:str,types:tuple):
+        self.inst  = inst
+        self.attr  = attr
         self.key   = key
         self.types = types
-        self.data  = {}
 
-    @contextmanager
-    def enter_context(self, export = False):
-        t = context[self.key].set(self)
-        try:    yield
-        except: raise
-        finally: 
-            if export:
-                self.defered_resolve()
-            else:
-                del self.data
-                self.data = {}
-        context[self.key].reset(t)
+    def _export_(self)->str:
+        ''' Add data and return key, let bin take care of ensuring data is singular and in a collection '''
+        data = getattr(self.inst, self.attr, _unset)
+        if data is _unset: return _unset
+        return context[self.key].get().get_data_key(data)
 
-    def defered_resolve(self):
-        #iteravily export each item in self.data
-        ... 
+    def _import_(self,data:str):
+        ''' Add import_deferend to attach reference after bin is closed '''
+        col = context[self.key].get()        
+        def import_defered():
+            setattr(self.inst,self.attr,col.get_data(data))
+        col.add_defered(import_defered)
 
-class flat_ref[base,key=_unset]():
-    container : Any
+    def _append_(self,data):
+        if func := getattr(getattr(self.inst, self.attr, None),'_append_',None):
+            func(data)
+        elif data:
+            raise('Flat_Refs purpose is indeterminate with append, as obj doesnt have _append_ function to handle data')
 
-    base_type : base
-    key_value : str
+class flat_bin[key,*t](Generic(key,*t)):
+    inst  : Any
+    attr  : str
+    key   : str
+    types : tuple[Any]
 
     @classmethod
-    def from_union(cls,union:UnionType,container):
-        base = union.__args__[0]
-        key  = union.__args__[1]
-
-        if key is _unset:
-            key = getattr (base,'__flat_bin_key__',base.__name__)
-        elif isinstance(key,ForwardRef):
-            key = key.__forward_arg__
-
-        return cls(container = container,)
+    def from_generic_alias(cls,inst,attr,genericA):
+        key   = genericA.__args__[0]
+        types = genericA.__args__[1]
     
-    def __init__(self,*,container,key,types)->base:
-        ...
-
-class flat_col[key=_unset,*bases]():
-    ''' Treat value like a list or dict that returns binnable &  BaseModel compatable items to store in bin of key.
-        Currently There is no use of types as the types should be enforced on, and compatable with the bin
-        This may change to type check the contents
-       '''
-
-    @classmethod
-    def from_union(cls,union,container):
-        ...
-
-    def __init__(self,*,container:Any,types:Any,key:str)->base:
-        assert getattr(container,'_io_list_like_',False) or getattr(container,'_io_list_like_',False)
-        self.container = container
-        self.types = types
-    
-    @classmethod
-    def from_union(cls,union:UnionType,container):
-        key  = union.__args__[0]
-        types = union.__args__[1]
-
         if isinstance(key,ForwardRef):
             key = key.__forward_arg__
         else:
             key = getattr (key,'__flat_bin_key__',key.__name__)
+            types = tuple(list[types].insert(0,key))
+        if not types:
+            types = (Any,)
 
-        return cls(container = container, key = key, types = types)
+        return cls(inst=inst,attr=attr,key=key,types=types)
+    
+    def __init__(self,*,inst:Any,attr:str,key:str,types:tuple):
+        self.inst  = inst
+        self.attr  = attr
+        self.key   = key
+        self.types = types
+        self.data  = {} 
+        self._defered = []
+
+    def add_data(self,col,item)->str|tuple:
+        ''' Add data to this bin, requires source from collection. References defer to getting key'''
+        if item in self.data.values():
+            k_l = [k for k,v in self.data.items() if v == item]
+            return k_l[0]
+        
+        assert not getattr(item,'__io_in_bin__',None)
+        item.__io_in_bin__ = self
+        
+        val = getattr(item,'__io_in_col__',[])
+        item.__io_in_col__ = val.append(col._io_bin_name_)
+        
+        key = getattr(item,'_io_bin_name_',hash(item))
+
+        if key in self.data.keys():
+            raise Exception(f'Bin ({self.inst} : {self.key}) Contains two items by the same key of {key} with different instances')
+        
+        self.data[key] = item
+        
+        return key
+    
+    def get_data_key(self,item):
+        assert item in self.data.values()
+        k_l = [k for k,v in self.data.items() if v == item]
+        return k_l[0]
+
+    def get_data(self,ref:str)->Any:
+        ''' Get already type instance imported data on bin close using key exported from get_data_key '''
+        return self.data[ref]
+
+    def add_defered(self,defered_function):
+        self._defered.append(defered_function)
+
+    def resolve_defered(self):
+        for x in self._defered:
+            x()
+
+    @contextmanager
+    def _context_(self,mode:str='export'):
+        assert mode in ['export','import','append']
+
+        try:
+            t = context[self.key].set(self)
+            yield
+            if mode in ['import','append']: self.resolve_defered()
+            if mode in ['export']:          self.assert_all_from_collections()
+        except:
+            raise
+        finally:
+            context[self.key].reset(t)
+    
+    def assert_all_from_collections(self):
+        for x in self.data:
+            assert hasattr(x,'__io_in_col__')
+
+
+
+    def _import_(self,data):
+        ...
+    def _append_(self,):
+        ...
+
+    def _export_(self)->dict:
+        ret = {}
+        for k,v in self.data_generator(self.data):
+            val=v._export_()
+            ret[k]=val
+        return ret
+
+    def data_generator(self, data:dict, used_keys=None):
+        ''' Iterate over dict keys, yielding any new results per iteration. '''
+        if used_keys is None: used_keys = []
+        for k in [x for x in data.keys()]:
+            if k in used_keys: continue
+            used_keys.append(k)
+            yield k, data[k]
+        if len(data.keys()) > len(used_keys):
+            for x in self.data_generator(data,used_keys):
+                yield x
+
 
 
 class BaseModel:
@@ -145,159 +291,83 @@ class BaseModel:
     __io_cols__      : dict[str,flat_col]
     __io_refs__      : dict[str,flat_ref]
 
-    _io_list_like_   : bool
+    _io_list_like_   : bool 
     _io_dict_like_   : bool
+        # for as field io on generic custom collection classes, including as a flat_bin-flat_col contributer
+        # If used, iterates through using io method and stores as special field on export, re-applies on import
+        # Data field must be untyped or blacklisted
 
-    _io_ducktyping_  : bool
-    _io_whitelist_   : list[str]
-    _io_blacklist_   : list[str]
-
-    def _io_bin_id_(self):
-        return hash(self)  
-
-    @classmethod
-    def __io_fields__(cls,existing_inst=None):
-        ''' Get fields using above attributes '''
-        if existing_inst: cls = existing_inst
-        
-    @classmethod
-    def _cls_import_(cls,data:list|dict,existing_inst=None,):
-        if existing_inst:
-            existing_inst._import_(data)
-            return existing_inst
-        else:
-            inst = cls()
-            inst._import_(data)
-            return inst
-        
-    @classmethod
-    def _cls_append_(cls,data,existing_inst=None):
-        if not existing_inst:
-            return cls._cls_import_(data)
-        else:
-            return existing_inst._append_(data)
+    _io_export_defaults_ : bool = False
+    _io_ducktyping_      : bool = False
+    _io_whitelist_       : list[str]
+    _io_blacklist_       : list[str]
 
     @classmethod
-    def _cls_export_(cls,existing_inst=None):
-        if not existing_inst:
-            return _unset
-        else:
-            return existing_inst._export_()
+    def __io_fields__(cls,existing_inst)->dict:
+        if
+        if cls._io_export_defaults_:
+            base = 
+    
+    def _io_bin_name_(self):
+        return hash(self)
 
-    def __init_subclass__(cls):
-        cls.__io_organize_types__()
-
-    @classmethod
-    def __io_organize_types__(cls):
-        cls.__io_orig_bins__ = {}
-        cls.__io_orig_cols__ = {}
-        cls.__io_orig_refs__ = {}
-        cls.__io_fields__ = {}
-        #TODO: Set __orig_cols|refs|bins__
-        
-        for k,v in cls.__annotations__.items():
-            if src := getattr(v,'__origin__',None):
-                if   issubclass(src,flat_ref):
-                    cls.__io_orig_refs__[k] = v
-                elif issubclass(src,flat_col):
-                    cls.__io_orig_cols__[k] = v
-                elif issubclass(src,flat_bin):
-                    cls.__io_orig_bins__[k] = v
-            else:
-                cls.__io_fields__[k] = v 
-
-    def __io_attach_refs__(self):
-        self.__io_refs__ = {}
-        for k,v in self.__io_orig_refs__.items():
-            self.__io_refs__[k] = v.__origin__.from_union(v,self)
-
-    def __io_attach_cols__(self):
-        self.__io_cols__ = {}
-        for k,v in self.__io_orig_cols__.items():
-            self.__io_cols__[k] = v.__origin__.from_union(v,self)
-
-    def __io_attach_bins__(self):
-        self.__io_bins__ = {}
-        for k,v in self.__io_orig_bins__.items():
-            self.__io_bins__[k] = v.__origin__.from_union(v,self)
-
-    @contextmanager
     def __io_attach__(self):
-        self.__io_attach_refs__()
-        self.__io_attach_bins__()
-        self.__io_attach_refs__()
+        self.__io_bins__ = {}
+        self.__io_cols__ = {}
+        self.__io_refs__ = {}
+        for k,v in self.__io_orig_bins__.items():
+            self.__io_bins__[k] = v.__origin__.from_generic_alias(self,k,v)
+        for k,v in self.__io_orig_cols__.items():
+            self.__io_cols__[k] = v.__origin__.from_generic_alias(self,k,v)
+        for k,v in self.__io_orig_refs__.items():
+            self.__io_refs__[k] = v.__origin__.from_generic_alias(self,k,v)
+            
+    @contextmanager
+    def __enter_context__(self,mode='export'):
+        self.__io_attach__()
         with ExitStack() as stack:
-            for k,v in self.__io_refs__.items():
-                stack.enter_context(v.enter_context())
-            for k,v in self.__io_cols__.items():
-                stack.enter_context(v.enter_context())
-            for k,v in self.__io_bins__.items():
-                stack.enter_context(v.enter_context())
-            yield
+            for v in self.__io_bins__.values():
+                stack.enter_context(v._context_(mode=mode))
+            try:yield
+            except: raise
+            finally: return
 
-    @contextmanager
-    def _io_import_(self):
-        with self.__io_attach__():
-            yield
-        
-    @contextmanager
-    def _io_export_(self):
-        with self.__io_attach__():
-            yield
-        
-    @contextmanager
-    def _io_append_(self):
-        with self.__io_attach__():
-            yield
+    def _import_(self,data):
+        self.__io_attach__()
+        with self.__enter_context__(mode='import'):
+            self.__import_bins__(data)      #imports every bin, which creates all bin held references (and imports those recursivly) 
+            self.__import_cols__(data)      #imports each col, fed from context bins populated by import_bins
+            self.__import_refs__(data)      #imports each reference, pointing to bin held item by key
+            self.__import_fields__(data)    #imports each field(recur if isintance BaseModel or typed as so)
 
 
     def _export_(self):
-        with self._io_export_():
+        self.__io_attach__()
+        with self.__enter_context__(mode='export'):
             ...
-    def _import_(self, data):
-        with self._io_import_():
+        
+    def _append_(self):
+        self.__io_attach__()
+        with self.__enter_context__(mode='append'):
             ...
-    def _append_(self, data):
-        with self._io_append_():
+        
+    def __import_bins__(self,data):
+        for k,v in self.__io_bins__.items():
+            if not k in data.keys(): continue
+            v._import_(data[k])
+
+    def __import_cols__(self,data):
+        for k,v in self.__io_cols__.items():
+            if not k in data.keys(): continue
+            v._import_(data[k])
+            
+    def __import_refs__(self,data):
+        for k,v in self.__io_refs__.items():
+            if not k in data.keys(): continue
+            v._import_(data[k])
+            
+    def __import_fields__(self,data):
+        self.__io_fields__()
+        for k,v in self.__io_refs__.items():
+            
             ...
-
-if __name__ == '__main__':
-    
-    class item_archtype(defered_archtype):...
-
-    class item():
-        __flat_bin_key__ = 'item'
-    
-    class col(BaseModel):
-        __io_list_like__ = True  
-        __io_dict_like__ = False 
-            #When true, use method as IO when loading & diffing on a pre-existing instance
-
-        @classmethod
-        def _cls_import_(cls,data):
-            ''' If defined, use this to import data.
-                Generally expects an instance to be returned 
-                Can be used to construct and return type or pre-load data/change archtypes '''
-            inst = cls()
-            inst.super()._import_(data)
-            return inst
-
-    class root(BaseModel):
-        __io_ducktyping__ = False
-            #Attributes only on class vs any attributes
-
-        __io_whitelist__ = ['item_col', 'doesnt_export']
-        __io_blacklist__ = ['doesnt_export']
-            #record all fields (gatherd post ducktyping) on start minus blacklist 
-
-
-
-        item_bin : flat_bin['item',item_archtype] #all subtypes stored on disc here
-
-        item_col : flat_col[col , 'item'] = None 
-        item_ref : flat_ref[item, 'item'] = None
-        item_ref : flat_ref[item]         = None
-
-        doesnt_export : str = ''
-
-    item_archtype.Types.append(item)
