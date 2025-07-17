@@ -281,11 +281,12 @@ class flat_bin[key,*t](Generic(key,*t)):
 
 
 class BaseModel:
-    __io_orig_fields__ : dict[str,str]
 
-    __io_orig_bins__ : dict[str,flat_bin]
-    __io_orig_cols__ : dict[str,flat_col]
-    __io_orig_refs__ : dict[str,flat_ref]
+    __io_orig_fields__ : dict[str,Any] 
+    __io_orig_bins__   : dict[str,flat_bin]
+    __io_orig_cols__   : dict[str,flat_col]
+    __io_orig_refs__   : dict[str,flat_ref]
+        #All derived from __anotations__ 
 
     __io_bins__      : dict[str,flat_bin]
     __io_cols__      : dict[str,flat_col]
@@ -298,16 +299,30 @@ class BaseModel:
         # Data field must be untyped or blacklisted
 
     _io_export_defaults_ : bool = False
-    _io_ducktyping_      : bool = False
-    _io_whitelist_       : list[str]
-    _io_blacklist_       : list[str]
+    _io_whitelist_       : list[str] = None
+    _io_blacklist_       : list[str] = None
 
-    @classmethod
-    def __io_fields__(cls,existing_inst)->dict:
-        if
-        if cls._io_export_defaults_:
-            base = 
-    
+    def __io_fields__(self,filter_default=False)->dict:
+        ''' Returns dict of fields to export or import, filter whitelist, blacklist, and export_defaults (via) '''
+        
+        ret = {}
+
+        blacklist = getattr(self,'_io_blacklist_',[])
+        if whitelist:=getattr(self,'_io_whitelist_',None) is not None:
+            for k,v in self.__io_orig_fields__:
+                if k in whitelist and not k in blacklist:
+                    ret[k] = v
+        else:
+            for k,v in self.__io_orig_fields__:
+                if not k in blacklist:
+                    ret[k] = v
+        
+        if filter_default:
+            _d = self.__dict__.keys()
+            ret = {k:v for k,v in ret.items() if k in _d}
+
+        return ret
+
     def _io_bin_name_(self):
         return hash(self)
 
@@ -333,21 +348,26 @@ class BaseModel:
             finally: return
 
     def _import_(self,data):
-        self.__io_attach__()
         with self.__enter_context__(mode='import'):
             self.__import_bins__(data)      #imports every bin, which creates all bin held references (and imports those recursivly) 
             self.__import_cols__(data)      #imports each col, fed from context bins populated by import_bins
             self.__import_refs__(data)      #imports each reference, pointing to bin held item by key
             self.__import_fields__(data)    #imports each field(recur if isintance BaseModel or typed as so)
 
+            if getattr(self, '_io_dict_like_',None) and '_DATA_' in data.keys():
+                for k,v in data.pop('_DATA_').items(): self[k] = v
+            elif getattr(self, '_io_list_like_',None) and '_DATA_' in data.keys():
+                for v in data.pop('_DATA_'): self.append(v)
 
     def _export_(self):
-        self.__io_attach__()
         with self.__enter_context__(mode='export'):
-            ...
+            ret = ret|self._export_cols_()
+            ret = ret|self._export_refs_()
+            ret = ret|self._export_fields_()
+            ret = ret|self._export_bins_()
+        return ret
         
     def _append_(self):
-        self.__io_attach__()
         with self.__enter_context__(mode='append'):
             ...
         
@@ -367,7 +387,69 @@ class BaseModel:
             v._import_(data[k])
             
     def __import_fields__(self,data):
-        self.__io_fields__()
-        for k,v in self.__io_refs__.items():
+        
+        for k,v in self.__io_fields__().items():
+            if not k in data.keys(): continue
+
+            existing = getattr(self,k,None)
+            if existing is None and issubclass(v,BaseModel):
+                if func:=getattr(v,'_io_import_raw_',None):
+                    inst = func(data[k])
+                    setattr(self,k,inst)
+                    return
+                else:
+                    inst = v()
+                    setattr(self,k,inst)
+                    existing = inst
             
-            ...
+            if isinstance(existing,(OrderedDict,defaultdict,dict)):
+                for k,v in data[k].items(): existing[k] = v
+            elif isinstance(existing,(list)):
+                for v in data[k]: existing.append(v)
+
+            if issubclass(existing.__class__,BaseModel) or hasattr(existing,'_import_'):
+                    existing._import_(data[k])
+
+            elif existing:
+                raise Exception(f'Attempting to import ontop of existing structure that does not support import explicitly! {existing}')
+
+            else:
+                setattr(self,k,v(data[k]))
+
+    def _export_bins_(self):
+        ret = {}
+        for k,v in self.__io_bins__.items():
+            ret[k]=v._export_()
+        return ret
+
+    def _export_cols_(self):
+        ret = {}
+        for k,v in self.__io_cols__.items():
+            ret[k]=v._export_()
+        return ret
+    
+    def _export_refs_(self):
+        ret = {}
+        src = self._export_data_source_()
+        for k,v in self.__refs.items():
+            if k not in src.keys(): continue
+            elif src[k] is _unset: continue
+            ret[k] = v._export_(src[k])
+        # if ret:
+        #     raise Exception(f'Exported refs {ret}')
+        return ret
+
+    def __export_fields__(self):
+        ret = []
+        for k,v in self.__io_fields__(self._io_export_defaults_).items():
+            if d:=getattr(self,k,_unset) is _unset: continue
+            if isinstance(d,BaseModel) or hasattr(d,'_export_'):
+                ret[k] = d._export_()
+            elif isinstance(d,list):
+                ret[k] = [x if not hasattr(d,'_export_') else x._export_() for x in d]
+            elif isinstance(d,dict):
+                ret[k] = {k:v if not hasattr(d,'_export_') else v._export_() for k,v in d.items()}
+            else:
+                ret[k] = d
+        return ret
+
