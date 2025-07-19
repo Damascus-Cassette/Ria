@@ -20,10 +20,10 @@ class context():
 
 
     @classmethod
-    def construct(cls, include:list[str], as_name:str):
-        kwargs = {'_Include':include,
-                  '_as_name':as_name,}
-        type('Context',(cls,),kwargs)
+    def construct(cls, include:list[str]=None, as_name:str|None = None):
+        kwargs = {'_Include':include if include else [],
+                  '_as_name':as_name}
+        return type('Context',(cls,),kwargs)
 
 
     #### Instance Values ####
@@ -31,12 +31,14 @@ class context():
 
     def __init__(self,parent):
         self._parent = parent
+        with self.register():
+            pass
 
 
     @contextmanager
     def register(self):
         for k in self._Include:
-            setattr(self,_context[k].get())
+            setattr(self,k,_context[k].get())
         try:
             t = None
             if self._As_Name:

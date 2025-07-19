@@ -1,19 +1,26 @@
-from .struct_file_io import BaseModel,flat_bin,flat_col,flat_ref
+from .struct_file_io import BaseModel,defered_archtype,flat_bin,flat_col,flat_ref 
 from .struct_context import context
 
 from typing import Any,Self
 from types  import FunctionType
 
+class _node(defered_archtype):...
+class _socket(defered_archtype):...
+class _subgraph(defered_archtype):...
+class _graph(defered_archtype):...
+
 class pointer_socket(BaseModel):
     ''' Pointer to a socket via node.{dir}_socket.[socket_id] '''
-    context = context.construct(include=['root_graph','sub_graph','node','socket_coll','socket_group','socket'])
 
-    node       : flat_ref[node]
+    node       : flat_ref[_node]
     socket_id  : str|int
     socket_dir : str = 'out'
 
     def __init__(self):
         self.context = self.context(self)
+    
+    context = context.construct(include=['root_graph','sub_graph','node','socket_coll','socket_group','socket'])
+    def _context_walk_(self):...
 
     @classmethod
     def from_socket(cls, socket):
@@ -24,7 +31,7 @@ class pointer_socket(BaseModel):
         inst.socket_id  = socket.id 
 
     @property
-    def socket(self)->socket:
+    def socket(self):
         if self.socket_dir == 'out':
             return self.node.out_sockets[self.socket_id]
         elif self.socket_dir == 'in':
@@ -89,7 +96,7 @@ class socket(BaseModel):
     def __init__(self):
         self.context = self.context(self)
 
-    context = context.construct(include=['root_graph','sub_graph','node','socket_coll','socket_group'],name_as='socket')
+    context = context.construct(include=['root_graph','sub_graph','node','socket_coll','socket_group'],as_name='socket')
     def _context_walk_(self):
         with self.context.register():        
             for s in self.out_links:
@@ -163,7 +170,7 @@ class socket_group[SocketType=socket]():
         if socket not in self.parent_col.sockets.values():
             self.parent_col.sockets[key] = socket
 
-    context = context.construct(include=['root_graph','sub_graph','node','socket_coll',],name_as='socket_group')
+    context = context.construct(include=['root_graph','sub_graph','node','socket_coll',],as_name='socket_group')
     def _context_walk_(self):
         with self.context.register():        
             for s in self.out_links:
@@ -189,7 +196,7 @@ class socket_collection(BaseModel):
         kwargs['Direction'] = Direction
         return type(name,(cls,),kwargs)
 
-    context = context.construct(include=['root_graph','sub_graph','node'],name_as='socket_coll')
+    context = context.construct(include=['root_graph','sub_graph','node'],as_name='socket_coll')
     def _context_walk_(self):
         with self.context.register():
             for sg in self.groups:
@@ -214,7 +221,7 @@ class node(BaseModel):
         assert issubclass(cls.out_sockets,  socket_collection)
         assert issubclass(cls.side_sockets, socket_collection)
 
-    context = context.construct(include=['root_graph','sub_graph'],name_as='node')
+    context = context.construct(include=['root_graph','sub_graph'],as_name='node')
     def _context_walk_(self):
         with self.context.register():
             self.in_sockets._context_walk_()
@@ -228,6 +235,69 @@ class node(BaseModel):
         self.out_sockets = self.side_sockets()
 
 
+class node_collection[SocketType=socket](BaseModel):
+    _io_bin_name_ = 'node'
+    _io_dict_like_ = True
+    _io_blacklist_ = ['data']
+    data : dict[node]
 
-if __name__ == '__main__':
-    ...
+    context = context.construct(include=['root_graph','sub_graph'])
+    def _context_walk_(self):
+        with self.context.register():
+            for v in self.data.values:
+                v._context_walk_()
+
+
+    def __init__(self):
+        self.context = self.context(self)
+        self.data = {}
+
+class subgraph(BaseModel):
+    _io_bin_name_ = 'subgraph'
+    nodes : flat_col[node_collection]
+
+    context = context.construct(include=['root_graph'],as_name = 'sub_graph')
+    def _context_walk_(self):
+        with self.context.register():
+            self.nodes._context_walk_()
+
+    def __init__(self,):
+        self.context = self.context(self)
+        self.nodes = node_collection()
+
+class subgraph_collection[SubgraphType=subgraph](BaseModel):
+    _io_bin_name_ = 'subgraph'
+    _io_dict_like_ = True
+    _io_blacklist_ = ['data']
+    data : dict[subgraph]
+
+    def __init__(self):
+        self.context = self.context(self)
+        self.data = {}
+
+    context = context.construct(include=['root_graph','sub_graph'])
+    def _context_walk_(self):
+        with self.context.register():
+            for v in self.data.values:
+                v._context_walk_()
+
+class graph(BaseModel):
+    _nodes      : flat_bin[node]
+    _subgraphs  : flat_bin[subgraph]
+    
+    subgraphs   : flat_col[subgraph_collection]
+
+    context = context.construct(as_name = 'root_graph')
+    def _context_walk_(self):
+        with self.context.register():
+            self.nodes._context_walk_()
+    
+    def __init__(self):
+        self.context = self.context(self)
+        self.subgraphs = subgraph_collection()
+
+
+_node.types.append(node)
+_socket.types.append(socket)
+_subgraph.types.append(subgraph)
+_graph.types.append(graph)
