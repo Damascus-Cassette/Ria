@@ -1,8 +1,8 @@
-from .base_node import base_node, base_node_collection
+from ._base_node import base_node, base_node_collection
 from .struct_context import context
 from .struct_file_io import flat_col, flat_ref, BaseModel, defered_archtype
 
-from .loader import _meta_nodes, _modules
+from .__loader import _meta_nodes, _modules
 
 class meta_subgraph(BaseModel):
     ''' One of a number of subgraphs who's nodes can have cross-references '''
