@@ -33,5 +33,6 @@ def test_context_node_through_pointer(struct):
     socket,node,*other = struct
     _node = node()
     _node.default_sockets()
-    _node._context_walk_()
-    list(_node.in_sockets.items())[0].context.node = _node
+    _node._context_walk_() 
+    list(_node.in_sockets.values())[0].context.node = _node
+    

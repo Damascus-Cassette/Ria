@@ -94,6 +94,7 @@ class socket(BaseModel):
     #### Internal Methods ####
 
     def __init__(self):
+        self.out_links = []
         self.context = self.context(self)
 
     context = context.construct(include=['root_graph','sub_graph','node','socket_coll','socket_group'],as_name='socket')
@@ -126,14 +127,14 @@ class socket_group[SocketType=socket]():
     Socket_Mutable      : bool        
     Socket_Mutatle_Pool : list[socket]
 
-    def Socket_Label_Generator(self,s_col,socket:socket):
+    def Socket_Label_Generator(self,socket:socket):
         return socket.Default_Label
-    def Socket_ID_Generator(self,s_col,socket:socket):
+    def Socket_ID_Generator(self,socket:socket):
         ''' Verify ID is Unique before attaching '''
         uid_base = socket.Default_ID
         uid = uid_base
         i = 0
-        while uid in s_col.sockets.keys():
+        while uid in self.parent_col.sockets.keys():
             i=+1
             uid = uid_base + str(i).zfill(3)
         return uid
@@ -162,7 +163,7 @@ class socket_group[SocketType=socket]():
             self.create_set(i)
 
     def create_set(self,set_id:int=0):
-        while set_id in self.socket_sets.keys:
+        while set_id in self.socket_sets.keys():
             set_id += 1
 
         ret = []
@@ -207,8 +208,8 @@ class socket_group[SocketType=socket]():
     context = context.construct(include=['root_graph','sub_graph','node','socket_coll',],as_name='socket_group')
     def _context_walk_(self):
         with self.context.register():        
-            for s in self.out_links:
-                s.context.register()
+            for s in self.sockets.values():
+                s._context_walk_()
 
 
 
@@ -252,8 +253,10 @@ class socket_collection(BaseModel):
 
     def __init__(self):
         self.context = self.context(self)
-        self.groups  = {}
         self.sockets = {}
+        self.groups  = {}
+        for v in self.Groups:
+            self.groups[v.Group_ID] = v(self)
 
 
     def default_sockets(self):
