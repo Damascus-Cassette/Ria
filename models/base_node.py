@@ -99,8 +99,8 @@ class socket(BaseModel):
     context = context.construct(include=['root_graph','sub_graph','node','socket_coll','socket_group'],as_name='socket')
     def _context_walk_(self):
         with self.context.register():        
-            for s in self.out_links:
-                s.context.register()
+            for sl in self.out_links:
+                sl.context._Get()
 
 
 class socket_group[SocketType=socket]():
@@ -122,6 +122,9 @@ class socket_group[SocketType=socket]():
     Socket_Set_Base     : list[socket]
     Socket_Quantity_Min : int = 1
     Socket_Quantity_Max : int = 1
+
+    Socket_Mutable      : bool        
+    Socket_Mutatle_Pool : list[socket]
 
     def Socket_Label_Generator(self,s_col,socket:socket):
         return socket.Default_Label
@@ -154,6 +157,28 @@ class socket_group[SocketType=socket]():
         self.context = self.context(self)
         self.parent_col = parent_col
 
+    def default_sockets(self):
+        for i in range(self.Socket_Quantity_Min):
+            self.create_set(i)
+
+    def create_set(self,set_id:int=0):
+        while set_id in self.socket_sets.keys:
+            set_id += 1
+
+        ret = []
+        for socket_base in self.Socket_Set_Base:
+            inst = socket_base()
+            inst.label = self.Socket_Label_Generator(inst)
+            inst.id    = self.Socket_ID_Generator(inst)
+            inst.group_set_id = set_id
+            ret.append(inst)
+        for inst in ret:
+            self[inst.id] = inst
+
+        return ret
+
+
+
     @property
     def sockets(self):
         ret = {}
@@ -162,6 +187,15 @@ class socket_group[SocketType=socket]():
                 ret[k]=v
         return ret
     
+    @property
+    def socket_sets(self)->dict[dict[str,socket]]:
+        ret = {}
+        for k,v in self.sockets.items():
+            if (_k:=v.group_set_id) not in ret.keys():
+                ret[_k] = {}
+            ret[_k][k] = v
+        return ret
+
     def __getitem__(self,key)->SocketType:
         return self.sockets[key]
 
@@ -177,33 +211,62 @@ class socket_group[SocketType=socket]():
                 s.context.register()
 
 
+
 class socket_collection(BaseModel):
     ''' Accessor of sockets and socket_groups '''
     
     #### Constructed Values ####
-    Groups    : dict[socket_group]
+    Groups    : list[socket_group]
     Direction : str
 
     @classmethod
-    def construct(cls,name:str,/,groups:list[socket_group]|list[socket], Direction:str, **kwargs):
-        if not isinstance(groups,(list,tuple,set)):
-            groups = [groups]
-        if issubclass(groups[0],socket):
-            _g = socket_group.construct('main',Sockets=groups)
-            groups = [_g]
+    def construct(cls,name:str,/,Groups:list[socket_group]|list[socket], Direction:str, **kwargs):
+        if not isinstance(Groups,(list,tuple,set)):
+            Groups = [Groups]
+        if issubclass(Groups[0],socket):
+            _g = socket_group.construct('main',Sockets=Groups)
+            Groups = [_g]
+        elif issubclass(Groups[0],cls):
+            raise Exception('COLLECTION HAS BEEN PASSED INTO COLLECTION CONSTRUCTION')
 
-        kwargs['Groups'] = groups
+        kwargs['Groups'] = Groups
         kwargs['Direction'] = Direction
         return type(name,(cls,),kwargs)
+
+    def __init__(self):
+        self.context = self.context(self)
+        self.groups  = {}
+        for v in self.Groups:
+            assert issubclass(v,socket_group)
+            self.groups[v.Group_ID] = v(self)
 
     context = context.construct(include=['root_graph','sub_graph','node'],as_name='socket_coll')
     def _context_walk_(self):
         with self.context.register():
-            for sg in self.groups:
+            for sg in self.groups.values():
                 sg._context_walk_()
 
     #### Instance Values ####
+    groups  : dict[socket_group]
     sockets : dict[socket]
+
+    def __init__(self):
+        self.context = self.context(self)
+        self.groups  = {}
+        self.sockets = {}
+
+
+    def default_sockets(self):
+        for k,v in self.groups.items():
+            v.default_sockets()
+
+    def values(self): return self.sockets.values()
+    def items(self): return self.sockets.items()
+    def keys(self): return self.sockets.keys()
+    def __getitem__(self,key:str)->socket:
+        return self.sockets[key]
+    def __setitem__(self,key,value:socket):
+        self.sockets[key] = value
 
 
 class node(BaseModel):
@@ -214,9 +277,9 @@ class node(BaseModel):
     side_sockets : socket_collection
 
     def __init_subclass__(cls):
-        if issubclass(cls.in_sockets,   (list,tuple,set)): cls.in_sockets   = socket_collection.construct('in_sockets',   Direction='in',   Groups=cls.in_sockets)
-        if issubclass(cls.out_sockets,  (list,tuple,set)): cls.out_sockets  = socket_collection.construct('out_sockets',  Direction='out',  Groups=cls.in_sockets)
-        if issubclass(cls.side_sockets, (list,tuple,set)): cls.side_sockets = socket_collection.construct('side_sockets', Direction='side', Groups=cls.in_sockets)
+        if isinstance(cls.in_sockets,   (list,tuple,set)): cls.in_sockets   = socket_collection.construct('in_sockets',   Direction='in',   Groups=cls.in_sockets)
+        if isinstance(cls.out_sockets,  (list,tuple,set)): cls.out_sockets  = socket_collection.construct('out_sockets',  Direction='out',  Groups=cls.out_sockets)
+        if isinstance(cls.side_sockets, (list,tuple,set)): cls.side_sockets = socket_collection.construct('side_sockets', Direction='side', Groups=cls.side_sockets)
         assert issubclass(cls.in_sockets,   socket_collection)
         assert issubclass(cls.out_sockets,  socket_collection)
         assert issubclass(cls.side_sockets, socket_collection)
@@ -232,8 +295,12 @@ class node(BaseModel):
         self.context = self.context(self)
         self.in_sockets  = self.in_sockets()
         self.out_sockets = self.out_sockets()
-        self.out_sockets = self.side_sockets()
+        self.side_sockets = self.side_sockets()
 
+    def default_sockets(self):
+        self.in_sockets.default_sockets()
+        self.out_sockets.default_sockets()
+        self.side_sockets.default_sockets()
 
 class node_collection[SocketType=socket](BaseModel):
     _io_bin_name_ = 'node'

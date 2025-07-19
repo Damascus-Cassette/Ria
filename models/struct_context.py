@@ -22,7 +22,7 @@ class context():
     @classmethod
     def construct(cls, include:list[str]=None, as_name:str|None = None):
         kwargs = {'_Include':include if include else [],
-                  '_as_name':as_name}
+                  '_As_Name':as_name}
         return type('Context',(cls,),kwargs)
 
 
@@ -31,14 +31,16 @@ class context():
 
     def __init__(self,parent):
         self._parent = parent
-        with self.register():
-            pass
+        self._Get()
 
+    def _Get(self):
+        for k in self._Include:
+            val = _context[k].get()
+            setattr(self,k,val)
 
     @contextmanager
     def register(self):
-        for k in self._Include:
-            setattr(self,k,_context[k].get())
+        self._Get()
         try:
             t = None
             if self._As_Name:
