@@ -332,6 +332,7 @@ class flat_bin[key,*t]:
 
 
 class BaseModel:
+    _io_bin_name_ : str
 
     __io_orig_fields__ : dict[str,Any] 
     __io_orig_bins__   : dict[str,flat_bin]

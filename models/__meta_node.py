@@ -1,4 +1,4 @@
-from ._base_node import base_socket, base_node, base_node_set
+from .base_node import base_socket, base_node, base_node_set
 from .struct_file_io import flat_col, flat_ref
 from typing import Self, Any
 

@@ -1,27 +1,233 @@
-from typing import Any, Self
+from .struct_file_io import BaseModel,flat_bin,flat_col,flat_ref
+from .struct_context import context
 
-class pointer_socket():
-    node      : node
-    socket_id : str
+from typing import Any,Self
+from types  import FunctionType
 
-class socket():
-    set_id : str
-    value  : Any
+class pointer_socket(BaseModel):
+    ''' Pointer to a socket via node.{dir}_socket.[socket_id] '''
+    context = context.construct(include=['root_graph','sub_graph','node','socket_coll','socket_group','socket'])
 
-class socket_set():
+    node       : flat_ref[node]
+    socket_id  : str|int
+    socket_dir : str = 'out'
+
+    def __init__(self):
+        self.context = self.context(self)
+
+    @classmethod
+    def from_socket(cls, socket):
+        inst = cls()
+        sc = socket.context
+        inst.node       = sc.node
+        inst.socket_dir = sc.collection.direction
+        inst.socket_id  = socket.id 
+
+    @property
+    def socket(self)->socket:
+        if self.socket_dir == 'out':
+            return self.node.out_sockets[self.socket_id]
+        elif self.socket_dir == 'in':
+            return self.node.in_sockets[self.socket_id]
+        elif self.socket_dir == 'side':
+            return self.node.side_sockets[self.socket_id]
+        raise Exception(f'Socket direction "{self.socket_dir}" is not found!')
+
+
+class socket(BaseModel):
+    ''' 
+    Module constructed socket type, 
+    Interactions/rules are defined on socket_group
+    Responcible for writing & retrieving specific data types 
+    '''
+
+    #### Constructed Values, Not Stored ####
+    Value_Type  : Any       = Any
+    Value_Allow : list[Any] = [Any]
+        # Fallback values from socket_group.
+
+    Disc_Cachable   : bool = True
+        # If this socket can be cached to disc or not
+        # If false, invalidates disc_cachable on exec_node
+
+    Call_Cache_Dump : bool = False
+    Call_Cache_Load : bool = False
+        # If true, calls dump and load on execution
+
+    Default_ID      : str
+    Default_Label   : str
+
+
+    #### Constructed Methods ####
+    def cache_dump(self,dir):
+        ''' Dump cache infor to location w/a, set disc_loc and disc_cached for cache_load'''
+    def cache_load(self):
+        ''' Load cache from disc_loc, set to self.value '''
+
+
+    ####  Inst Props, Stored ####
+    _io_whitelist_ = ['id', 'label', 'group_id', 'value', 'disc_cached', 'disc_location', 'out_links']
+
+    id       : str
+    label    : str
+
+    group_id : str 
+    group_set_id : str
+        #IDs for socket_group container & subset
+
+    value    : Any
+    
+    disc_cached   : bool = False
+    disc_location : str
+        #Hooks will convert spaces from & to `<SpaceID>/...` Format
+
+    out_links : list[pointer_socket]
+
+
+    #### Internal Methods ####
+
+    def __init__(self):
+        self.context = self.context(self)
+
+    context = context.construct(include=['root_graph','sub_graph','node','socket_coll','socket_group'],name_as='socket')
+    def _context_walk_(self):
+        with self.context.register():        
+            for s in self.out_links:
+                s.context.register()
+
+
+class socket_group[SocketType=socket]():
+    ''' 
+    Constructed Class for methods to allow sockets 0+ to interact
+    Defines UI interaction & validation of a socket type
+    '''
+    #TODO: Consider having sockets being quiried subset of parent socket_collection
+
+    #### Constructed Data ####
+
+    Group_ID : str
+    Set_ID   : str|None = None
+        #Used in events, runtime context-formatted string
+    
+    Value_Allow  : list[Any]|None = None 
+        #If none, defers to per socket type allowed types
+
+    Socket_Set_Base     : list[socket]
+    Socket_Quantity_Min : int = 1
+    Socket_Quantity_Max : int = 1
+
+    def Socket_Label_Generator(self,s_col,socket:socket):
+        return socket.Default_Label
+    def Socket_ID_Generator(self,s_col,socket:socket):
+        ''' Verify ID is Unique before attaching '''
+        uid_base = socket.Default_ID
+        uid = uid_base
+        i = 0
+        while uid in s_col.sockets.keys():
+            i=+1
+            uid = uid_base + str(i).zfill(3)
+        return uid
+
+    #### Base Methods ####
+    @classmethod
+    def construct(cls,
+                  group_id:str,
+                  *,
+                  Sockets:list[socket],
+                  **kwargs
+                  ):
+        if not isinstance(Sockets,(list,tuple,set)):
+            Sockets = list(Sockets)
+        kwargs['Group_ID']        = group_id
+        kwargs['Socket_Set_Base'] = Sockets
+        return type(f'S_GROUP_{group_id}',(cls,),kwargs)
+
+
+    def __init__(self,parent_col):
+        self.context = self.context(self)
+        self.parent_col = parent_col
+
+    @property
+    def sockets(self):
+        ret = {}
+        for k,v in self.parent_col.sockets.items():
+            if v.group_id == self.Group_ID:
+                ret[k]=v
+        return ret
+    
+    def __getitem__(self,key)->SocketType:
+        return self.sockets[key]
+
+    def __setitem__(self,key,socket:SocketType):
+        socket.group_id = self.Group_ID
+        if socket not in self.parent_col.sockets.values():
+            self.parent_col.sockets[key] = socket
+
+    context = context.construct(include=['root_graph','sub_graph','node','socket_coll',],name_as='socket_group')
+    def _context_walk_(self):
+        with self.context.register():        
+            for s in self.out_links:
+                s.context.register()
+
+
+class socket_collection(BaseModel):
+    ''' Accessor of sockets and socket_groups '''
+    
+    #### Constructed Values ####
+    Groups    : dict[socket_group]
+    Direction : str
+
+    @classmethod
+    def construct(cls,name:str,/,groups:list[socket_group]|list[socket], Direction:str, **kwargs):
+        if not isinstance(groups,(list,tuple,set)):
+            groups = [groups]
+        if issubclass(groups[0],socket):
+            _g = socket_group.construct('main',Sockets=groups)
+            groups = [_g]
+
+        kwargs['Groups'] = groups
+        kwargs['Direction'] = Direction
+        return type(name,(cls,),kwargs)
+
+    context = context.construct(include=['root_graph','sub_graph','node'],name_as='socket_coll')
+    def _context_walk_(self):
+        with self.context.register():
+            for sg in self.groups:
+                sg._context_walk_()
+
+    #### Instance Values ####
     sockets : dict[socket]
 
-class socket_collection():
-    ...
 
-class node():
-    ...
+class node(BaseModel):
+    _io_bin_name_ = 'g_node'
+
+    in_sockets   : socket_collection
+    out_sockets  : socket_collection
+    side_sockets : socket_collection
+
+    def __init_subclass__(cls):
+        if issubclass(cls.in_sockets,   (list,tuple,set)): cls.in_sockets   = socket_collection.construct('in_sockets',   Direction='in',   Groups=cls.in_sockets)
+        if issubclass(cls.out_sockets,  (list,tuple,set)): cls.out_sockets  = socket_collection.construct('out_sockets',  Direction='out',  Groups=cls.in_sockets)
+        if issubclass(cls.side_sockets, (list,tuple,set)): cls.side_sockets = socket_collection.construct('side_sockets', Direction='side', Groups=cls.in_sockets)
+        assert issubclass(cls.in_sockets,   socket_collection)
+        assert issubclass(cls.out_sockets,  socket_collection)
+        assert issubclass(cls.side_sockets, socket_collection)
+
+    context = context.construct(include=['root_graph','sub_graph'],name_as='node')
+    def _context_walk_(self):
+        with self.context.register():
+            self.in_sockets._context_walk_()
+            self.out_sockets._context_walk_()
+            self.side_sockets._context_walk_()
+
+    def __init__(self):
+        self.context = self.context(self)
+        self.in_sockets  = self.in_sockets()
+        self.out_sockets = self.out_sockets()
+        self.out_sockets = self.side_sockets()
+
 
 
 if __name__ == '__main__':
-
-    class socket_type(socket):
-        ...
-
-    class test_node(node):
-        ...
+    ...
