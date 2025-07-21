@@ -1,6 +1,6 @@
 from .struct_file_io import BaseModel,defered_archtype,flat_bin,flat_col,flat_ref 
 from .struct_context import context
-
+from .struct_collection_base import item_base, collection_base, collection_typed_base
 from typing import Any,Self
 from types  import FunctionType
 
@@ -41,7 +41,7 @@ class pointer_socket(BaseModel):
         raise Exception(f'Socket direction "{self.socket_dir}" is not found!')
 
 
-class socket(BaseModel):
+class socket(BaseModel,item_base):
     ''' 
     Module constructed socket type, 
     Interactions/rules are defined on socket_group
@@ -136,7 +136,7 @@ class socket_group[SocketType=socket]():
         i = 0
         while uid in self.parent_col.sockets.keys():
             i=+1
-            uid = uid_base + str(i).zfill(3)
+            uid = uid_base + '.' + str(i).zfill(3)
         return uid
 
     #### Base Methods ####
@@ -172,9 +172,8 @@ class socket_group[SocketType=socket]():
             inst.label = self.Socket_Label_Generator(inst)
             inst.id    = self.Socket_ID_Generator(inst)
             inst.group_set_id = set_id
-            ret.append(inst)
-        for inst in ret:
             self[inst.id] = inst
+            ret.append(inst)
 
         return ret
 
@@ -280,9 +279,13 @@ class node(BaseModel):
     side_sockets : socket_collection
 
     def __init_subclass__(cls):
-        if isinstance(cls.in_sockets,   (list,tuple,set)): cls.in_sockets   = socket_collection.construct('in_sockets',   Direction='in',   Groups=cls.in_sockets)
-        if isinstance(cls.out_sockets,  (list,tuple,set)): cls.out_sockets  = socket_collection.construct('out_sockets',  Direction='out',  Groups=cls.out_sockets)
-        if isinstance(cls.side_sockets, (list,tuple,set)): cls.side_sockets = socket_collection.construct('side_sockets', Direction='side', Groups=cls.side_sockets)
+        if isinstance(cls.in_sockets,   (list,tuple,set)): 
+            cls.in_sockets   = socket_collection.construct('in_sockets',   Direction='in',   Groups=cls.in_sockets)
+            print(cls.in_sockets)
+        if isinstance(cls.out_sockets,  (list,tuple,set)): 
+            cls.out_sockets  = socket_collection.construct('out_sockets',  Direction='out',  Groups=cls.out_sockets)
+        if isinstance(cls.side_sockets, (list,tuple,set)): 
+            cls.side_sockets = socket_collection.construct('side_sockets', Direction='side', Groups=cls.side_sockets)
         assert issubclass(cls.in_sockets,   socket_collection)
         assert issubclass(cls.out_sockets,  socket_collection)
         assert issubclass(cls.side_sockets, socket_collection)
@@ -305,11 +308,16 @@ class node(BaseModel):
         self.out_sockets.default_sockets()
         self.side_sockets.default_sockets()
 
-class node_collection[SocketType=socket](BaseModel):
-    _io_bin_name_ = 'node'
+class node_collection(BaseModel, collection_typed_base):
+    _io_bin_name_  = 'node'
     _io_dict_like_ = True
     _io_blacklist_ = ['data']
-    data : dict[node]
+
+    @property
+    def Bases(self)->dict[str,Any]:
+        return self.context.Exec_Node_Types
+
+    data : list[_node]
 
     context = context.construct(include=['root_graph','sub_graph'])
     def _context_walk_(self):
@@ -317,12 +325,11 @@ class node_collection[SocketType=socket](BaseModel):
             for v in self.data.values:
                 v._context_walk_()
 
-
     def __init__(self):
         self.context = self.context(self)
-        self.data = {}
+        self.data = []
 
-class subgraph(BaseModel):
+class subgraph(BaseModel, item_base):
     _io_bin_name_ = 'subgraph'
     nodes : flat_col[node_collection]
 
@@ -335,21 +342,24 @@ class subgraph(BaseModel):
         self.context = self.context(self)
         self.nodes = node_collection()
 
-class subgraph_collection[SubgraphType=subgraph](BaseModel):
+class subgraph_collection[SubgraphType=subgraph](BaseModel, collection_base):
     _io_bin_name_ = 'subgraph'
     _io_dict_like_ = True
     _io_blacklist_ = ['data']
+    Base : subgraph
     data : dict[subgraph]
 
     def __init__(self):
         self.context = self.context(self)
-        self.data = {}
+        self.data = []
 
     context = context.construct(include=['root_graph','sub_graph'])
     def _context_walk_(self):
         with self.context.register():
-            for v in self.data.values:
+            for v in self.data:
                 v._context_walk_()
+    
+
 
 class graph(BaseModel):
     _nodes      : flat_bin[node]
@@ -357,13 +367,15 @@ class graph(BaseModel):
     
     subgraphs   : flat_col[subgraph_collection]
 
+    label : str
+
     context = context.construct(as_name = 'root_graph')
     def _context_walk_(self):
         with self.context.register():
             self.nodes._context_walk_()
     
     def __init__(self):
-        self.context = self.context(self)
+        self.context   = self.context(self)
         self.subgraphs = subgraph_collection()
 
 
