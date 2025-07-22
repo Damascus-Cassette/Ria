@@ -1,18 +1,18 @@
-from .struct_file_io import BaseModel,defered_archtype,flat_bin,flat_col,flat_ref 
+from .struct_file_io import BaseModel,defered_archtype,flat_bin,flat_col,flat_ref,context_archtype 
 from .struct_context import context
 from .struct_collection_base import item_base, collection_base, collection_typed_base
 from typing import Any,Self
 from types  import FunctionType
 
-class _node(defered_archtype):...
-class _socket(defered_archtype):...
-class _subgraph(defered_archtype):...
-class _graph(defered_archtype):...
+class node_archtype(context_archtype):...
+class socket_archtype(context_archtype):...
+class subgraph_archtype(context_archtype):...
+class graph_archtype(context_archtype):...
 
 class pointer_socket(BaseModel):
     ''' Pointer to a socket via node.{dir}_socket.[socket_id] '''
 
-    node       : flat_ref[_node]
+    node       : flat_ref[node_archtype]
     socket_id  : str|int
     socket_dir : str = 'out'
 
@@ -317,7 +317,7 @@ class node_collection(BaseModel, collection_typed_base):
     def Bases(self)->dict[str,Any]:
         return self.context.Exec_Node_Types
 
-    data : list[_node]
+    data : list[node_archtype]
 
     context = context.construct(include=['root_graph','sub_graph'])
     def _context_walk_(self):
@@ -365,6 +365,9 @@ class graph(BaseModel):
     _nodes      : flat_bin[node]
     _subgraphs  : flat_bin[subgraph]
     
+    allowed_nodes   : list[node]
+    allowed_sockets : list[socket]
+
     subgraphs   : flat_col[subgraph_collection]
 
     label : str
@@ -378,8 +381,3 @@ class graph(BaseModel):
         self.context   = self.context(self)
         self.subgraphs = subgraph_collection()
 
-
-_node.types.append(node)
-_socket.types.append(socket)
-_subgraph.types.append(subgraph)
-_graph.types.append(graph)

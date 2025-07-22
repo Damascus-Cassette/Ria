@@ -19,6 +19,31 @@ class defered_archtype:
     ''' Class to construct lists with after intial structure definition '''
     types : list[Any]
 
+    @classmethod
+    def append(cls,item):
+        cls.types.append(item)
+
+class context_archtype:
+    ''' Class to construct lists with after intial structure definition via attr 'types' as a context varaible '''
+    _context_key_ : str
+    types : ContextVar[list]
+
+    def __init_subclass__(cls):
+        cls._types = ContextVar(getattr(cls,'_context_key_',cls.__name__), default = [])
+    
+    @classmethod
+    def append(cls,item):
+        cls.types.get().append(item)
+
+    @classmethod
+    @contextmanager
+    def _as(cls,types:list=None):
+        if types is None:
+            types = []
+        t = cls.types.set(types)
+        yield
+        cls.types.reset(t)
+
 def collapse_type_chain(ty)->list:
     res = []
     for x in ty:
@@ -27,6 +52,9 @@ def collapse_type_chain(ty)->list:
                 res.extend(collapse_type_chain(e))
         if issubclass(x,defered_archtype):
             for e in x.types:
+                res.extend(collapse_type_chain(e))
+        elif issubclass(x,context_archtype):
+            for e in x.types.get():
                 res.extend(collapse_type_chain(e))
         else:
             res.append(x)
