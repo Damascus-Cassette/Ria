@@ -408,8 +408,15 @@ class graph(BaseModel, ConstrBase):
         self.context   = self.context(self)
         self.subgraphs = subgraph_collection()
 
+items  = []
+mixins = []
+
 modules = []
+
 def construct():
     ''' Construct in place all types using modules list (replaced externally) '''
-    items  = []
-    mixins = []
+    
+    #Resolve, ie ensure versions and nodes have unique IDs
+    for module in modules:
+        module._loader_items_
+        module._loader_mixins_

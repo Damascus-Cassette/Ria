@@ -15,13 +15,21 @@ class _item_base:
     ''' Is a new node class, for execution and hooks 
         Note: inherits all node_mixins from all enabled modules'''
     _loader_item_ = True
+    
+    ID           : str
+    Version      : str
+    Label        : str
+    Soft_Dependencies : list[str|tuple] 
+        #use this node if x modules IDs and version are enabled
 
     def __init_subclass__(cls):
         assert getattr(cls, 'UID'    , None) is not None
         assert getattr(cls, 'Version', None) is not None
+        assert getattr(cls, 'Label'  , None) is not None
+        assert getattr(cls, 'Desc'  ,  None) is not None
 
 class mixin:
-    class node(_mixin_base,_base_node.node):...        
+    class node(_mixin_base,_base_node.node):...
 
 class item:
     class node(_item_base,_base_node.node):...
@@ -31,7 +39,8 @@ class module():
 
     ID           : str
     Version      : str
-    Dependencies : list[str]
+    Label        : str
+    Dependencies : list[str|tuple]
         #raise error if dependencies not found by loader
 
     _loader_mixins_ : list[Any]
@@ -40,6 +49,8 @@ class module():
     def __init_subclass__(cls):
         assert getattr(cls,'UID',None)     is not None
         assert getattr(cls,'Version',None) is not None
+        assert getattr(cls,'Label',None)   is not None
+        assert getattr(cls,'Desc',None)    is not None
 
         cls._loader_items_  = getattr(cls,'_loader_items_',[])
         cls._loader_mixins_ = getattr(cls,'_loader_mixins_',[])
@@ -51,4 +62,11 @@ class module():
                 cls._loader_mixins_.append()
             elif issubclass(v,_item_base):
                 cls._loader_items_.append()
+
+class module_collection():
     
+    def __init__():
+        ...
+
+    def append(self,):
+        ...
