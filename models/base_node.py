@@ -6,7 +6,7 @@ Graph Execution logic in a module constructed onto this set
 from .struct_file_io import BaseModel,defered_archtype,flat_bin,flat_col,flat_ref,context_archtype 
 from .struct_context import context
 from .struct_collection_base import item_base, collection_base, collection_typed_base
-from .struct_construction import ConstrBase
+from .struct_construction import ConstrBase, Bases, Constructed
 from types  import FunctionType
 from typing import Any,Self
 
@@ -392,8 +392,8 @@ class graph(BaseModel, ConstrBase):
     _nodes      : flat_bin[node]
     _subgraphs  : flat_bin[subgraph]
     
-    allowed_nodes   = node_archtype
-    allowed_sockets = socket_archtype
+    # allowed_nodes   = node_archtype
+    # allowed_sockets = socket_archtype
 
     subgraphs : flat_col[subgraph_collection]
 
@@ -408,3 +408,8 @@ class graph(BaseModel, ConstrBase):
         self.context   = self.context(self)
         self.subgraphs = subgraph_collection()
 
+modules = []
+def construct():
+    ''' Construct in place all types using modules list (replaced externally) '''
+    items  = []
+    mixins = []

@@ -44,6 +44,8 @@ class ConstrBase():
     _constr_has_run_   : bool = False
     _constr_in_place_  : bool = True
 
+    _constr_asbase_discard_ : bool
+
 
     @classmethod
     def Construct(cls,recur=True)->Self:
@@ -57,7 +59,8 @@ class ConstrBase():
                 other_bases = Bases.get()[k]
 
                 temp = type('temp', tuple(other_bases), {})
-                other_bases = list(temp.__bases__)
+                other_bases = list(temp.__bases__) 
+                other_bases = [x for x in other_bases if not getattr(b,'_constr_asbase_discard_',False)]
                 # Intermediate class for joining and sorting bases via pythons internal
                 
                 if cls in other_bases : b.remove(cls)
