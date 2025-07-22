@@ -400,8 +400,12 @@ class BaseModel:
     def _io_bin_id_(self,bin):
         return hash(self)
     
-
     def __init_subclass__(cls):
+        cls.__io_setup__()
+        
+    @classmethod
+    def __io_setup__(cls):
+        ...
         cls.__io_orig_fields__ = {}
         cls.__io_orig_bins__   = {}
         cls.__io_orig_cols__   = {}

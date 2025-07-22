@@ -39,6 +39,7 @@ class ConstrBase():
     _constr_whitelist_  : list[str]
     _constr_bases_key_  : str
     _constr_join_lists_ : list[str]
+    _constr_call_post_  : list[str]
 
     _constr_has_run_   : bool = False
     _constr_in_place_  : bool = True
@@ -90,6 +91,11 @@ class ConstrBase():
             if recur:
                 new_type.Construct_Walk()
 
+            for k in getattr(new_type,'_constr_call_post_',[]):
+                if func:=getattr(new_type,k,None):
+                    func()
+            
+
             return new_type
             
 
@@ -112,12 +118,3 @@ class ConstrBase():
                 setattr(cls,k,v.Construct())
 
 
-ensure_bases(reset=False)
-print(Bases.get())
-
-class A(ConstrBase):
-    ...
-class B(ConstrBase):
-    _constr_whitelist_
-    _constr_bases_key_
-    a = A

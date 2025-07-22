@@ -1,16 +1,25 @@
+''' 
+Base graph > node > socket structure, deep copied and constructed with loader
+Graph Execution logic in a module constructed onto this set
+'''
+
 from .struct_file_io import BaseModel,defered_archtype,flat_bin,flat_col,flat_ref,context_archtype 
 from .struct_context import context
 from .struct_collection_base import item_base, collection_base, collection_typed_base
-from typing import Any,Self
+from .struct_construction import ConstrBase
 from types  import FunctionType
+from typing import Any,Self
 
-class node_archtype(context_archtype):...
-class socket_archtype(context_archtype):...
-class subgraph_archtype(context_archtype):...
-class graph_archtype(context_archtype):...
+class node_archtype(defered_archtype):...
+class socket_archtype(defered_archtype):...
+# class subgraph_archtype(defered_archtype):...
+# class graph_archtype(defered_archtype):...
 
-class pointer_socket(BaseModel):
+
+class pointer_socket(BaseModel,ConstrBase):
     ''' Pointer to a socket via node.{dir}_socket.[socket_id] '''
+    _constr_bases_key_ = 'pointer_socket'
+    _constr_call_post_ = ['__io_setup__']
 
     node       : flat_ref[node_archtype]
     socket_id  : str|int
@@ -41,7 +50,9 @@ class pointer_socket(BaseModel):
         raise Exception(f'Socket direction "{self.socket_dir}" is not found!')
 
 
-class socket(BaseModel,item_base):
+class socket(BaseModel,item_base,ConstrBase):
+    _constr_bases_key_ = 'socket'
+    _constr_call_post_ = ['__io_setup__']
     ''' 
     Module constructed socket type, 
     Interactions/rules are defined on socket_group
@@ -104,7 +115,10 @@ class socket(BaseModel,item_base):
                 sl.context._Get()
 
 
-class socket_group[SocketType=socket]():
+class socket_group[SocketType=socket](ConstrBase):
+    _constr_bases_key_ = 'socket_group'
+    _constr_call_post_ = ['__io_setup__']
+ 
     ''' 
     Constructed Class for methods to allow sockets 0+ to interact
     Defines UI interaction & validation of a socket type
@@ -211,8 +225,9 @@ class socket_group[SocketType=socket]():
                 s._context_walk_()
 
 
-
-class socket_collection(BaseModel):
+class socket_collection(BaseModel,ConstrBase):
+    _constr_bases_key_ = 'socket_collection'
+    _constr_call_post_ = ['__io_setup__']
     ''' Accessor of sockets and socket_groups '''
     
     #### Constructed Values ####
@@ -271,7 +286,9 @@ class socket_collection(BaseModel):
         self.sockets[key] = value
 
 
-class node(BaseModel):
+class node(BaseModel,ConstrBase):
+    _constr_bases_key_ = 'node'
+    _constr_call_post_ = ['__io_setup__']
     _io_bin_name_ = 'g_node'
 
     in_sockets   : socket_collection
@@ -308,7 +325,10 @@ class node(BaseModel):
         self.out_sockets.default_sockets()
         self.side_sockets.default_sockets()
 
-class node_collection(BaseModel, collection_typed_base):
+
+class node_collection(BaseModel, collection_typed_base, ConstrBase):
+    _constr_bases_key_ = 'node_collection'
+    _constr_call_post_ = ['__io_setup__']
     _io_bin_name_  = 'node'
     _io_dict_like_ = True
     _io_blacklist_ = ['data']
@@ -329,7 +349,10 @@ class node_collection(BaseModel, collection_typed_base):
         self.context = self.context(self)
         self.data = []
 
-class subgraph(BaseModel, item_base):
+
+class subgraph(BaseModel, item_base, ConstrBase):
+    _constr_bases_key_ = 'subgraph'
+    _constr_call_post_ = ['__io_setup__']
     _io_bin_name_ = 'subgraph'
     nodes : flat_col[node_collection]
 
@@ -342,7 +365,10 @@ class subgraph(BaseModel, item_base):
         self.context = self.context(self)
         self.nodes = node_collection()
 
-class subgraph_collection[SubgraphType=subgraph](BaseModel, collection_base):
+
+class subgraph_collection[SubgraphType=subgraph](BaseModel, collection_base, ConstrBase):
+    _constr_bases_key_ = 'subgraph_collection'
+    _constr_call_post_ = ['__io_setup__']
     _io_bin_name_ = 'subgraph'
     _io_dict_like_ = True
     _io_blacklist_ = ['data']
@@ -360,15 +386,16 @@ class subgraph_collection[SubgraphType=subgraph](BaseModel, collection_base):
                 v._context_walk_()
     
 
-
-class graph(BaseModel):
+class graph(BaseModel, ConstrBase):
+    _constr_call_post_ = ['__io_setup__']
+    _constr_bases_key_ = 'graph'
     _nodes      : flat_bin[node]
     _subgraphs  : flat_bin[subgraph]
     
-    allowed_nodes   : list[node]
-    allowed_sockets : list[socket]
+    allowed_nodes   = node_archtype
+    allowed_sockets = socket_archtype
 
-    subgraphs   : flat_col[subgraph_collection]
+    subgraphs : flat_col[subgraph_collection]
 
     label : str
 
@@ -376,7 +403,7 @@ class graph(BaseModel):
     def _context_walk_(self):
         with self.context.register():
             self.nodes._context_walk_()
-    
+
     def __init__(self):
         self.context   = self.context(self)
         self.subgraphs = subgraph_collection()
