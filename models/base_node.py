@@ -9,6 +9,7 @@ from .struct_collection_base import item_base, collection_base, collection_typed
 from .struct_construction import ConstrBase, Bases, Constructed
 from types  import FunctionType
 from typing import Any,Self
+from collections import defaultdict
 
 class node_archtype(defered_archtype):...
 class socket_archtype(defered_archtype):...
@@ -408,15 +409,32 @@ class graph(BaseModel, ConstrBase):
         self.context   = self.context(self)
         self.subgraphs = subgraph_collection()
 
-items  = []
-mixins = []
 
-modules = []
+module_col : 'local_module_collection' #type:ignore
 
 def construct():
     ''' Construct in place all types using modules list (replaced externally) '''
-    
-    #Resolve, ie ensure versions and nodes have unique IDs
-    for module in modules:
-        module._loader_items_
-        module._loader_mixins_
+    items  = defaultdict(dict)
+    mixins = defaultdict(dict)
+
+    for x in module_col.items:
+        key = getattr(x,'_constr_bases_key_','_uncatagorized')
+        items[key] = x
+
+    node_archtype   = items['node']
+    socket_archtype = items['socket']
+
+    for x in module_col.mixins:
+        key = getattr(x,'_constr_bases_key_','_uncatagorized')
+        mixins[key] = x
+
+    with Bases.set(mixins):
+        pointer_socket.Construct(recur=False)
+        socket.Construct(recur=False)
+        socket_group.Construct(recur=False)
+        socket_collection.Construct(recur=False)
+        node.Construct(recur=False)
+        node_collection.Construct(recur=False)
+        subgraph.Construct(recur=False)
+        subgraph_collection.Construct(recur=False)
+        graph.Construct(recur=False)

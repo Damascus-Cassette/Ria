@@ -1,6 +1,7 @@
 from . import base_node as _base_node 
 from typing import Any
 from inspect import isclass
+from copy import deepcopy
 
 class _mixin_base:
     ''' Mixes into all specified's base class 
@@ -10,6 +11,8 @@ class _mixin_base:
     _constr_asbase_discard_ = True
     Module_Id : str
     Module_V  : str
+    Deps         : list[tuple[str,str,str,str]] 
+    Module       : Any
 
 class _item_base:
     ''' Is a new node class, for execution and hooks 
@@ -19,7 +22,8 @@ class _item_base:
     ID           : str
     Version      : str
     Label        : str
-    Soft_Dependencies : list[str|tuple] 
+    Deps         : list[tuple[str,str,str,str]]
+    Module       : Any 
         #use this node if x modules IDs and version are enabled
 
     def __init_subclass__(cls):
@@ -52,22 +56,18 @@ class module():
         assert getattr(cls,'Label',None)   is not None
         assert getattr(cls,'Desc',None)    is not None
 
-        cls.__module_components__(_mixin_base,'_loader_mixins_')
-        cls.__module_components__(_item_base,'_loader_items_')
+        cls.__module_set_components__(_mixin_base,'_loader_mixins_')
+        cls.__module_set_components__(_item_base,'_loader_items_')
 
     @classmethod
-    def __module_components__(cls,type,attr)->None:
-        if getattr(cls,attr,None) is not None:
-            return
-        for k,v in vars(cls):
-            if not isclass(): 
-                continue
+    def __module_set_components__(cls,type,attr)->None:
         res = []
         for k,v in vars(cls):
             if not isclass(): 
                 continue
             elif issubclass(v,type):
                 res.append()
+                v.Module = cls
         setattr(cls,attr,res)
         return        
 
@@ -166,7 +166,9 @@ class global_module_collection():
 class local_module_collection():
     ''' Module collection used in construction of the graph and internal types '''
     allowed_modules:dict
+    _orig_modules : list[module]
     modules : list[module]
+    
     def __init__(self,g_col:global_module_collection, allowed_modules:dict = None):
         self.modules = []
         self.g_col        = g_col
@@ -177,22 +179,40 @@ class local_module_collection():
         for k,v in self.allowed_modules:
             if module:=self.g_col[k,v]:
                 ret.append(module)
+        self._orig_modules = ret
+    
+    def __deepcopy__(self,memo):
+        ''' Localize all active modules for the construction process to work, but do not deep copy g_col or _orig_modules '''
+        self.modules = self._orig_modules
+
+        new_inst = self.__class__(self.g_col)
+        new_inst._orig_modules = self._orig_modules
+        new_inst.modules = deepcopy(self.modules,memo)
+        new_inst.allowed_modules = deepcopy(self.allowed_modules,memo)
+        memo[id(self)] = new_inst
+        return new_inst
+
 
     def check_deps(self):
         uids = []
         for mod in self.modules:
-            for statement in mod.Dependencies:
+            for statement in mod.Deps:
                 self.verify_statement(statement)
+                self.verify_statement(statement,context_statement=f'On Module {mod.UID}({mod.Version})')
             assert mod.UID not in uids
             uids.append(mod.UID)
+        for item in self.items:
+            for statement in item.Deps:
+                self.verify_statement(statement,context_statement=f'On Module Item {item.Module.UID}({item.Module.Version}) : {item.UID}({item.Version})')
+            
     
-    def verify_statement(self,statement):
+    def verify_statement(self,statement,context_statement=''):
         mode,uid,ver,message = statement
         mode = mode.lower()
         res = self[(uid,ver)]
-        if   mode == 'required' and not res: raise Exception(f'Module Loader {mode} Dependencies Statement Failed: {message}') 
-        elif mode == 'incompatable' and res: raise Exception(f'Module Loader {mode} Dependencies Statement Failed: {message}')
-        elif mode == 'warning'      and res: print(f'Module Loader {mode} Dependencies Statement Failed: {message}')
+        if   mode == 'required' and not res: raise Exception(f'Module Loader {mode} Dependencies Statement Failed {context_statement} : {message}') 
+        elif mode == 'incompatable' and res: raise Exception(f'Module Loader {mode} Dependencies Statement Failed {context_statement} : {message}')
+        elif mode == 'warning'      and res: print(f'Module Loader {mode} Dependencies Statement Failed {context_statement} : {message}')
         else: raise Exception(f'Module Loader {mode} is not ')
 
     def __getitem__(self,key:str|tuple[str,str|ver_expr])->tuple[module]|module|None:
@@ -250,3 +270,4 @@ class local_module_collection():
     def __iter__(self):
         for x in self.modules:
             yield x
+
