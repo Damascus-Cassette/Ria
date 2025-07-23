@@ -192,7 +192,6 @@ class local_module_collection():
         memo[id(self)] = new_inst
         return new_inst
 
-
     def check_deps(self):
         uids = []
         for mod in self.modules:
