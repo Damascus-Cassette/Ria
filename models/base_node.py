@@ -29,7 +29,7 @@ class pointer_socket(BaseModel,ConstrBase):
     def __init__(self):
         self.context = self.context(self)
     
-    context = context.construct(include=['root_graph','sub_graph','node','socket_coll','socket_group','socket'])
+    context = context.construct(include=['meta_graph','root_graph','sub_graph','node','socket_coll','socket_group','socket'])
     def _context_walk_(self):...
 
     @classmethod
@@ -109,7 +109,7 @@ class socket(BaseModel,item_base,ConstrBase):
         self.out_links = []
         self.context = self.context(self)
 
-    context = context.construct(include=['root_graph','sub_graph','node','socket_coll','socket_group'],as_name='socket')
+    context = context.construct(include=['meta_graph','root_graph','sub_graph','node','socket_coll','socket_group'],as_name='socket')
     def _context_walk_(self):
         with self.context.register():        
             for sl in self.out_links:
@@ -219,21 +219,30 @@ class socket_group[SocketType=socket](ConstrBase):
         if socket not in self.parent_col.sockets.values():
             self.parent_col.sockets[key] = socket
 
-    context = context.construct(include=['root_graph','sub_graph','node','socket_coll',],as_name='socket_group')
+    context = context.construct(include=['meta_graph','root_graph','sub_graph','node','socket_coll',],as_name='socket_group')
     def _context_walk_(self):
         with self.context.register():        
             for s in self.sockets.values():
                 s._context_walk_()
 
 
-class socket_collection(BaseModel,ConstrBase):
+class socket_collection(BaseModel,collection_typed_base,ConstrBase):
+    ''' Accessor of sockets and socket_groups '''
     _constr_bases_key_ = 'socket_collection'
     _constr_call_post_ = ['__io_setup__']
-    ''' Accessor of sockets and socket_groups '''
-    
+
+    _io_bin_name_      = 'socket'
+    _io_dict_like_     = True
+    _io_blacklist_     = ['Groups','groups','data']
+        #Data accessed by IO through dict-like interface.
+
     #### Constructed Values ####
     Groups    : list[socket_group]
     Direction : str
+
+    @property
+    def Bases(self)->dict[str,Any]:
+        return self.context.root_graph.mod_col.items_by_attr('_io_bin_name_','socket')
 
     @classmethod
     def construct(cls,name:str,/,Groups:list[socket_group]|list[socket], Direction:str, **kwargs):
@@ -256,7 +265,7 @@ class socket_collection(BaseModel,ConstrBase):
             assert issubclass(v,socket_group)
             self.groups[v.Group_ID] = v(self)
 
-    context = context.construct(include=['root_graph','sub_graph','node'],as_name='socket_coll')
+    context = context.construct(include=['meta_graph','root_graph','sub_graph','node'],as_name='socket_coll')
     def _context_walk_(self):
         with self.context.register():
             for sg in self.groups.values():
@@ -264,28 +273,18 @@ class socket_collection(BaseModel,ConstrBase):
 
     #### Instance Values ####
     groups  : dict[socket_group]
-    sockets : dict[socket]
+    data    : dict[socket]
 
     def __init__(self):
         self.context = self.context(self)
-        self.sockets = {}
+        self.data = {}
         self.groups  = {}
         for v in self.Groups:
             self.groups[v.Group_ID] = v(self)
 
-
     def default_sockets(self):
         for k,v in self.groups.items():
             v.default_sockets()
-
-    def values(self): return self.sockets.values()
-    def items(self): return self.sockets.items()
-    def keys(self): return self.sockets.keys()
-    def __getitem__(self,key:str)->socket:
-        return self.sockets[key]
-    def __setitem__(self,key,value:socket):
-        self.sockets[key] = value
-
 
 class node(BaseModel,ConstrBase):
     _constr_bases_key_ = 'node'
@@ -308,18 +307,20 @@ class node(BaseModel,ConstrBase):
         assert issubclass(cls.out_sockets,  socket_collection)
         assert issubclass(cls.side_sockets, socket_collection)
 
-    context = context.construct(include=['root_graph','sub_graph'],as_name='node')
+    context = context.construct(include=['meta_graph','root_graph','sub_graph'],as_name='node')
     def _context_walk_(self):
         with self.context.register():
             self.in_sockets._context_walk_()
             self.out_sockets._context_walk_()
             self.side_sockets._context_walk_()
 
-    def __init__(self):
+    def __init__(self,/,*,default_sockets:bool = False):
         self.context = self.context(self)
         self.in_sockets  = self.in_sockets()
         self.out_sockets = self.out_sockets()
         self.side_sockets = self.side_sockets()
+        if default_sockets:
+            self.default_sockets()
 
     def default_sockets(self):
         self.in_sockets.default_sockets()
@@ -336,11 +337,11 @@ class node_collection(BaseModel, collection_typed_base, ConstrBase):
 
     @property
     def Bases(self)->dict[str,Any]:
-        return self.context.Exec_Node_Types
+        return self.context.root_graph.mod_col.items_by_attr('_io_bin_name_','g_node')
 
     data : list[node_archtype]
 
-    context = context.construct(include=['root_graph','sub_graph'])
+    context = context.construct(include=['meta_graph','root_graph','sub_graph'])
     def _context_walk_(self):
         with self.context.register():
             for v in self.data.values:
@@ -357,7 +358,7 @@ class subgraph(BaseModel, item_base, ConstrBase):
     _io_bin_name_ = 'subgraph'
     nodes : flat_col[node_collection]
 
-    context = context.construct(include=['root_graph'],as_name = 'sub_graph')
+    context = context.construct(include=['meta_graph','root_graph'],as_name = 'sub_graph')
     def _context_walk_(self):
         with self.context.register():
             self.nodes._context_walk_()
@@ -373,14 +374,14 @@ class subgraph_collection[SubgraphType=subgraph](BaseModel, collection_base, Con
     _io_bin_name_ = 'subgraph'
     _io_dict_like_ = True
     _io_blacklist_ = ['data']
-    Base : subgraph
+    Base = subgraph
     data : dict[subgraph]
 
     def __init__(self):
         self.context = self.context(self)
         self.data = []
 
-    context = context.construct(include=['root_graph','sub_graph'])
+    context = context.construct(include=['meta_graph','root_graph','sub_graph'])
     def _context_walk_(self):
         with self.context.register():
             for v in self.data:
@@ -397,6 +398,7 @@ class graph(BaseModel, ConstrBase):
 
     _nodes      : flat_bin[node]
     _subgraphs  : flat_bin[subgraph]
+    subgraphs : flat_col[subgraph_collection]
 
     active      : bool = False
 
@@ -404,19 +406,34 @@ class graph(BaseModel, ConstrBase):
     
     module_col   : local_module_collection 
     
-    subgraphs : flat_col[subgraph_collection]
 
     label : str
 
-    context = context.construct(as_name = 'root_graph')
+    context = context.construct(include = ['meta_graph'],as_name = 'root_graph')
     def _context_walk_(self):
         with self.context.register():
             self.nodes._context_walk_()
 
-    def __init__(self):
+    def __init__(self,modules_iten:dict=None):
         self.context   = self.context(self)
-        self.subgraphs = subgraph_collection()
+        self.module_col = local_module_collection(modules_iten=modules_iten)
+        self.subgraphs  = subgraph_collection()
 
+
+class graph_collection(BaseModel, collection_base, ConstrBase):
+    _constr_bases_key_ = 'graph_collection'
+    _constr_call_post_ = ['__io_setup__']
+    _io_bin_name_ = 'graph'
+    _io_dict_like_ = True
+    _io_blacklist_ = ['data']
+    Base = graph
+    data : dict[subgraph]
+
+    context = context.construct(include=['meta_graph'])
+    def _context_walk_(self):
+        with self.context.register():
+            for v in self.data:
+                v._context_walk_()
 
 class meta_graph(BaseModel, ConstrBase):
     ''' Should have a single instance, holds graphs, sets active. If more than one instance the latest active's modules are used. '''
@@ -424,6 +441,14 @@ class meta_graph(BaseModel, ConstrBase):
     _constr_call_post_ = ['__io_setup__']
     _constr_bases_key_ = 'metagraph'
     Global_Module_Pool = Global_Module_Pool
+
+    _graphs  : flat_bin[graph]
+    graphs   : flat_col[graph_collection]
+
+    context = context.construct(as_name='meta_graph')
+    def _context_walk_(self):
+        with self.context.register():
+            self.graph._context_walk_()
 
     def _Set_As_Active_Construction(self,graph_inst:graph):
         ''' Construct in place all types using modules list '''
@@ -447,6 +472,7 @@ class meta_graph(BaseModel, ConstrBase):
             subgraph.Construct(recur=False)
             subgraph_collection.Construct(recur=False)
             graph.Construct(recur=False)
+            graph_collection.Construct(recur=False)
             self.__class__.Construct(recur=False)
 
 

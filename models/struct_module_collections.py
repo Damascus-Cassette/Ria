@@ -4,6 +4,7 @@ from .struct_module import ver_expr,module,_item_base,_mixin_base
 from .struct_file_io import BaseModel
 import copy
 
+class _unset:...
 
 class global_module_collection():
     '''Global module collection, all loaded modules preconstruction'''
@@ -118,7 +119,41 @@ class local_module_collection(BaseModel):
         if   mode == 'required' and not res: raise Exception(f'Module Loader {mode} Dependencies Statement Failed {context_statement} : {message}') 
         elif mode == 'incompatable' and res: raise Exception(f'Module Loader {mode} Dependencies Statement Failed {context_statement} : {message}')
         elif mode == 'warning'      and res: print(f'Module Loader {mode} Dependencies Statement Failed {context_statement} : {message}')
+        elif mode == 'enable_if_any':   ...
+        elif mode == 'enable_if_all':   ...
+            #TODO: enable_if is item exclusive. Enforce inside statment somehow. 
         else: raise Exception(f'Module Loader {mode} is not ')
+    
+    def item_statements_enabled(self,item)->bool:
+        ''' Determine if an item should be enabled to be added based on statements'''
+        any_statements = []
+        all_statements = []
+
+        for statement in item.Deps:
+            if statement[0].lower() == 'enable_if_any':
+                any_statements.append(self.item_statement_enabled(self,statement))
+            elif statement[0].lower() == 'enable_if_all':
+                all_statements.append(self.item_statement_enabled(self,statement))
+        
+        if all_statements:
+            all_res = all(all_statements)
+        else:
+            all_res = True
+        
+        if any_statements:
+            any_res = any(any_statements)
+        else:
+            any_res = True
+        
+        return any_res and all_res
+
+    def item_statement_enabled(self,statement,context_statement='')->bool:
+        #enabled_if is implicitly an AND rather than an or. 
+        mode,uid,ver,message = statement
+        mode = mode.lower()
+        res = self[(uid,ver)]
+        return True if res else False
+
 
     def __getitem__(self,key:str|tuple[str,str|ver_expr])->tuple[module]|module|None:
         if isinstance(key,str):
@@ -160,10 +195,21 @@ class local_module_collection(BaseModel):
 
     @property
     def items(self)->list[_item_base]:
-        #TODO: Filter with dependency statements!
-        ret = []
+        ''' Filter allowed items with statement evaluation '''
+        _ret = []
+        ret  = []
         for x in self.modules:
-            ret.extend(x._loader_items_)
+            _ret.extend(x._loader_items_)
+        for x in _ret:
+            if self.item_statements_enabled(x):
+                ret.append(x)
+        return ret
+
+    def items_by_attr(self,attr,value)->list[_item_base]:
+        ret = []
+        for x in self.items:
+            if getattr(x,attr,_unset) == value:
+                ret.append(x)
         return ret
 
     @property
@@ -177,3 +223,4 @@ class local_module_collection(BaseModel):
         for x in self.modules:
             yield x
 
+    

@@ -21,9 +21,9 @@ class collection_base[T=item_base]():
             ret[x.key] = x
         return ret
     
-    def new(self,key,label,/,*,args,kwargs):
+    def new(self,key,label,*args,**kwargs):
         assert key not in self._data.keys()
-        inst = self.Base()
+        inst = self.Base(*args,**kwargs)
         inst.label = label
         inst.key   = key
         self.data.append(inst)
@@ -66,10 +66,7 @@ class collection_typed_base(collection_base):
     #### Constructed Values ####
     Bases : dict[str,Any]
     
-    def new(self, type:str|Any, key, label,
-            /,*,args:list=None,kwargs:dict=None):
-        if args   is None: args   = []
-        if kwargs is None: kwargs = {}
+    def new(self, type:str|Any, key, label,*args,**kwargs):
 
         if isinstance(type,str): assert type in self.Bases.keys()
         else:                    assert type in self.Bases.values()
