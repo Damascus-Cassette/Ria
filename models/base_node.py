@@ -386,16 +386,24 @@ class subgraph_collection[SubgraphType=subgraph](BaseModel, collection_base, Con
             for v in self.data:
                 v._context_walk_()
     
+from .struct_module_collections import (local_module_collection, 
+                                        Global_Module_Pool)         #Singleton inst of global_module_collection
 
 class graph(BaseModel, ConstrBase):
     _constr_call_post_ = ['__io_setup__']
     _constr_bases_key_ = 'graph'
+
+    _io_blacklist_ = ['active','g_module_col']
+
     _nodes      : flat_bin[node]
     _subgraphs  : flat_bin[subgraph]
-    
-    # allowed_nodes   = node_archtype
-    # allowed_sockets = socket_archtype
 
+    active      : bool = False
+
+    Global_Module_Pool = Global_Module_Pool
+    
+    module_col   : local_module_collection 
+    
     subgraphs : flat_col[subgraph_collection]
 
     label : str
@@ -410,31 +418,45 @@ class graph(BaseModel, ConstrBase):
         self.subgraphs = subgraph_collection()
 
 
-module_col : 'local_module_collection' #type:ignore
+class meta_graph(BaseModel, ConstrBase):
+    ''' Should have a single instance, holds graphs, sets active. If more than one instance the latest active's modules are used. '''
+    ''' Current design limitation of structure for flexibility to instnace manually in user modules. '''
+    _constr_call_post_ = ['__io_setup__']
+    _constr_bases_key_ = 'metagraph'
+    Global_Module_Pool = Global_Module_Pool
 
-def construct():
-    ''' Construct in place all types using modules list (replaced externally) '''
+    def _Set_As_Active_Construction(self,graph_inst:graph):
+        ''' Construct in place all types using modules list '''
+        ''' This does limit the active graph count to 1, inactive graphs will have to disable hooks '''
+
+        module_col = graph_inst.module_col
+        assert graph_inst.active
+        
+        mixins = defaultdict(dict)
+        for x in module_col.mixins:
+            key = getattr(x,'_constr_bases_key_','_uncatagorized')
+            mixins[key] = x
+
+        with Bases.set(mixins):
+            pointer_socket.Construct(recur=False)
+            socket.Construct(recur=False)
+            socket_group.Construct(recur=False)
+            socket_collection.Construct(recur=False)
+            node.Construct(recur=False)
+            node_collection.Construct(recur=False)
+            subgraph.Construct(recur=False)
+            subgraph_collection.Construct(recur=False)
+            graph.Construct(recur=False)
+            self.__class__.Construct(recur=False)
+
+
+
+def _Load_Types():
     items  = defaultdict(dict)
-    mixins = defaultdict(dict)
 
-    for x in module_col.items:
+    for x in global_module_col.items:
         key = getattr(x,'_constr_bases_key_','_uncatagorized')
         items[key] = x
 
     node_archtype   = items['node']
     socket_archtype = items['socket']
-
-    for x in module_col.mixins:
-        key = getattr(x,'_constr_bases_key_','_uncatagorized')
-        mixins[key] = x
-
-    with Bases.set(mixins):
-        pointer_socket.Construct(recur=False)
-        socket.Construct(recur=False)
-        socket_group.Construct(recur=False)
-        socket_collection.Construct(recur=False)
-        node.Construct(recur=False)
-        node_collection.Construct(recur=False)
-        subgraph.Construct(recur=False)
-        subgraph_collection.Construct(recur=False)
-        graph.Construct(recur=False)

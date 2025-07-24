@@ -1,7 +1,5 @@
-from . import base_node as _base_node 
 from typing import Any
 from inspect import isclass
-from copy import deepcopy
 
 class _mixin_base:
     ''' Mixes into all specified's base class 
@@ -32,11 +30,6 @@ class _item_base:
         assert getattr(cls, 'Label'  , None) is not None
         assert getattr(cls, 'Desc'  ,  None) is not None
 
-class mixin:
-    class node(_mixin_base,_base_node.node):...
-
-class item:
-    class node(_item_base,_base_node.node):...
     
 class module():
     ''' Inherit onto base '''
@@ -119,154 +112,47 @@ class ver_expr():
     
     operations = ['>','<','=','!']
 
-class global_module_collection():
-    '''Global module collection, all loaded modules preconstruction'''
+from collections import defaultdict
 
-    def __init__(self):
-        self.modules = []
+class meta_graph(BaseModel, ConstrBase):
+    ''' Should have a single instance, holds graphs, sets active. If more than one instance the latest active's modules are used. '''
+    ''' Current design limitation of structure for flexibility to instnace manually in user modules. '''
+    _constr_call_post_ = ['__io_setup__']
+    _constr_bases_key_ = 'metagraph'
+    Global_Module_Pool = Global_Module_Pool
 
-    def __getitem__(self,key:str|tuple[str,str|ver_expr])->tuple[module]|module:
-        if isinstance(key,str):
-            return self.find_by_uid(key)
-        elif isinstance(key,tuple):
-            if key[1].startswith(tuple(ver_expr.operations)):
-                subset = self.find_by_uid(key[0])
-                expr   = ver_expr(key[1])
-                return self.filter_by_expr(subset,expr)
-            else:
-                subset = self.find_by_uid(key[0])
-                for module in subset:
-                    if module.Version == key[1]:
-                        return module
+    def _Set_As_Active_Construction(self,graph_inst:graph):
+        ''' Construct in place all types using modules list '''
+        ''' This does limit the active graph count to 1, Non-active graphs will have to'''
 
-    def find_by_uid(self,uid):
-        res = []
-        for x in self.modules:
-            if x.UID == uid:
-                res.append(x)
-        return res
+        module_col = graph_inst.module_col
+        assert graph_inst.active
+        
+        mixins = defaultdict(dict)
+        for x in module_col.mixins:
+            key = getattr(x,'_constr_bases_key_','_uncatagorized')
+            mixins[key] = x
 
-    def filter_by_expr(self,subset, expr:str):
-        res = []
-        for mod in subset:
-            if expr(mod.Version):
-                res.append(mod)
-        return res
+        with Bases.set(mixins):
+            pointer_socket.Construct(recur=False)
+            socket.Construct(recur=False)
+            socket_group.Construct(recur=False)
+            socket_collection.Construct(recur=False)
+            node.Construct(recur=False)
+            node_collection.Construct(recur=False)
+            subgraph.Construct(recur=False)
+            subgraph_collection.Construct(recur=False)
+            graph.Construct(recur=False)
+            self.__class__.Construct(recur=False)
 
-    def append(self,module):
-        self.modules.append(module)
 
-    def extend(self,module_list):
-        self.modules.extend(module)
 
-    def __iter__(self):
-        for x in self.modules:
-            yield x
-            
-class local_module_collection():
-    ''' Module collection used in construction of the graph and internal types '''
-    allowed_modules:dict
-    _orig_modules : list[module]
-    modules : list[module]
-    
-    def __init__(self,g_col:global_module_collection, allowed_modules:dict = None):
-        self.modules = []
-        self.g_col        = g_col
-        self.allowed_modules = allowed_modules
+def _Load_Types():
+    items  = defaultdict(dict)
 
-    def set_modules(self):
-        ret = []
-        for k,v in self.allowed_modules:
-            if module:=self.g_col[k,v]:
-                ret.append(module)
-        self._orig_modules = ret
-    
-    def __deepcopy__(self,memo):
-        ''' Localize all active modules for the construction process to work, but do not deep copy g_col or _orig_modules '''
-        self.modules = self._orig_modules
+    for x in global_module_col.items:
+        key = getattr(x,'_constr_bases_key_','_uncatagorized')
+        items[key] = x
 
-        new_inst = self.__class__(self.g_col)
-        new_inst._orig_modules = self._orig_modules
-        new_inst.modules = deepcopy(self.modules,memo)
-        new_inst.allowed_modules = deepcopy(self.allowed_modules,memo)
-        memo[id(self)] = new_inst
-        return new_inst
-
-    def check_deps(self):
-        uids = []
-        for mod in self.modules:
-            for statement in mod.Deps:
-                self.verify_statement(statement)
-                self.verify_statement(statement,context_statement=f'On Module {mod.UID}({mod.Version})')
-            assert mod.UID not in uids
-            uids.append(mod.UID)
-        for item in self.items:
-            for statement in item.Deps:
-                self.verify_statement(statement,context_statement=f'On Module Item {item.Module.UID}({item.Module.Version}) : {item.UID}({item.Version})')
-            
-    
-    def verify_statement(self,statement,context_statement=''):
-        mode,uid,ver,message = statement
-        mode = mode.lower()
-        res = self[(uid,ver)]
-        if   mode == 'required' and not res: raise Exception(f'Module Loader {mode} Dependencies Statement Failed {context_statement} : {message}') 
-        elif mode == 'incompatable' and res: raise Exception(f'Module Loader {mode} Dependencies Statement Failed {context_statement} : {message}')
-        elif mode == 'warning'      and res: print(f'Module Loader {mode} Dependencies Statement Failed {context_statement} : {message}')
-        else: raise Exception(f'Module Loader {mode} is not ')
-
-    def __getitem__(self,key:str|tuple[str,str|ver_expr])->tuple[module]|module|None:
-        if isinstance(key,str):
-            return self.find_by_uid(key)
-        elif isinstance(key,tuple):
-            if key[1].startswith(tuple(ver_expr.operations)):
-                subset = self.find_by_uid(key[0])
-                expr   = ver_expr(key[1])
-                return self.filter_by_expr(subset,expr)
-            else:
-                subset = self.find_by_uid(key[0])
-                for module in subset:
-                    if module.Version == key[1]:
-                        return module
-
-    def find_by_uid(self,uid):
-        res = []
-        for x in self.modules:
-            if x.UID == uid:
-                res.append(x)
-        return res
-
-    def filter_by_expr(self,subset, expr:str):
-        res = []
-        for mod in subset:
-            if expr(mod.Version):
-                res.append(mod)
-        return res
-    
-    def append(self,item:tuple|module):
-        if isinstance(item,tuple):
-            self.allowed_modules[item[0]] = item[1]
-        else:
-            self.modules.append(item)
-
-    def extend(self,module_list):
-        for x in module_list:
-            self.append(x)
-
-    @property
-    def items(self)->list[_item_base]:
-        ret = []
-        for x in self.modules:
-            ret.extend(x._loader_items_)
-        return ret
-
-    @property
-    def mixins(self)->list[_mixin_base]:
-        ret = []
-        for x in self.modules:
-            ret.extend(x._loader_mixins_)
-        return ret
-
-    def __iter__(self):
-        for x in self.modules:
-            yield x
-
+    node_archtype   = items['node']
+    socket_archtype = items['socket']
