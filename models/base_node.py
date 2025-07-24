@@ -450,13 +450,13 @@ class meta_graph(BaseModel, ConstrBase):
             self.__class__.Construct(recur=False)
 
 
-
 def _Load_Types():
+    ''' Fullfill object types post loader, pre-import'''
     items  = defaultdict(dict)
 
-    for x in global_module_col.items:
+    for x in Global_Module_Pool.items:
         key = getattr(x,'_constr_bases_key_','_uncatagorized')
         items[key] = x
 
-    node_archtype   = items['node']
-    socket_archtype = items['socket']
+    node_archtype.types   = items['node']
+    socket_archtype.types = items['socket']
