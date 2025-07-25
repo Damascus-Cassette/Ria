@@ -253,7 +253,7 @@ class local_module_collection(global_module_collection):
         ret = {}
         for x in self.items:
             if getattr(x,attr,_unset) == value:
-                ret[x.key] = x
+                ret[x.UID] = x
         return ret
 
     @property
