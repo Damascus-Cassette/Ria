@@ -48,7 +48,7 @@ class global_module_collection():
         self.modules.append(module)
 
     def extend(self,module_list):
-        self.modules.extend(module)
+        self.modules.extend(module_list)
 
     def __iter__(self):
         for x in self.modules:

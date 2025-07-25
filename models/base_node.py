@@ -3,13 +3,14 @@ Base graph > node > socket structure, deep copied and constructed with loader
 Graph Execution logic in a module constructed onto this set
 '''
 
-from .struct_file_io import BaseModel,defered_archtype,flat_bin,flat_col,flat_ref,context_archtype 
-from .struct_context import context
+from .struct_file_io         import BaseModel, defered_archtype,flat_bin,flat_col,flat_ref 
+from .struct_context         import context
 from .struct_collection_base import item_base, collection_base, collection_typed_base
-from .struct_construction import ConstrBase, Bases, Constructed
-from types  import FunctionType
-from typing import Any,Self
-from collections import defaultdict
+from .struct_construction    import ConstrBase, Bases, Constructed
+
+from types                   import FunctionType
+from typing                  import Any,Self
+from collections             import defaultdict
 
 class node_archtype(defered_archtype):...
 class socket_archtype(defered_archtype):...
@@ -435,6 +436,7 @@ class graph_collection(BaseModel, collection_base, ConstrBase):
             for v in self.data:
                 v._context_walk_()
 
+
 class meta_graph(BaseModel, ConstrBase):
     ''' Should have a single instance, holds graphs, sets active. If more than one instance the latest active's modules are used. '''
     ''' Current design limitation of structure for flexibility to instnace manually in user modules. '''
@@ -486,3 +488,16 @@ def _Load_Types():
 
     node_archtype.types   = items['node']
     socket_archtype.types = items['socket']
+
+def general_test():
+    print(pointer_socket)
+    print(socket)
+    print(socket_group)
+    print(socket_collection)
+    print(node)
+    print(node_collection)
+    print(subgraph)
+    print(subgraph_collection)
+    print(graph)
+    print(graph_collection)
+    print(meta_graph)

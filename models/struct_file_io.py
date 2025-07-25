@@ -5,6 +5,11 @@ from types  import UnionType, GenericAlias
 from contextlib  import contextmanager, ExitStack
 from contextvars import ContextVar
 from collections import OrderedDict,defaultdict
+
+from types                   import FunctionType
+from typing                  import Any,Self
+from collections             import defaultdict
+
 class _unset():...
 class _defaultdict(dict):
     def __missing__(self,key):
