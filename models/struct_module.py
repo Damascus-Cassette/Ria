@@ -1,5 +1,6 @@
-from typing import Any
+from packaging.version import Version as VersionType
 from inspect import isclass
+from typing import Any
 
 class _mixin_base:
     ''' Mixes into all specified's base class 
@@ -30,6 +31,9 @@ class _item_base:
         assert getattr(cls, 'Label'  , None) is not None
         assert getattr(cls, 'Desc'  ,  None) is not None
 
+        cls._Version = VersionType(cls.Version)
+        cls.Version  = cls._Version.release
+
     
 class module():
     ''' Inherit onto base '''
@@ -48,69 +52,60 @@ class module():
         assert getattr(cls,'Version',None) is not None
         assert getattr(cls,'Label',None)   is not None
         assert getattr(cls,'Desc',None)    is not None
+        
+        cls._Version = VersionType(cls.Version)
+        cls.Version  = cls._Version.release
 
-        cls.__module_set_components__(_mixin_base,'_loader_mixins_')
-        cls.__module_set_components__(_item_base,'_loader_items_')
+        
+        _mixins = cls.__module_set_components__(_mixin_base, '_loader_mixins_' )
+        _items  = cls.__module_set_components__(_item_base,  '_loader_items_'  )
+        print(f'ITEMS: {_items}')
+        print(f'MIXINS: {_mixins}')
+        for x in _items:
+            x.Module = cls
 
     @classmethod
     def __module_set_components__(cls,type,attr)->None:
-        res = []
-
-        for k,v in vars(cls).items():
-            if not isclass(v): 
-                continue
-            elif issubclass(v,type):
-                print(v, 'IS OF TYPE', type)
-                res.append(v)
-                v.Module = cls
-        setattr(cls,attr,res)
+        print('Called Module Set Components!!') 
+        if (res:=getattr(cls,attr,None)) is None:
+            res = []
+            for k,v in vars(cls).items():
+                if not isclass(v): 
+                    continue
+                elif issubclass(v,type):
+                    res.append(v)
+            setattr(cls,attr,res)
+        return res
         
 
 class ver_expr():
     ''' Version compatability expression, such as '<5.3,>4.2,!4.41a,=4.2' 
-    TODO: Switch to packaging.version.parse instead of standard!
+    Using packaging.version.Version
     '''
-    src_indv : list[str]
-    src_expr : str
+
+    src_ops = list[tuple[str,VersionType]]
 
     def __init__(self,expr:str):
-        src = [x.replace(' ','') for x in expr.split(',') if x ]
-        self.src_expr = expr
-        self.src_indv  = src
-
-    def __call__(self,evaluated_Version):
-        return all([self.check_indv(x,evaluated_Version) for x in self.src_indv])
-    
-    def check_indv(self,check,src)->bool:
-        ''' Breach each into a numerical set, check if expression matches '''
-        ''' 4.1a > 3.1b via split to digit, zfill, append, then regular string operands '''        
-        s_num, s_stg, _     = self.standard(src)
-        c_num, c_stg, c_ops = self.standard(check)
-
-        if len(s_num) > len(c_num):
-            c_num = c_num.zfill(len(s_num))
-        elif len(s_num) < len(c_num):
-            s_num = s_num.zfill(len(c_num))
+        self.src_ops = []
+        src = [x.replace(' ','') for x in expr.split(',') if x]
         
-        print(c_num,c_stg)
-        print(s_num,s_stg)
-        c_num = str(c_num) + c_stg
-        s_num = str(s_num) + s_stg
-        
-        assert c_ops
+        for x in src:
+            split = x.split('(',1)
+            assert split[1][-1] == ')'
+            ops = split[0]
+            val = split[1][0:-1]
+            val = VersionType(val)
 
-        val = [self.ops(x,c_num,s_num) for x in c_ops]
-        print('RESULT IS:',c_num,s_num, {c_ops[i]:val[i] for i in range(len(val))})
-        val = all(val)
-        
-        return val
-    
-    def standard(self,check:str)->list[str,str|int,str]:
-        num = ''.join([x for x in check if x.isdigit()])
-        stg = ''.join([x for x in check if x.isalnum() and not x.isdigit()])
-        ops = ''.join([x for x in check if not x.isalnum() and not x == '.'])
-        ops = ops.replace('!=','!')
-        return (num, stg, ops)
+            for x in ops:
+                self.src_ops.append((x,val))
+
+    def __call__(self,version:VersionType):
+        print(f'CALLED VER_EXPR {self.src_ops} WITH {version}')
+        if isinstance(version,tuple):
+            return all(self.ops(x[0], x[1].release, version) for x in self.src_ops)            
+        elif not isinstance(version,VersionType):
+            version = VersionType(version)
+        return all(self.ops(x[0], x[1], version) for x in self.src_ops)
     
     def ops(self,op,src,check):
         assert op in self.operations

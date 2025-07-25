@@ -1,5 +1,5 @@
 
-
+from packaging.version import Version as VersionType
 from .struct_module import ver_expr,module,_item_base,_mixin_base
 from .struct_file_io import BaseModel
 import copy
@@ -33,23 +33,28 @@ class global_module_collection():
             if key[1].startswith(tuple(ver_expr.operations)):
                 subset = self.find_by_uid(key[0])
                 expr   = ver_expr(key[1])
-                return self.filter_by_expr(subset,expr)
+                print(f'FILTERING WITH EXPR:"{key[1]}"')
+                return self.filter_by_expr(subset, expr)
+            
             else:
                 print(f'TRYING TO FIND TUPLE {key}')
                 subset = self.find_by_uid(key[0])
+
                 if not subset:
-                    raise Exception('Unable to find any module with the UID: {key[0]}')
+                    raise Exception(f'Unable to find any module with the UID: {key[0]}')
+                
                 if key[1] == '^':
                     highest = subset[0]
                     for module in subset:
-                        if module.Version>highest.Version:
-                            #TODO: Convert to agnostic type comparison used in local
+                        if module._Version>highest._Version:
                             highest = module
                     return highest
 
                 for module in subset:
-                    if module.Version == key[1]:
+                    if module.Version == VersionType(key[1]).release:
                         return module
+
+                    
         raise Exception(f'Unable to find key {key}')
 
     def find_by_uid(self,uid):
@@ -57,6 +62,7 @@ class global_module_collection():
         for x in self.modules:
             if x.UID == uid:
                 res.append(x)
+
         return res
 
     def filter_by_expr(self,subset, expr:str):
@@ -95,7 +101,7 @@ Global_Module_Pool = global_module_collection()
     #Singleton, Consider different solution later
 
 
-class local_module_collection(BaseModel):
+class local_module_collection(global_module_collection):
     ''' Module collection used in construction of the graph and internal types '''
 
     _io_whitelist_ = ['module_iten']
@@ -112,8 +118,8 @@ class local_module_collection(BaseModel):
             self.module_iten = copy.copy(self.G_Col.defaults)
         else:
             self.module_iten = module_iten
-            self.set_modules()
-            self.check_deps()
+        self.set_modules()
+        self.check_deps()
 
     def set_modules(self):
         ret = []
@@ -138,13 +144,19 @@ class local_module_collection(BaseModel):
     def verify_statement(self,statement,context_statement=''):
         mode,uid,ver,message = statement
         mode = mode.lower()
+        assert mode in ['required' ,'incompatable' ,'warning', 'enable_if_any', 'enable_if_all']
+
         res = self[(uid,ver)]
-        if   mode == 'required' and not res: raise Exception(f'Module Loader {mode} Dependencies Statement Failed {context_statement} : {message}') 
-        elif mode == 'incompatable' and res: raise Exception(f'Module Loader {mode} Dependencies Statement Failed {context_statement} : {message}')
-        elif mode == 'warning'      and res: print(f'Module Loader {mode} Dependencies Statement Failed {context_statement} : {message}')
-        elif mode == 'enable_if_any':   ...
-        elif mode == 'enable_if_all':   ...
+        print(self.modules)
+        print(statement)
+        print(res)
+
+        if   mode == 'required' and not res: raise Exception(f'Module Loader "{mode}" Dependencies Statement Failed {context_statement} : {message}') 
+        elif mode == 'incompatable' and res: raise Exception(f'Module Loader "{mode}" Dependencies Statement Failed {context_statement} : {message}')
+        elif mode == 'warning'      and res: print(f'Module Loader "{mode}" Dependencies Statement Failed {context_statement} : {message}')
         return True
+        # elif mode == 'enable_if_any':   ...
+        # elif mode == 'enable_if_all':   ...
             #TODO: enable_if is item exclusive. Enforce inside statment somehow. 
     
     def item_statements_enabled(self,item)->bool:
@@ -178,28 +190,28 @@ class local_module_collection(BaseModel):
         return True if res else False
 
 
-    def __getitem__(self,key:str|tuple[str,str|ver_expr])->tuple[module]|module|None:
-        if isinstance(key,str):
-            return self.find_by_uid(key)
-        elif isinstance(key,tuple):
-            if key[1].startswith(tuple(ver_expr.operations)):
-                print(key[1], 'STARTSWITH ANY OF',ver_expr.operations )
-                subset = self.find_by_uid(key[0])
-                expr   = ver_expr(key[1])
-                return self.filter_by_expr(subset,expr)
-            elif key[1].startswith('^'):
-                subset = self.find_by_uid(key[0])
-                highest = subset[0]
-                for x in subset:
-                    if x.Version > highest.Version:
-                        highest = x
-                return highest
+    # def __getitem__(self,key:str|tuple[str,str|ver_expr])->tuple[module]|module|None:
+    #     if isinstance(key,str):
+    #         return self.find_by_uid(key)
+    #     elif isinstance(key,tuple):
+    #         if key[1].startswith(tuple(ver_expr.operations)):
+    #             print(key[1], 'STARTSWITH ANY OF',ver_expr.operations )
+    #             subset = self.find_by_uid(key[0])
+    #             expr   = ver_expr(key[1])
+    #             return self.filter_by_expr(subset,expr)
+    #         elif key[1].startswith('^'):
+    #             subset = self.find_by_uid(key[0])
+    #             highest = subset[0]
+    #             for x in subset:
+    #                 if x.Version > highest.Version:
+    #                     highest = x
+    #             return highest
 
-            else:
-                subset = self.find_by_uid(key[0])
-                for module in subset:
-                    if module.Version == key[1]:
-                        return module
+    #         else:
+    #             subset = self.find_by_uid(key[0])
+    #             for module in subset:
+    #                 if module.Version == key[1]:
+    #                     return module
 
     def find_by_uid(self,uid):
         res = []

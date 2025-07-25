@@ -14,7 +14,7 @@ class main(module):
     Version      = '1.0'
     
     Deps : list[tuple[str,str,str,str]] = [
-        ('required','TestModule','=1.0','Failure_Message')
+        ('required','TestModule','=(1.0)','Failure_Message')
     ]
 
     _loader_items_  : list #= []
@@ -52,6 +52,8 @@ class new_socket(item.socket):
     Deps : list[tuple[str,str,str,str]]
         #Typically only used by nodes & modules.
         #On Items it allows enable_if_any|all statment modes.
+    Module  = main 
+
 
     #### Socket Type Eval & Handling Info ####
     Value_Types             : list[Any]  = [str]
@@ -87,9 +89,10 @@ class new_meta_node(item.node):
     Version = '1.0'
     Label   = 'TestNode'
     Desc    = '''  '''
+    Module  = main 
 
     Deps : list[tuple[str,str,str,str]] = [
-        ('enable_if_any','TestModule','=1.0','Failure_Message')
+        ('enable_if_any','TestModule','=(1.0)','Failure_Message')
     ]
         #Load if these modules, versions
     test_value      = True
@@ -134,3 +137,4 @@ class new_meta_node(item.node):
     #         exec_graph.append(inst)
 
 main._loader_items_ = [new_socket, new_meta_node]
+    #item.Module = main is required when doing this method
