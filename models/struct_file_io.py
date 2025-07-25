@@ -5,11 +5,6 @@ from types  import UnionType, GenericAlias
 from contextlib  import contextmanager, ExitStack
 from contextvars import ContextVar
 from collections import OrderedDict,defaultdict
-
-from types                   import FunctionType
-from typing                  import Any,Self
-from collections             import defaultdict
-
 class _unset():...
 class _defaultdict(dict):
     def __missing__(self,key):
@@ -25,7 +20,6 @@ class defered_archtype:
         cls.types = []
 
 def collapse_type_chain(ty:list)->list:
-    print(ty)
     res = []
     if not isinstance(ty,(tuple,list,set)):
         return [ty]
@@ -269,7 +263,6 @@ class flat_bin[key,*t]:
         return self.data[ref]
 
     def add_defered(self,defered_function):
-        print('CALLED ADD DEFERED')
         self._defered.append(defered_function)
 
     def resolve_defered(self):
@@ -520,13 +513,9 @@ class BaseModel:
         ret = {}
         with self.__enter_context__(mode='export'):     #Enters into bin's context
             ret = ret|(a:=self._export_cols_())
-            # print('_export_cols_ result:',a)
             ret = ret|(a:=self._export_refs_())
-            # print('_export_refs_ result:',a)
             ret = ret|(a:=self._export_fields_())
-            # print('_export_fields_ result:',a)
             ret = ret|(a:=self._export_bins_())              #Resolve bin's export items
-            # print('_export_bins_ result:',a)
         return ret
 
     def _export_bins_(self):
@@ -580,9 +569,6 @@ if __name__ == '__main__':
         _io_strict_ = True
         # def _export_(self):
         #     if not (data:=self.__io_fields__()):
-        #         print(f'GENERATED FIELDS ARE: {data}')
-        #         print(f'SRC  FIELDS ARE: {self.__io_orig_fields__}')
-        #         print(f'SRC  REFS   ARE: {self.__io_orig_refs__}')
         #         raise Exception()
         name : io[str]
         ref  : flat_ref[Self] = None
@@ -623,10 +609,8 @@ if __name__ == '__main__':
     root_a.setup()
 
     root_a_rep = root_a._export_()
-    print(root_a_rep)
 
     root_b = test_root()
     root_b._import_(root_a_rep)
     root_b_rep = root_b._export_()
-    print(root_b_rep)
     # assert root_a_rep == root_b_rep

@@ -55,6 +55,7 @@ class pointer_socket(BaseModel,ConstrBase):
 class socket(BaseModel,item_base,ConstrBase):
     _constr_bases_key_ = 'socket'
     _constr_call_post_ = ['__io_setup__']
+    _io_bin_name_      = 'socket'
     ''' 
     Module constructed socket type, 
     Interactions/rules are defined on socket_group
@@ -144,13 +145,13 @@ class socket_group[SocketType=socket](ConstrBase):
     Socket_Mutatle_Pool : list[socket]
 
     def Socket_Label_Generator(self,socket:socket):
-        return socket.Default_Label
+        return getattr(socket,'Default_Label',socket.Label)
     def Socket_ID_Generator(self,socket:socket):
         ''' Verify ID is Unique before attaching '''
-        uid_base = socket.Default_ID
+        uid_base = getattr(socket,'Default_ID',socket.UID)
         uid = uid_base
         i = 0
-        while uid in self.parent_col.sockets.keys():
+        while uid in self.parent_col.keys():
             i=+1
             uid = uid_base + '.' + str(i).zfill(3)
         return uid
@@ -193,12 +194,10 @@ class socket_group[SocketType=socket](ConstrBase):
 
         return ret
 
-
-
     @property
     def sockets(self):
         ret = {}
-        for k,v in self.parent_col.sockets.items():
+        for k,v in self.parent_col.items():
             if v.group_id == self.Group_ID:
                 ret[k]=v
         return ret
@@ -217,8 +216,8 @@ class socket_group[SocketType=socket](ConstrBase):
 
     def __setitem__(self,key,socket:SocketType):
         socket.group_id = self.Group_ID
-        if socket not in self.parent_col.sockets.values():
-            self.parent_col.sockets[key] = socket
+        if socket not in self.parent_col.values():
+            self.parent_col[key] = socket
 
     context = context.construct(include=['meta_graph','root_graph','sub_graph','node','socket_coll',],as_name='socket_group')
     def _context_walk_(self):
@@ -243,7 +242,7 @@ class socket_collection(BaseModel,collection_typed_base,ConstrBase):
 
     @property
     def Bases(self)->dict[str,Any]:
-        return self.context.root_graph.mod_col.items_by_attr('_io_bin_name_','socket')
+        return self.context.root_graph.module_col.items_by_attr('_io_bin_name_','socket')
 
     @classmethod
     def construct(cls,name:str,/,Groups:list[socket_group]|list[socket], Direction:str, **kwargs):
@@ -260,12 +259,6 @@ class socket_collection(BaseModel,collection_typed_base,ConstrBase):
         kwargs['Direction'] = Direction
         return type(name,(cls,),kwargs)
 
-    def __init__(self):
-        self.context = self.context(self)
-        self.groups  = {}
-        for v in self.Groups:
-            assert issubclass(v,socket_group)
-            self.groups[v.Group_ID] = v(self)
 
     context = context.construct(include=['meta_graph','root_graph','sub_graph','node'],as_name='socket_coll')
     def _context_walk_(self):
@@ -275,11 +268,11 @@ class socket_collection(BaseModel,collection_typed_base,ConstrBase):
 
     #### Instance Values ####
     groups  : dict[socket_group]
-    data    : dict[socket]
+    data    : list[socket]
 
     def __init__(self):
         self.context = self.context(self)
-        self.data = {}
+        self.data    = []
         self.groups  = {}
         for v in self.Groups:
             self.groups[v.Group_ID] = v(self)
@@ -299,8 +292,8 @@ class node(BaseModel,ConstrBase):
 
     def __init_subclass__(cls):
         cls.in_sockets   = socket_collection.construct('in_sockets',   Direction='in',   Groups=getattr(cls,'in_sockets',[]))
-        cls.in_sockets   = socket_collection.construct('out_sockets',   Direction='out',   Groups=getattr(cls,'out_sockets',[]))
-        cls.in_sockets   = socket_collection.construct('side_sockets',   Direction='side',   Groups=getattr(cls,'side_sockets',[]))
+        cls.out_sockets  = socket_collection.construct('out_sockets',  Direction='out',  Groups=getattr(cls,'out_sockets',[]))
+        cls.side_sockets = socket_collection.construct('side_sockets', Direction='side', Groups=getattr(cls,'side_sockets',[]))
 
     context = context.construct(include=['meta_graph','root_graph','sub_graph'],as_name='node')
     def _context_walk_(self):
@@ -311,8 +304,8 @@ class node(BaseModel,ConstrBase):
 
     def __init__(self,/,*,default_sockets:bool = False):
         self.context = self.context(self)
-        self.in_sockets  = self.in_sockets()
-        self.out_sockets = self.out_sockets()
+        self.in_sockets   = self.in_sockets()
+        self.out_sockets  = self.out_sockets()
         self.side_sockets = self.side_sockets()
         if default_sockets:
             self.default_sockets()

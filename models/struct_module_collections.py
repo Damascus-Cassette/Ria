@@ -33,7 +33,6 @@ class global_module_collection():
             if key[1].startswith(tuple(ver_expr.operations)):
                 subset = self.find_by_uid(key[0])
                 expr   = ver_expr(key[1])
-                print(f'FILTERING WITH EXPR:"{key[1]}"')
                 return self.filter_by_expr(subset, expr)
             
             else:
@@ -147,9 +146,7 @@ class local_module_collection(global_module_collection):
         assert mode in ['required' ,'incompatable' ,'warning', 'enable_if_any', 'enable_if_all']
 
         res = self[(uid,ver)]
-        print(self.modules)
-        print(statement)
-        print(res)
+
 
         if   mode == 'required' and not res: raise Exception(f'Module Loader "{mode}" Dependencies Statement Failed {context_statement} : {message}') 
         elif mode == 'incompatable' and res: raise Exception(f'Module Loader "{mode}" Dependencies Statement Failed {context_statement} : {message}')

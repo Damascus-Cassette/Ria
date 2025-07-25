@@ -30,6 +30,8 @@ class main(module):
         test_value = False
     class graph_mixin(_mixin.graph):
         test_value = False
+    class metagraph_mixin(_mixin.meta_graph):
+        test_value = False
 
 class new_socket(item.socket):
     #### Automatic ####

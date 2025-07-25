@@ -3,6 +3,7 @@ from typing import Callable, Any
 #Generic collection
 
 from .struct_context import context
+from contextlib import contextmanager
 
 class item_base():
     key   : str
@@ -24,7 +25,7 @@ class collection_base[T=item_base]():
     def _context_new_item_(self,item):
         if func:=getattr(item,'_context_walk_',None):
             with self.context.In_Last_Context():
-                func()
+                func()            
 
     @property
     def _data(self):
@@ -96,18 +97,22 @@ class collection_typed_base(collection_base):
 
         assert key not in self._data.keys()
 
-        inst = Bases[type](*args,**kwargs)
+        with self.context.In_Last_Context():
+            inst = Bases[type](*args,**kwargs)
         inst.label = label
         inst.key   = key
 
         self.data.append(inst)
 
-        self._context_new_item_(inst)
+        # self._context_new_item_(inst)
         
         return inst
     
     def __setitem__(self,k,item):
-        assert isinstance(k,[x for x in self.Base.values()])
+        print('BASES IN SETITEM:', self.Bases, self)
+        x = tuple(self.Bases.values())
+        print(x)
+        assert isinstance(item,x)
         item.key = k
         self.data.append(item)
         self._context_new_item_(item)

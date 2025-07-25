@@ -59,14 +59,11 @@ class module():
         
         _mixins = cls.__module_set_components__(_mixin_base, '_loader_mixins_' )
         _items  = cls.__module_set_components__(_item_base,  '_loader_items_'  )
-        print(f'ITEMS: {_items}')
-        print(f'MIXINS: {_mixins}')
         for x in _items:
             x.Module = cls
 
     @classmethod
     def __module_set_components__(cls,type,attr)->None:
-        print('Called Module Set Components!!') 
         if (res:=getattr(cls,attr,None)) is None:
             res = []
             for k,v in vars(cls).items():
@@ -100,7 +97,6 @@ class ver_expr():
                 self.src_ops.append((x,val))
 
     def __call__(self,version:VersionType):
-        print(f'CALLED VER_EXPR {self.src_ops} WITH {version}')
         if isinstance(version,tuple):
             return all(self.ops(x[0], x[1].release, version) for x in self.src_ops)            
         elif not isinstance(version,VersionType):
