@@ -9,11 +9,12 @@ from typing import Any
 
 class main(module):
     UID          = 'TestModule'
+    Label        = 'TestModule'
     Desc         = ''' '''
     Version      = '1.0'
     
     Deps : list[tuple[str,str,str,str]] = [
-        ('requires','TestModule','=1.0','Failure_Message')
+        ('required','TestModule','=1.0','Failure_Message')
     ]
 
     _loader_items_  : list #= []

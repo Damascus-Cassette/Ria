@@ -2,6 +2,7 @@
 from typing import Callable, Any
 #Generic collection
 
+from .struct_context import context
 
 class item_base():
     key   : str
@@ -14,6 +15,17 @@ class collection_base[T=item_base]():
     #### Instance Values ####
     data : list[T]
     
+    context = context.construct()
+    def _context_walk_(self):
+        with self.context.register():
+            for x in self.data:
+                if func:=getattr(x,'_context_walk_',None):
+                    func()
+    def _context_new_item_(self,item):
+        if func:=getattr(item,'_context_walk_',None):
+            with self.context.In_Last_Context():
+                func()
+
     @property
     def _data(self):
         ret = {}
@@ -27,9 +39,11 @@ class collection_base[T=item_base]():
         inst.label = label
         inst.key   = key
         self.data.append(inst)
+        self._context_new_item_(inst)
         return inst
 
     def set(self,key,item):
+        self._context_new_item_(item)
         self[key] = item
 
     def clear(self):
@@ -47,6 +61,7 @@ class collection_base[T=item_base]():
         assert isinstance(k,self.Base)
         item.key = k
         self.data.append(item)
+        self._context_new_item_(item)
 
     def values(self): 
         return self._data.values()
@@ -58,26 +73,36 @@ class collection_base[T=item_base]():
         return self._data.keys()
     
     def __init__(self):
+        self.context = self.context(self)
         self.data = []
+
+    def __iter__(self):
+        for v in self.values():
+            yield v
 
 class collection_typed_base(collection_base):
     ''' Collection of multiple allowable types '''
 
     #### Constructed Values ####
     Bases : dict[str,Any]
+        #Replaced in inherited to be filtered property of root_graph.
     
     def new(self, type:str|Any, key, label,*args,**kwargs):
+        Bases = self.Bases
+        print('BASES:',Bases)
 
-        if isinstance(type,str): assert type in self.Bases.keys()
-        else:                    assert type in self.Bases.values()
+        if isinstance(type,str): assert type in Bases.keys()
+        else:                    assert type in Bases.values()
 
         assert key not in self._data.keys()
 
-        inst = self.Bases[type](*args,**kwargs)
+        inst = Bases[type](*args,**kwargs)
         inst.label = label
         inst.key   = key
 
         self.data.append(inst)
+
+        self._context_new_item_(inst)
         
         return inst
     
@@ -85,3 +110,4 @@ class collection_typed_base(collection_base):
         assert isinstance(k,[x for x in self.Base.values()])
         item.key = k
         self.data.append(item)
+        self._context_new_item_(item)

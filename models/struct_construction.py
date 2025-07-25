@@ -60,9 +60,10 @@ class ConstrBase():
 
                 temp = type('temp', tuple(other_bases), {})
                 other_bases = list(temp.__bases__) 
-                other_bases = [x for x in other_bases if not getattr(b,'_constr_asbase_discard_',False)]
+                other_bases = [x for x in other_bases if not getattr(x,'_constr_asbase_discard_',False)]
                 # Intermediate class for joining and sorting bases via pythons internal
-                
+                    #This will have to be changed to be Method Resolution Order based!!!
+                    # This does not support two level inheritance
                 if cls in other_bases : b.remove(cls)
                 for b in cls.__bases__:
                     if b in other_bases: other_bases.remove(b)

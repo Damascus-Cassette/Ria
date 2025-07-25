@@ -249,11 +249,12 @@ class socket_collection(BaseModel,collection_typed_base,ConstrBase):
     def construct(cls,name:str,/,Groups:list[socket_group]|list[socket], Direction:str, **kwargs):
         if not isinstance(Groups,(list,tuple,set)):
             Groups = [Groups]
-        if issubclass(Groups[0],socket):
-            _g = socket_group.construct('main',Sockets=Groups)
-            Groups = [_g]
-        elif issubclass(Groups[0],cls):
-            raise Exception('COLLECTION HAS BEEN PASSED INTO COLLECTION CONSTRUCTION')
+        if len(Groups):
+            if issubclass(Groups[0],socket):
+                _g = socket_group.construct('main',Sockets=Groups)
+                Groups = [_g]
+            elif issubclass(Groups[0],cls):
+                raise Exception('COLLECTION HAS BEEN PASSED INTO COLLECTION CONSTRUCTION')
 
         kwargs['Groups'] = Groups
         kwargs['Direction'] = Direction
@@ -297,16 +298,9 @@ class node(BaseModel,ConstrBase):
     side_sockets : socket_collection
 
     def __init_subclass__(cls):
-        if isinstance(cls.in_sockets,   (list,tuple,set)): 
-            cls.in_sockets   = socket_collection.construct('in_sockets',   Direction='in',   Groups=cls.in_sockets)
-            print(cls.in_sockets)
-        if isinstance(cls.out_sockets,  (list,tuple,set)): 
-            cls.out_sockets  = socket_collection.construct('out_sockets',  Direction='out',  Groups=cls.out_sockets)
-        if isinstance(cls.side_sockets, (list,tuple,set)): 
-            cls.side_sockets = socket_collection.construct('side_sockets', Direction='side', Groups=cls.side_sockets)
-        assert issubclass(cls.in_sockets,   socket_collection)
-        assert issubclass(cls.out_sockets,  socket_collection)
-        assert issubclass(cls.side_sockets, socket_collection)
+        cls.in_sockets   = socket_collection.construct('in_sockets',   Direction='in',   Groups=getattr(cls,'in_sockets',[]))
+        cls.in_sockets   = socket_collection.construct('out_sockets',   Direction='out',   Groups=getattr(cls,'out_sockets',[]))
+        cls.in_sockets   = socket_collection.construct('side_sockets',   Direction='side',   Groups=getattr(cls,'side_sockets',[]))
 
     context = context.construct(include=['meta_graph','root_graph','sub_graph'],as_name='node')
     def _context_walk_(self):
@@ -338,14 +332,14 @@ class node_collection(BaseModel, collection_typed_base, ConstrBase):
 
     @property
     def Bases(self)->dict[str,Any]:
-        return self.context.root_graph.mod_col.items_by_attr('_io_bin_name_','g_node')
+        return self.context.root_graph.module_col.items_by_attr('_io_bin_name_','g_node')
 
     data : list[node_archtype]
 
     context = context.construct(include=['meta_graph','root_graph','sub_graph'])
     def _context_walk_(self):
         with self.context.register():
-            for v in self.data.values:
+            for v in self.data:
                 v._context_walk_()
 
     def __init__(self):
@@ -399,6 +393,7 @@ class graph(BaseModel, ConstrBase):
 
     _nodes      : flat_bin[node]
     _subgraphs  : flat_bin[subgraph]
+
     subgraphs : flat_col[subgraph_collection]
 
     active      : bool = False
@@ -413,11 +408,11 @@ class graph(BaseModel, ConstrBase):
     context = context.construct(include = ['meta_graph'],as_name = 'root_graph')
     def _context_walk_(self):
         with self.context.register():
-            self.nodes._context_walk_()
+            self.subgraphs._context_walk_()
 
-    def __init__(self,modules_iten:dict=None):
-        self.context   = self.context(self)
-        self.module_col = local_module_collection(modules_iten=modules_iten)
+    def __init__(self,module_iten:dict=None):
+        self.context    = self.context(self)
+        self.module_col = local_module_collection(module_iten=module_iten)
         self.subgraphs  = subgraph_collection()
 
 
@@ -428,13 +423,17 @@ class graph_collection(BaseModel, collection_base, ConstrBase):
     _io_dict_like_ = True
     _io_blacklist_ = ['data']
     Base = graph
-    data : dict[subgraph]
+    data : list[subgraph]
 
     context = context.construct(include=['meta_graph'])
     def _context_walk_(self):
         with self.context.register():
             for v in self.data:
                 v._context_walk_()
+
+    def __init__(self):
+        self.data = []
+        self.context = self.context(self)
 
 
 class meta_graph(BaseModel, ConstrBase):
@@ -447,6 +446,10 @@ class meta_graph(BaseModel, ConstrBase):
     _graphs  : flat_bin[graph]
     graphs   : flat_col[graph_collection]
 
+    def __init__(self):
+        self.graphs = graph_collection() 
+        self.context = self.context(self)
+
     context = context.construct(as_name='meta_graph')
     def _context_walk_(self):
         with self.context.register():
@@ -456,26 +459,32 @@ class meta_graph(BaseModel, ConstrBase):
         ''' Construct in place all types using modules list '''
         ''' This does limit the active graph count to 1, inactive graphs will have to disable hooks '''
 
+        for x in self.graphs:
+            x.active = False
+        graph_inst.active = True
+
         module_col = graph_inst.module_col
-        assert graph_inst.active
         
         mixins = defaultdict(dict)
         for x in module_col.mixins:
             key = getattr(x,'_constr_bases_key_','_uncatagorized')
             mixins[key] = x
+        
+        t = Bases.set(mixins)
 
-        with Bases.set(mixins):
-            pointer_socket.Construct(recur=False)
-            socket.Construct(recur=False)
-            socket_group.Construct(recur=False)
-            socket_collection.Construct(recur=False)
-            node.Construct(recur=False)
-            node_collection.Construct(recur=False)
-            subgraph.Construct(recur=False)
-            subgraph_collection.Construct(recur=False)
-            graph.Construct(recur=False)
-            graph_collection.Construct(recur=False)
-            self.__class__.Construct(recur=False)
+        pointer_socket.Construct(recur=False)
+        socket.Construct(recur=False)
+        socket_group.Construct(recur=False)
+        socket_collection.Construct(recur=False)
+        node.Construct(recur=False)
+        node_collection.Construct(recur=False)
+        subgraph.Construct(recur=False)
+        subgraph_collection.Construct(recur=False)
+        graph.Construct(recur=False)
+        graph_collection.Construct(recur=False)
+        self.__class__.Construct(recur=False)
+
+        Bases.reset(t)
 
 
 def _Load_Types():
@@ -488,16 +497,3 @@ def _Load_Types():
 
     node_archtype.types   = items['node']
     socket_archtype.types = items['socket']
-
-def general_test():
-    print(pointer_socket)
-    print(socket)
-    print(socket_group)
-    print(socket_collection)
-    print(node)
-    print(node_collection)
-    print(subgraph)
-    print(subgraph_collection)
-    print(graph)
-    print(graph_collection)
-    print(meta_graph)

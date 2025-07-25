@@ -15,14 +15,20 @@ class context():
         Must be init on parent's init'''
 
     #### Constructed Values ####
+    _Global_Context_Copy : dict[str, Any]
     _Include : list[str]
     _As_Name : str|None  = None
-
+    _Constructed : bool  = False
 
     @classmethod
     def construct(cls, include:list[str]=None, as_name:str|None = None):
-        kwargs = {'_Include':include if include else [],
-                  '_As_Name':as_name}
+        ''' construct context object to initialize with self, 
+        Constext object must be constructed'''
+        if include is None:
+            include = []
+        kwargs = {'_Include': include,
+                  '_As_Name': as_name,
+                  '_Constructed':True}
         return type('Context',(cls,),kwargs)
 
 
@@ -30,6 +36,9 @@ class context():
     _parent  : Any
 
     def __init__(self,parent):
+        assert self._Constructed
+
+        self._Global_Context_Copy = {}
         self._parent = parent
         self._Get()
 
@@ -38,8 +47,25 @@ class context():
             val = _context[k].get()
             setattr(self,k,val)
 
+    def _Copy(self):
+        self._Global_Context_Copy = {}
+        for k,v in _context.items():
+            if not ((_v :=v.get()) is None):
+                self._Global_Context_Copy[k] = _v
+    
+    @contextmanager
+    def In_Last_Context(self):
+        _c_temp = {}
+        for k,v in self._Global_Context_Copy.items():
+            _c_temp[k]=_context[k].set(v)
+        yield
+        for k,v in _c_temp.items():
+            _context[k].reset(_c_temp[k])
+            
+
     @contextmanager
     def register(self):
+        self._Copy()
         self._Get()
         try:
             t = None

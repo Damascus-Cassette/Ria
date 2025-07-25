@@ -9,7 +9,7 @@ from .struct_module_collections import (local_module_collection, Global_Module_P
 
 def load(): 
     from ..base_modules import modules  as base_modules
-    from ..base_modules import defaults as base_module_defaults
+    from ..base_modules import base_module_defaults
     # will have another that loads user modules here as well
     Global_Module_Pool.extend(base_modules)
     Global_Module_Pool.defaults = base_module_defaults

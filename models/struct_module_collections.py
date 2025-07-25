@@ -16,7 +16,17 @@ class global_module_collection():
         self.defaults   = {}
         self.modules    = []
 
+    def load(self):
+        from .loader import load
+        load()
+
     def __getitem__(self,key:str|tuple[str,str|ver_expr])->tuple[module]|module:
+        
+        if not self.modules:
+            #Dirty delayed import for loading modules.
+            #Consider other timing/method. (perhaps on import of a graph base via a passthrough module?)
+            self.load()
+
         if isinstance(key,str):
             return self.find_by_uid(key)
         elif isinstance(key,tuple):
@@ -25,10 +35,22 @@ class global_module_collection():
                 expr   = ver_expr(key[1])
                 return self.filter_by_expr(subset,expr)
             else:
+                print(f'TRYING TO FIND TUPLE {key}')
                 subset = self.find_by_uid(key[0])
+                if not subset:
+                    raise Exception('Unable to find any module with the UID: {key[0]}')
+                if key[1] == '^':
+                    highest = subset[0]
+                    for module in subset:
+                        if module.Version>highest.Version:
+                            #TODO: Convert to agnostic type comparison used in local
+                            highest = module
+                    return highest
+
                 for module in subset:
                     if module.Version == key[1]:
                         return module
+        raise Exception(f'Unable to find key {key}')
 
     def find_by_uid(self,uid):
         res = []
@@ -67,7 +89,7 @@ class global_module_collection():
         for x in self.modules:
             ret.extend(x._loader_mixins_)
         return ret
-    
+
 
 Global_Module_Pool = global_module_collection()
     #Singleton, Consider different solution later
@@ -75,7 +97,6 @@ Global_Module_Pool = global_module_collection()
 
 class local_module_collection(BaseModel):
     ''' Module collection used in construction of the graph and internal types '''
-    allowed_modules:dict
 
     _io_whitelist_ = ['module_iten']
     G_Col = Global_Module_Pool
@@ -87,17 +108,19 @@ class local_module_collection(BaseModel):
     def __init__(self, module_iten:dict = None):
         self.modules = []
         
-        if self.allowed_modules is None:
+        if module_iten is None:
             self.module_iten = copy.copy(self.G_Col.defaults)
         else:
             self.module_iten = module_iten
+            self.set_modules()
+            self.check_deps()
 
     def set_modules(self):
         ret = []
-        for k,v in self.allowed_modules:
+        for k,v in self.module_iten.items():
             if module:=self.G_Col[k,v]:
                 ret.append(module)
-        self._orig_modules = ret
+        self.modules = ret
 
     def check_deps(self):
         uids = []
@@ -108,7 +131,7 @@ class local_module_collection(BaseModel):
             assert mod.UID not in uids
             uids.append(mod.UID)
         for item in self.items:
-            for statement in item.Deps:
+            for statement in getattr(item,'Deps',[]):
                 self.verify_statement(statement,context_statement=f'On Module Item {item.Module.UID}({item.Module.Version}) : {item.UID}({item.Version})')
             
     
@@ -121,19 +144,19 @@ class local_module_collection(BaseModel):
         elif mode == 'warning'      and res: print(f'Module Loader {mode} Dependencies Statement Failed {context_statement} : {message}')
         elif mode == 'enable_if_any':   ...
         elif mode == 'enable_if_all':   ...
+        return True
             #TODO: enable_if is item exclusive. Enforce inside statment somehow. 
-        else: raise Exception(f'Module Loader {mode} is not ')
     
     def item_statements_enabled(self,item)->bool:
         ''' Determine if an item should be enabled to be added based on statements'''
         any_statements = []
         all_statements = []
 
-        for statement in item.Deps:
+        for statement in getattr(item,'Deps',[]):
             if statement[0].lower() == 'enable_if_any':
-                any_statements.append(self.item_statement_enabled(self,statement))
+                any_statements.append(self.item_statement_enabled(statement))
             elif statement[0].lower() == 'enable_if_all':
-                all_statements.append(self.item_statement_enabled(self,statement))
+                all_statements.append(self.item_statement_enabled(statement))
         
         if all_statements:
             all_res = all(all_statements)
@@ -160,9 +183,18 @@ class local_module_collection(BaseModel):
             return self.find_by_uid(key)
         elif isinstance(key,tuple):
             if key[1].startswith(tuple(ver_expr.operations)):
+                print(key[1], 'STARTSWITH ANY OF',ver_expr.operations )
                 subset = self.find_by_uid(key[0])
                 expr   = ver_expr(key[1])
                 return self.filter_by_expr(subset,expr)
+            elif key[1].startswith('^'):
+                subset = self.find_by_uid(key[0])
+                highest = subset[0]
+                for x in subset:
+                    if x.Version > highest.Version:
+                        highest = x
+                return highest
+
             else:
                 subset = self.find_by_uid(key[0])
                 for module in subset:
@@ -185,7 +217,7 @@ class local_module_collection(BaseModel):
     
     def append(self,item:tuple|module):
         if isinstance(item,tuple):
-            self.allowed_modules[item[0]] = item[1]
+            self.module_iten[item[0]] = item[1]
         else:
             self.modules.append(item)
 
@@ -205,11 +237,11 @@ class local_module_collection(BaseModel):
                 ret.append(x)
         return ret
 
-    def items_by_attr(self,attr,value)->list[_item_base]:
-        ret = []
+    def items_by_attr(self, attr, value)->list[_item_base]:
+        ret = {}
         for x in self.items:
             if getattr(x,attr,_unset) == value:
-                ret.append(x)
+                ret[x.key] = x
         return ret
 
     @property

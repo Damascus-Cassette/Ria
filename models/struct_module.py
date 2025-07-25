@@ -55,17 +55,21 @@ class module():
     @classmethod
     def __module_set_components__(cls,type,attr)->None:
         res = []
-        for k,v in vars(cls):
-            if not isclass(): 
+
+        for k,v in vars(cls).items():
+            if not isclass(v): 
                 continue
             elif issubclass(v,type):
-                res.append()
+                print(v, 'IS OF TYPE', type)
+                res.append(v)
                 v.Module = cls
         setattr(cls,attr,res)
-        return        
+        
 
 class ver_expr():
-    ''' Version compatability expression, such as '<5.3,>4.2,!4.41a,=4.2' '''
+    ''' Version compatability expression, such as '<5.3,>4.2,!4.41a,=4.2' 
+    TODO: Switch to packaging.version.parse instead of standard!
+    '''
     src_indv : list[str]
     src_expr : str
 
@@ -77,7 +81,7 @@ class ver_expr():
     def __call__(self,evaluated_Version):
         return all([self.check_indv(x,evaluated_Version) for x in self.src_indv])
     
-    def check_indv(self,src,check)->bool:
+    def check_indv(self,check,src)->bool:
         ''' Breach each into a numerical set, check if expression matches '''
         ''' 4.1a > 3.1b via split to digit, zfill, append, then regular string operands '''        
         s_num, s_stg, _     = self.standard(src)
@@ -85,20 +89,26 @@ class ver_expr():
 
         if len(s_num) > len(c_num):
             c_num = c_num.zfill(len(s_num))
-        elif len(s_num) > len(c_num):
+        elif len(s_num) < len(c_num):
             s_num = s_num.zfill(len(c_num))
         
-        c_num = c_num.append(c_stg)
-        s_num = s_num.append(s_stg)
-
+        print(c_num,c_stg)
+        print(s_num,s_stg)
+        c_num = str(c_num) + c_stg
+        s_num = str(s_num) + s_stg
+        
         assert c_ops
 
-        return all([self.ops(x,c_num,s_num) for x in c_ops])
+        val = [self.ops(x,c_num,s_num) for x in c_ops]
+        print('RESULT IS:',c_num,s_num, {c_ops[i]:val[i] for i in range(len(val))})
+        val = all(val)
+        
+        return val
     
     def standard(self,check:str)->list[str,str|int,str]:
-        num = str([x for x in check if x.isdigit])
-        stg = str([x for x in check if x.isascii])
-        ops = str([x for x in check if (not x.isascii) and (not x.isdigit)])
+        num = ''.join([x for x in check if x.isdigit()])
+        stg = ''.join([x for x in check if x.isalnum() and not x.isdigit()])
+        ops = ''.join([x for x in check if not x.isalnum() and not x == '.'])
         ops = ops.replace('!=','!')
         return (num, stg, ops)
     
