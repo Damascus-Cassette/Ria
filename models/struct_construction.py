@@ -56,7 +56,10 @@ class ConstrBase():
                 return Constructed.get()[cls]
             
             if k:=getattr(cls,'_constr_bases_key_',None):
+                
                 other_bases = Bases.get()[k]
+
+                print(f'SOURCE BASES OF {k} ARE = {other_bases}')
 
                 temp = type('temp', tuple(other_bases), {})
                 other_bases = list(temp.__bases__) 
@@ -70,8 +73,11 @@ class ConstrBase():
 
                 # Removing anything in orig classes' chain from the constr, 
                 # Prevents loops
+                print(f'FILTERED BASES OF {k} ARE: {other_bases}')
 
-            else: other_bases = []
+            else: 
+                other_bases = []
+            
 
             new_lists = {}
             for k in getattr(cls,'_constr_join_lists_',[]):
@@ -80,20 +86,18 @@ class ConstrBase():
                     new_lists[k].extend(getattr(x,k,[]))
 
             if getattr(cls,'_constr_in_place_',False):
+                cls.__bases__ += tuple(other_bases)
+                for k,v in new_lists.items():
+                    setattr(cls,k,v)
+                new_type = cls
+            
+            else:
                 new_type = type('Constr_'+cls.__name__,
                                 (cls, *other_bases),
                                 new_lists|{'_constr_has_run_':True})
                 Constructed.get()[cls] = new_type
 
-            else:
-                cls.__bases__ += other_bases
-                for k,v in new_lists.items():
-                    setattr(cls,k,v)
-                new_type = cls
-
-
-            if recur:
-                new_type.Construct_Walk()
+            if recur: new_type.Construct_Walk()
 
             for k in getattr(new_type,'_constr_call_post_',[]):
                 if func:=getattr(new_type,k,None):

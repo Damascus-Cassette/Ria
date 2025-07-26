@@ -452,16 +452,19 @@ class meta_graph(BaseModel, ConstrBase):
         ''' Construct in place all types using modules list '''
         ''' This does limit the active graph count to 1, inactive graphs will have to disable hooks '''
 
+        #Fuggly, break into more functions with contextual stuff.
+
         for x in self.graphs:
             x.active = False
         graph_inst.active = True
 
         module_col = graph_inst.module_col
         
-        mixins = defaultdict(dict)
+        mixins = defaultdict(list)
         for x in module_col.mixins:
             key = getattr(x,'_constr_bases_key_','_uncatagorized')
-            mixins[key] = x
+            mixins[key].append(x)
+        print(f'MIXINS PRE SET: {mixins}')
         
         t = Bases.set(mixins)
 
@@ -476,6 +479,11 @@ class meta_graph(BaseModel, ConstrBase):
         graph.Construct(recur=False)
         graph_collection.Construct(recur=False)
         self.__class__.Construct(recur=False)
+
+        for item_class in graph_inst.module_col.items:
+            item_class.Construct(recur=False)
+            #This allows mixins to target multiple levels of construction, 
+            #In this case first level subtypes such as exec_nodes vs meta_nodes
 
         Bases.reset(t)
 

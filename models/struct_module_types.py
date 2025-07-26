@@ -1,8 +1,6 @@
 from .struct_module import _mixin_base, _item_base
 
-from .base_node import node   as _node
-from .base_node import socket as _socket
-
+from typing import Generic
 
 from .base_node import pointer_socket      as _pointer_socket
 from .base_node import socket              as _socket
@@ -21,22 +19,35 @@ from .base_node import meta_graph          as _meta_graph
 # May find in testing that I need to get rid of the generic if this works?
 
 class mixin:
-    class socket[_socket](_mixin_base):...
-    class node[_node](_mixin_base):...
+    class socket[T=_socket](_mixin_base):
+        _constr_bases_key_ = _socket._constr_bases_key_
+    class node[T=_node](_mixin_base):
+        _constr_bases_key_ = _node._constr_bases_key_
 
 class _mixin:
     ''' For internal module mixins, use in optional modules at great risk! '''
-    class pointer_socket[_pointer_socket](_mixin_base):...
-    class socket[_socket](_mixin_base):...
-    class socket_group[_socket_group](_mixin_base):...
-    class socket_collection[_socket_collection](_mixin_base):...
-    class node[_node](_mixin_base):...
-    class node_collection[_node_collection](_mixin_base):...
-    class subgraph[_subgraph](_mixin_base):...
-    class subgraph_collection[_subgraph_collection](_mixin_base):...
-    class graph[_graph](_mixin_base):...
-    class graph_collection[_graph_collection](_mixin_base):...
-    class meta_graph[_meta_graph](_mixin_base):...
+    class pointer_socket(_mixin_base):
+        _constr_bases_key_ = _pointer_socket._constr_bases_key_
+    class socket(_mixin_base):
+        _constr_bases_key_ = _socket._constr_bases_key_
+    class socket_group(_mixin_base):
+        _constr_bases_key_ = _socket_group._constr_bases_key_
+    class socket_collection(_mixin_base):
+        _constr_bases_key_ = _socket_collection._constr_bases_key_
+    class node(_mixin_base):
+        _constr_bases_key_ = _node._constr_bases_key_
+    class node_collection(_mixin_base):
+        _constr_bases_key_ = _node_collection._constr_bases_key_
+    class subgraph(_mixin_base):
+        _constr_bases_key_ = _subgraph._constr_bases_key_
+    class subgraph_collection(_mixin_base):
+        _constr_bases_key_ = _subgraph_collection._constr_bases_key_
+    class graph(_mixin_base):
+        _constr_bases_key_ = _graph._constr_bases_key_
+    class graph_collection(_mixin_base):
+        _constr_bases_key_ = _graph_collection._constr_bases_key_
+    class meta_graph(_mixin_base):
+        _constr_bases_key_ = _meta_graph._constr_bases_key_
 
 
 class item:

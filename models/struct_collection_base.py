@@ -56,6 +56,8 @@ class collection_base[T=item_base]():
         self.data.remove(item)
 
     def __getitem__(self,k):
+        if isinstance(k,int):
+            return self.data[k]
         return self._data[k]
 
     def __setitem__(self,k,item):
@@ -90,7 +92,6 @@ class collection_typed_base(collection_base):
     
     def new(self, type:str|Any, key, label,*args,**kwargs):
         Bases = self.Bases
-        print('BASES:',Bases)
 
         if isinstance(type,str): assert type in Bases.keys()
         else:                    assert type in Bases.values()
@@ -109,7 +110,6 @@ class collection_typed_base(collection_base):
         return inst
     
     def __setitem__(self,k,item):
-        print('BASES IN SETITEM:', self.Bases, self)
         x = tuple(self.Bases.values())
         print(x)
         assert isinstance(item,x)

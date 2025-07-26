@@ -7,7 +7,7 @@ class _mixin_base:
         For hooking and base behavior changes '''
 
     _loader_mixin_ = True
-    _constr_asbase_discard_ = True
+    # _constr_asbase_discard_ = True
     Module_Id : str
     Module_V  : str
     Deps         : list[tuple[str,str,str,str]] 

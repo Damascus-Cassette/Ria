@@ -34,8 +34,8 @@ class main(module):
         test_value = False
 
 class new_socket(item.socket):
-    #### Automatic ####
-    Module : module
+    #### Automatic if subclass of main(Module) ####
+    Module : module = main 
 
     #### IO Info  ####
     UID     = 'TestNode'
@@ -54,7 +54,6 @@ class new_socket(item.socket):
     Deps : list[tuple[str,str,str,str]]
         #Typically only used by nodes & modules.
         #On Items it allows enable_if_any|all statment modes.
-    Module  = main 
 
 
     #### Socket Type Eval & Handling Info ####
