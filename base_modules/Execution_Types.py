@@ -9,8 +9,7 @@ class mixin(mixin):
     class exec_placeholder_node(_mixin.node):
         _constr_bases_key_ = 'node:placeholder_node'
 
-class _mixin(mixin,_mixin):
-    ...
+class _mixin(mixin,_mixin): ...
 
 class item(_item):
     class meta_node(_item.node):
@@ -19,3 +18,5 @@ class item(_item):
         _constr_bases_key_ = 'node:exec_node'
     class exec_placeholder_node(_item.node):
         _constr_bases_key_ = 'node:placeholder_node'
+
+

@@ -139,3 +139,4 @@ class new_meta_node(item.node):
 
 main._loader_items_ = [new_socket, new_meta_node]
     #item.Module = main is required when doing this method
+

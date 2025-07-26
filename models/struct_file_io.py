@@ -1,5 +1,6 @@
 from typing import ForwardRef,Generic
-from typing import Any, Self
+from typing import Any, Self 
+from typing import AnnotatedAlias
 from types  import UnionType, GenericAlias
 
 from contextlib  import contextmanager, ExitStack
@@ -25,6 +26,9 @@ def collapse_type_chain(ty:list)->list:
         return [ty]
     for x in ty:
         if x.__class__ is UnionType:
+            for e in x.__args__:
+                res.extend(collapse_type_chain(e))
+        if x.__class__ is AnnotatedAlias:
             for e in x.__args__:
                 res.extend(collapse_type_chain(e))
         if issubclass(x,defered_archtype):
