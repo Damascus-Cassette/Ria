@@ -595,7 +595,7 @@ if __name__ == '__main__':
 
     class test_root(BaseModel):
         col : flat_col[test_col]
-        bin : flat_bin['base_bin',defered_items]
+        bin : flat_bin['base_bin',defered_items] #type:ignore
         
         def setup(self):
             self.col = test_col()
