@@ -39,6 +39,7 @@ class ConstrBase():
     _constr_whitelist_  : list[str]
     _constr_bases_key_  : str
     _constr_join_lists_ : list[str]
+    _constr_join_dicts_ : list[str]
     _constr_call_post_  : list[str]
 
     _constr_has_run_   : bool = False
@@ -80,10 +81,17 @@ class ConstrBase():
             
 
             new_lists = {}
+            new_dicts = {}
             for k in getattr(cls,'_constr_join_lists_',[]):
                 new_lists[k]=[]
                 for x in other_bases:
                     new_lists[k].extend(getattr(x,k,[]))
+
+            for k in getattr(cls,'_constr_join_dicts_',[]):
+                new_dicts[k]=[]
+                for x in other_bases:
+                    if val := getattr(x,k,{}):
+                        new_dicts[k] = new_dicts[k] | val
 
             if getattr(cls,'_constr_in_place_',False):
                 cls.__bases__ += tuple(other_bases)
@@ -94,7 +102,7 @@ class ConstrBase():
             else:
                 new_type = type('Constr_'+cls.__name__,
                                 (cls, *other_bases),
-                                new_lists|{'_constr_has_run_':True})
+                                new_dicts|new_lists|{'_constr_has_run_':True})
                 Constructed.get()[cls] = new_type
 
             if recur: new_type.Construct_Walk()
