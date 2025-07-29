@@ -116,3 +116,24 @@ class collection_typed_base(collection_base):
         item.key = k
         self.data.append(item)
         self._context_new_item_(item)
+
+class subcollection[T](collection_base):
+    ''' A collection initlizied with another collection's data and containing a lambda filter. '''
+    
+    def __init__(self, base_collection:collection_base, filter_func:Callable):
+        self.data   = base_collection
+        self.filter = filter_func
+
+    def __getitem__(self,key)->T|None:
+        x = self.data[key]
+        if self.filter(x):
+            return x
+        return None
+
+    def __iter__(self):
+        for v in self.values():
+            if self.filter(v):
+                yield v
+
+class typed_subcollection[T](subcollection,collection_typed_base):
+    ...
