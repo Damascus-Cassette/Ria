@@ -27,7 +27,7 @@ class link(BaseModel,ConstrBase,Hookable):
     _constr_bases_key_  = 'link'
     _constr_call_post_  = ['__io_setup__']
     _constr_join_dicts_ = ['_hooks']
-    _constr_join_lists_ = ['_io_blacklist_']
+    _constr_join_lists_ = ['_io_blacklist_','_io_whitelist_','_constr_call_post_']
 
     node       : flat_ref[node_archtype]
     socket_id  : str|int
@@ -49,6 +49,7 @@ class link(BaseModel,ConstrBase,Hookable):
         inst.node       = sc.node
         inst.socket_dir = sc.collection.direction
         inst.socket_id  = socket.id 
+        return inst
 
     @property
     def socket(self):
@@ -68,15 +69,17 @@ class socket(BaseModel,item_base,ConstrBase,Hookable):
     Responcible for writing & retrieving specific data types 
     '''
     _io_bin_name_       = 'socket'
+    _io_whitelist_      = ['id', 'label', 'group_id', 'value', 'disc_cached', 'disc_location', 'out_links']
     _io_blacklist_      = ['in_links']
 
     _constr_bases_key_  = 'socket'
     _constr_call_post_  = ['__io_setup__']
     _constr_join_dicts_ = ['_hooks']
-    _constr_join_lists_ = ['_io_blacklist_']
+    _constr_join_lists_ = ['_io_blacklist_','_io_whitelist_','_constr_call_post_']
 
 
     #### Constructed Values, Not Stored ####
+
     Value_Type  : Any       = Any
     Value_Allow : list[Any] = [Any]
         # Fallback values from socket_group.
@@ -94,6 +97,7 @@ class socket(BaseModel,item_base,ConstrBase,Hookable):
 
 
     #### Constructed Methods ####
+
     def cache_dump(self,dir):
         ''' Dump cache infor to location w/a, set disc_loc and disc_cached for cache_load'''
     def cache_load(self):
@@ -101,7 +105,7 @@ class socket(BaseModel,item_base,ConstrBase,Hookable):
 
 
     ####  Inst Props, Stored ####
-    _io_whitelist_ = ['id', 'label', 'group_id', 'value', 'disc_cached', 'disc_location', 'out_links']
+
 
     id       : str
     label    : str
@@ -143,7 +147,7 @@ class socket_group[SocketType=socket](ConstrBase,Hookable):
     _constr_bases_key_ = 'socket_group'
     _constr_call_post_ = ['__io_setup__']
     _constr_join_dicts_ = ['_hooks']
-    _constr_join_lists_ = ['_io_blacklist_']
+    _constr_join_lists_ = ['_io_blacklist_','_io_whitelist_','_constr_call_post_']
     
     #TODO: Consider having sockets being quiried subset of parent socket_collection
 
@@ -254,7 +258,7 @@ class socket_collection(BaseModel,collection_typed_base,ConstrBase,Hookable):
     _constr_bases_key_ = 'socket_collection'
     _constr_call_post_ = ['__io_setup__']
     _constr_join_dicts_ = ['_hooks']
-    _constr_join_lists_ = ['_io_blacklist_']
+    _constr_join_lists_ = ['_io_blacklist_','_io_whitelist_','_constr_call_post_']
 
         #Data accessed by IO through dict-like interface.
 
@@ -303,6 +307,7 @@ class socket_collection(BaseModel,collection_typed_base,ConstrBase,Hookable):
         for k,v in self.groups.items():
             v.default_sockets()
 
+
 class node(BaseModel,ConstrBase,Hookable):
     ''' Base Node type, inherited into actionable forms '''
     _io_bin_name_       = 'g_node'
@@ -310,7 +315,7 @@ class node(BaseModel,ConstrBase,Hookable):
     _constr_bases_key_  = 'node'
     _constr_call_post_  = ['__io_setup__']
     _constr_join_dicts_ = ['_hooks']
-    _constr_join_lists_ = ['_io_blacklist_']
+    _constr_join_lists_ = ['_io_blacklist_','_io_whitelist_','_constr_call_post_']
 
     _links       : flat_bin[link]
 
@@ -352,7 +357,7 @@ class node_collection(BaseModel, collection_typed_base, ConstrBase,Hookable):
     _constr_bases_key_ = 'node_collection'
     _constr_call_post_ = ['__io_setup__']
     _constr_join_dicts_ = ['_hooks']
-    _constr_join_lists_ = ['_io_blacklist_']
+    _constr_join_lists_ = ['_io_blacklist_','_io_whitelist_','_constr_call_post_']
 
     @property
     def Bases(self)->dict[str,Any]:
@@ -375,11 +380,11 @@ class subgraph(BaseModel, item_base, ConstrBase,Hookable):
     ''' Container for nodes, links'''
     _io_bin_name_  = 'subgraph'
     _io_blacklist_ = ['links']
-    
+
     _constr_bases_key_ = 'subgraph'
     _constr_call_post_ = ['__io_setup__']
     _constr_join_dicts_ = ['_hooks']
-    _constr_join_lists_ = ['_io_blacklist_']
+    _constr_join_lists_ = ['_io_blacklist_','_io_whitelist_','_constr_call_post_']
 
     nodes : flat_col[node_collection]
     links : collection_typed_base[link]
@@ -398,13 +403,15 @@ class subgraph(BaseModel, item_base, ConstrBase,Hookable):
 
 
 class subgraph_collection[SubgraphType=subgraph](BaseModel, collection_base, ConstrBase,Hookable):
-    _constr_bases_key_ = 'subgraph_collection'
-    _constr_call_post_ = ['__io_setup__']
-    _constr_join_dicts_ = ['_hooks']
-    _constr_join_lists_ = ['_io_blacklist_']
     _io_bin_name_ = 'subgraph'
     _io_dict_like_ = True
     _io_blacklist_ = ['data']
+
+    _constr_bases_key_ = 'subgraph_collection'
+    _constr_call_post_ = ['__io_setup__']
+    _constr_join_dicts_ = ['_hooks']
+    _constr_join_lists_ = ['_io_blacklist_','_io_whitelist_','_constr_call_post_']
+    
     Base = subgraph
     data : dict[subgraph]
 
@@ -424,26 +431,26 @@ from .struct_module_collections import (local_module_collection,
                                         Global_Module_Pool)         #Singleton inst of global_module_collection
 
 class graph(BaseModel, ConstrBase,Hookable):
+    _io_bin_name_  = 'graph'
+    _io_blacklist_ = ['active','g_module_col']
+
     _constr_call_post_ = ['__io_setup__']
     _constr_join_dicts_ = ['_hooks']
-    _constr_join_lists_ = ['_io_blacklist_']
+    _constr_join_lists_ = ['_io_blacklist_','_io_whitelist_','_constr_call_post_']
     _constr_bases_key_ = 'graph'
-
-    _io_blacklist_ = ['active','g_module_col']
 
     _nodes      : flat_bin[node]
     _subgraphs  : flat_bin[subgraph]
 
-    subgraphs : flat_col[subgraph_collection]
-
-    active      : bool = False
-
     Global_Module_Pool = Global_Module_Pool
     
+    label : str
+    
+    active       : bool = False
     module_col   : local_module_collection 
     
-
-    label : str
+    subgraphs : flat_col[subgraph_collection]
+    
 
     context = context.construct(include = ['meta_graph'],as_name = 'root_graph')
     def _context_walk_(self):
@@ -457,14 +464,17 @@ class graph(BaseModel, ConstrBase,Hookable):
 
 
 class graph_collection(BaseModel, collection_base, ConstrBase,Hookable):
-    _constr_bases_key_ = 'graph_collection'
-    _constr_call_post_ = ['__io_setup__']
-    _constr_join_dicts_ = ['_hooks']
-    _constr_join_lists_ = ['_io_blacklist_']
     _io_bin_name_ = 'graph'
     _io_dict_like_ = True
     _io_blacklist_ = ['data']
+
+    _constr_bases_key_ = 'graph_collection'
+    _constr_call_post_ = ['__io_setup__']
+    _constr_join_dicts_ = ['_hooks']
+    _constr_join_lists_ = ['_io_blacklist_','_io_whitelist_','_constr_call_post_']
+
     Base = graph
+
     data : list[subgraph]
 
     context = context.construct(include=['meta_graph'])
@@ -483,8 +493,9 @@ class meta_graph(BaseModel, ConstrBase,Hookable):
     ''' Current design limitation of structure for flexibility to instnace manually in user modules. '''
     _constr_call_post_ = ['__io_setup__']
     _constr_join_dicts_ = ['_hooks']
-    _constr_join_lists_ = ['_io_blacklist_']
+    _constr_join_lists_ = ['_io_blacklist_','_io_whitelist_','_constr_call_post_']
     _constr_bases_key_ = 'metagraph'
+
     Global_Module_Pool = Global_Module_Pool
 
     _graphs  : flat_bin[graph]
