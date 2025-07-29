@@ -29,37 +29,46 @@ class link(BaseModel,ConstrBase,Hookable):
     _constr_join_dicts_ = ['_hooks']
     _constr_join_lists_ = ['_io_blacklist_','_io_whitelist_','_constr_call_post_']
 
-    node       : flat_ref[node_archtype]
-    socket_id  : str|int
-    socket_dir : str = 'out'
-
     name : str
         #Collection Name, not written
 
-    def __init__(self):
-        self.context = self.context(self)
-    
-    context = context.construct(include=['meta_graph','root_graph','sub_graph','node','socket_coll','socket_group','socket'])
-    def _context_walk_(self):...
+    to_socket_node     : flat_ref[node_archtype] = None
+    to_socket_dir      : str                     = 'in'
+    to_socket_id       : str                     = None
+        #Does NOT refer to socket.name (used by collection), as that is not recorded
 
-    @classmethod
-    def from_socket(cls, socket):
-        inst = cls()
-        sc = socket.context
-        inst.node       = sc.node
-        inst.socket_dir = sc.collection.direction
-        inst.socket_id  = socket.id 
-        return inst
+    from_socket_node   : flat_ref[node_archtype] = None
+    from_socket_dir    : str                     = 'out'
+    from_socket_id     : str                     = None
+        #Does NOT refer to socket.name (used by collection), as that is not recorded
+
+    def __init__(self, from_socket=None, to_socket=None):
+        self.context = self.context(self)
+        self.from_socket = from_socket
+        self.to_socket   = to_socket
+    
+    @property
+    def from_socket(self):
+        if (self.from_socket_node) and (self.from_socket_dir) and (self.from_socket_id is not None):
+            return getattr(self.from_socket_node,self.from_socket_dir+'sockets')[self.from_socket_id]
+    @from_socket.setter
+    def from_socket(self,socket):
+        self.from_socket_node = socket.context.node
+        self.from_socket_dir  = socket.context.socket_collection.dir
+        self.from_socket_id   = socket.id
 
     @property
-    def socket(self):
-        if self.socket_dir == 'out':
-            return self.node.out_sockets[self.socket_id]
-        elif self.socket_dir == 'in':
-            return self.node.in_sockets[self.socket_id]
-        elif self.socket_dir == 'side':
-            return self.node.side_sockets[self.socket_id]
-        raise Exception(f'Socket direction "{self.socket_dir}" is not found!')
+    def to_socket(self):
+        if (self.to_socket_node) and (self.to_socket_dir) and (self.to_socket_id is not None):
+            return getattr(self.to_socket_node,self.to_socket_dir+'sockets')[self.to_socket_id]
+    @to_socket.setter
+    def to_socket(self,socket):
+        self.to_socket_node = socket.context.node
+        self.to_socket_dir  = socket.context.socket_collection.dir
+        self.to_socket_id   = socket.id
+
+    context = context.construct(include=['meta_graph','root_graph','sub_graph','node','socket_coll','socket_group','socket'])
+    def _context_walk_(self):...
 
 
 class socket(BaseModel,item_base,ConstrBase,Hookable):
@@ -129,8 +138,9 @@ class socket(BaseModel,item_base,ConstrBase,Hookable):
     def __init__(self):
         self.out_links = []
         self.context = self.context(self)
-        self.out_links = typed_subcollection(self.context.subgraph.links)
-        self.in_links  = typed_subcollection(self.context.subgraph.links)
+        self.out_links = typed_subcollection(self.context.subgraph.links, self._in_link_filter, lambda link :  link.to_socket == self)
+        self.in_links  = typed_subcollection(self.context.subgraph.links, self._out_link_filter, lambda link : link.from_socket == self)
+
 
     context = context.construct(include=['meta_graph','root_graph','sub_graph','node','socket_coll','socket_group'],as_name='socket')
     def _context_walk_(self):
@@ -144,8 +154,8 @@ class socket_group[SocketType=socket](ConstrBase,Hookable):
     Constructed Class for methods to allow sockets 0+ to interact
     Defines UI interaction & validation of a socket type
     '''
-    _constr_bases_key_ = 'socket_group'
-    _constr_call_post_ = ['__io_setup__']
+    _constr_bases_key_  = 'socket_group'
+    _constr_call_post_  = ['__io_setup__']
     _constr_join_dicts_ = ['_hooks']
     _constr_join_lists_ = ['_io_blacklist_','_io_whitelist_','_constr_call_post_']
     
