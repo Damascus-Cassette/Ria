@@ -54,7 +54,7 @@ class link(BaseModel,ConstrBase,Hookable):
     @from_socket.setter
     def from_socket(self,socket):
         self.from_socket_node = socket.context.node
-        self.from_socket_dir  = socket.context.socket_collection.dir
+        self.from_socket_dir  = socket.context.socket_collection.Direction
         self.from_socket_id   = socket.id
 
     @property
@@ -64,7 +64,7 @@ class link(BaseModel,ConstrBase,Hookable):
     @to_socket.setter
     def to_socket(self,socket):
         self.to_socket_node = socket.context.node
-        self.to_socket_dir  = socket.context.socket_collection.dir
+        self.to_socket_dir  = socket.context.socket_collection.Direction
         self.to_socket_id   = socket.id
 
     context = context.construct(include=['meta_graph','root_graph','sub_graph','node','socket_coll','socket_group','socket'])
@@ -147,7 +147,10 @@ class socket(BaseModel,item_base,ConstrBase,Hookable):
         with self.context.register():        
             for sl in self.out_links:
                 sl.context._Get()
-
+    
+    @property
+    def dir(self):
+        return self.context.socket_coll.Direction
 
 class socket_group[SocketType=socket](ConstrBase,Hookable):
     ''' 
