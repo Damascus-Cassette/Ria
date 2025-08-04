@@ -10,7 +10,7 @@ from typing import Any
 class main(module):
     UID          = 'TestModule'
     Label        = 'TestModule'
-    Desc         = ''' '''
+    Desc         = ''' Testing if the factory/loader method works '''
     Version      = '1.0'
     
     Deps : list[tuple[str,str,str,str]] = [

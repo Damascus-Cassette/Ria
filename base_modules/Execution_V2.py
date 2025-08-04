@@ -177,7 +177,12 @@ def node_exectution(func):
     return _node_execution(func)
 
 
-class main():
+class main(module):
+    UID          = 'Core_Execution'
+    Label        = 'Core_Execution'
+    Desc         = ''' Core execution method  '''
+    ChangeLog    = ''' '''
+    Version      = '1.0'
     class exec_node_mixin(_mixin.exec_node):
         #### Properties ####
 
@@ -190,7 +195,8 @@ class main():
 
         def execute_inputs(self,):
             ''' Calls execute on all inputs '''
-            for x in self.
+            for x in self.in_sockets:
+                
 
         #### Properties ####
 
