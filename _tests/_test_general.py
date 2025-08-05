@@ -6,7 +6,10 @@ from ..models.base_node import meta_graph as _meta_graph_base
 
 def test_graph_construction():
     m_graph = meta_graph()
-    graph   = m_graph.graphs.new('Primary_Graph','Primary_Graph', module_iten = {'TestModule':'1.0'})
+    graph   = m_graph.graphs.new('Primary_Graph','Primary_Graph', module_iten = {
+        'TestModule'     : '2.0',
+        'Core_Execution' : '2.0',
+        })
         # Assume version newest 
         # Use symbol of ^ for newest
         # On export the newest does get converted to its static version

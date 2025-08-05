@@ -1,6 +1,6 @@
 from packaging.version import Version as VersionType
 from inspect import isclass
-from typing import Any
+from typing import Any,Callable, ForwardRef
 
 class _mixin_base:
     ''' Mixes into all specified's base class 
@@ -34,6 +34,38 @@ class _item_base:
         cls._Version = VersionType(cls.Version)
         cls.Version  = cls._Version.release
 
+class module_test():
+    ''' Consolidated test object, can allow implicit setup and loading of modules not directly defined. '''
+    
+    module : 'module' = None
+
+    def __init__(self,test_name :str ,/,*,
+                #  implicit_load  :bool           = True,
+                 module_iten    :dict           = None, 
+                 funcs          :list[Callable] = None):
+        self.name        = test_name
+        self.module_iten = module_iten
+        self.funcs       = funcs
+        assert funcs is not None
+
+    def intake_module(self,module:'module'):
+        self.module = module
+        if not self.module_iten:
+            raise Exception('Implicit loading is not yet supported! Please Define Iten in Module_Test')
+            # from .struct_module_collections import Global_Module_Pool
+            # self.module_iten = Global_Module_Pool module.Dependencies
+
+    def run_tests(self,m_graph):
+        for x in self.funcs:
+            key = f'{self.module.UID} Test: {self.name} : {x.__name__}'
+            graph     = m_graph.graphs.new(key         = key,
+                                           label       = key,
+                                           module_iten = self.module_iten,
+                                           )
+            m_graph._Set_As_Active_Construction(graph)
+            subgraph = graph.subgraphs.new('test_env')
+            x(graph,subgraph)
+
     
 class module():
     ''' Inherit onto base '''
@@ -46,6 +78,8 @@ class module():
 
     _loader_mixins_ : list[Any]
     _loader_items_  : list[Any]
+    
+    _module_tests_  : list[module_test]
 
     def __init_subclass__(cls):
         assert getattr(cls,'UID',None)     is not None
@@ -56,11 +90,13 @@ class module():
         cls._Version = VersionType(cls.Version)
         cls.Version  = cls._Version.release
 
-        
         _mixins = cls.__module_set_components__(_mixin_base, '_loader_mixins_' )
         _items  = cls.__module_set_components__(_item_base,  '_loader_items_'  )
         for x in _items:
             x.Module = cls
+
+        for x in getattr(cls,'_module_tests_',[]):
+            x.intake_module(cls)
 
     @classmethod
     def __module_set_components__(cls,type,attr)->None:
@@ -73,7 +109,12 @@ class module():
                     res.append(v)
             setattr(cls,attr,res)
         return res
-        
+    
+    @classmethod
+    def _run_tests(cls,m_graph):
+        for test_obj in getattr(cls,'_module_tests_',[]):
+            test_obj.run_tests(m_graph)
+            
 
 class ver_expr():
     ''' Version compatability expression, such as '<5.3,>4.2,!4.41a,=4.2' 

@@ -34,8 +34,9 @@ class collection_base[T=item_base]():
             ret[x.key] = x
         return ret
     
-    def new(self,key,label,*args,**kwargs):
+    def new(self,key,label=None,*args,**kwargs):
         assert key not in self._data.keys()
+        if label is None: label = key
         inst = self.Base(*args,**kwargs)
         inst.label = label
         inst.key   = key
@@ -90,8 +91,9 @@ class collection_typed_base[T](collection_base):
     Bases : dict[str,Any]
         #Replaced in inherited to be filtered property of root_graph.
     
-    def new(self, type:str|Any, key, label,*args,**kwargs):
+    def new(self, type:str|Any, key, label=None,*args,**kwargs):
         Bases = self.Bases
+        if label is None: label = key
 
         if isinstance(type,str): assert type in Bases.keys()
         else:                    assert type in Bases.values()

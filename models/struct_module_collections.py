@@ -3,6 +3,7 @@ from packaging.version import Version as VersionType
 from .struct_module import ver_expr,module,_item_base,_mixin_base
 from .struct_file_io import BaseModel
 import copy
+from contextvars import ContextVar
 
 class _unset:...
 
@@ -21,7 +22,6 @@ class global_module_collection():
         load()
 
     def __getitem__(self,key:str|tuple[str,str|ver_expr])->tuple[module]|module:
-        
         if not self.modules:
             #Dirty delayed import for loading modules.
             #Consider other timing/method. (perhaps on import of a graph base via a passthrough module?)
@@ -32,11 +32,12 @@ class global_module_collection():
         elif isinstance(key,tuple):
             if key[1].startswith(tuple(ver_expr.operations)):
                 subset = self.find_by_uid(key[0])
+                if not subset:
+                    raise Exception(f'Unable to find any module with the UID: {key[0]}')
                 expr   = ver_expr(key[1])
                 return self.filter_by_expr(subset, expr)
             
             else:
-                print(f'TRYING TO FIND TUPLE {key}')
                 subset = self.find_by_uid(key[0])
 
                 if not subset:
@@ -96,6 +97,23 @@ class global_module_collection():
         return ret
 
 
+    # searched = ContextVar('Implicit_Search_Memo', default=None)
+    # def find_implicit_combinations(self,module_deps:list[tuple])->dict:
+    #     ''' For the moment, dont evaluate deps as a logic graph.
+    #     Just return first compatable, dont traverse
+    #     returns module_iten
+    #     ''' 
+    #     iten = {}
+    #     for mode,uid,ver,message in module_deps:
+    #         modules = self[uid,ver]
+    #         mod = modules[0]
+    #         iten[mod.UID] = mod.Version
+    #             #may be messed up, as could be something other than string??
+
+            
+
+        
+
 Global_Module_Pool = global_module_collection()
     #Singleton, Consider different solution later
 
@@ -122,15 +140,18 @@ class local_module_collection(global_module_collection):
 
     def set_modules(self):
         ret = []
+
         for k,v in self.module_iten.items():
             if module:=self.G_Col[k,v]:
                 ret.append(module)
+        
         self.modules = ret
+
 
     def check_deps(self):
         uids = []
         for mod in self.modules:
-            for statement in mod.Deps:
+            for statement in getattr(mod,'Deps',[]):
                 self.verify_statement(statement)
                 self.verify_statement(statement,context_statement=f'On Module {mod.UID}({mod.Version})')
             assert mod.UID not in uids
@@ -147,10 +168,9 @@ class local_module_collection(global_module_collection):
 
         res = self[(uid,ver)]
 
-
-        if   mode == 'required' and not res: raise Exception(f'Module Loader "{mode}" Dependencies Statement Failed {context_statement} : {message}') 
-        elif mode == 'incompatable' and res: raise Exception(f'Module Loader "{mode}" Dependencies Statement Failed {context_statement} : {message}')
-        elif mode == 'warning'      and res: print(f'Module Loader "{mode}" Dependencies Statement Failed {context_statement} : {message}')
+        if   mode == 'required' and not res: raise Exception(f'Module Loader "{mode} {uid} {ver}" Dependencies Statement Failed {context_statement} : {message}') 
+        elif mode == 'incompatable' and res: raise Exception(f'Module Loader "{mode} {uid} {ver}" Dependencies Statement Failed {context_statement} : {message}')
+        elif mode == 'warning'      and res: print(f'Module Loader "{mode} {uid} {ver}" Dependencies Statement Failed {context_statement} : {message}')
         return True
         # elif mode == 'enable_if_any':   ...
         # elif mode == 'enable_if_all':   ...
@@ -186,42 +206,11 @@ class local_module_collection(global_module_collection):
         res = self[(uid,ver)]
         return True if res else False
 
-
-    # def __getitem__(self,key:str|tuple[str,str|ver_expr])->tuple[module]|module|None:
-    #     if isinstance(key,str):
-    #         return self.find_by_uid(key)
-    #     elif isinstance(key,tuple):
-    #         if key[1].startswith(tuple(ver_expr.operations)):
-    #             print(key[1], 'STARTSWITH ANY OF',ver_expr.operations )
-    #             subset = self.find_by_uid(key[0])
-    #             expr   = ver_expr(key[1])
-    #             return self.filter_by_expr(subset,expr)
-    #         elif key[1].startswith('^'):
-    #             subset = self.find_by_uid(key[0])
-    #             highest = subset[0]
-    #             for x in subset:
-    #                 if x.Version > highest.Version:
-    #                     highest = x
-    #             return highest
-
-    #         else:
-    #             subset = self.find_by_uid(key[0])
-    #             for module in subset:
-    #                 if module.Version == key[1]:
-    #                     return module
-
     def find_by_uid(self,uid):
         res = []
         for x in self.modules:
             if x.UID == uid:
                 res.append(x)
-        return res
-
-    def filter_by_expr(self,subset, expr:str):
-        res = []
-        for mod in subset:
-            if expr(mod.Version):
-                res.append(mod)
         return res
     
     def append(self,item:tuple|module):

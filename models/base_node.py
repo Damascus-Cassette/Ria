@@ -67,7 +67,7 @@ class link(BaseModel,ConstrBase,Hookable):
         self.to_socket_dir  = socket.context.socket_collection.Direction
         self.to_socket_id   = socket.id
 
-    context = context.construct(include=['meta_graph','root_graph','sub_graph','node','socket_coll','socket_group','socket'])
+    context = context.construct(include=['meta_graph','root_graph','subgraph','node','socket_coll','socket_group','socket'])
     def _context_walk_(self):...
 
 
@@ -142,7 +142,7 @@ class socket(BaseModel,item_base,ConstrBase,Hookable):
         self.in_links  = typed_subcollection(self.context.subgraph.links, self._out_link_filter, lambda link : link.from_socket == self)
 
 
-    context = context.construct(include=['meta_graph','root_graph','sub_graph','node','socket_coll','socket_group'],as_name='socket')
+    context = context.construct(include=['meta_graph','root_graph','subgraph','node','socket_coll','socket_group'],as_name='socket')
     def _context_walk_(self):
         with self.context.register():        
             for sl in self.out_links:
@@ -255,7 +255,7 @@ class socket_group[SocketType=socket](ConstrBase,Hookable):
         if socket not in self.parent_col.values():
             self.parent_col[key] = socket
 
-    context = context.construct(include=['meta_graph','root_graph','sub_graph','node','socket_coll',],as_name='socket_group')
+    context = context.construct(include=['meta_graph','root_graph','subgraph','node','socket_coll',],as_name='socket_group')
     def _context_walk_(self):
         with self.context.register():        
             for s in self.sockets.values():
@@ -264,24 +264,23 @@ class socket_group[SocketType=socket](ConstrBase,Hookable):
 
 class socket_collection(BaseModel,collection_typed_base,ConstrBase,Hookable):
     ''' Accessor of sockets and socket_groups '''
-    _io_bin_name_      = 'socket'
-    _io_dict_like_     = True
-    _io_blacklist_     = ['Groups','groups','data']
+    _io_bin_name_       = 'socket'
+    _io_dict_like_      = True
+    _io_blacklist_      = ['Groups','groups','data']
 
-    _constr_bases_key_ = 'socket_collection'
-    _constr_call_post_ = ['__io_setup__']
+    _constr_bases_key_  = 'socket_collection'
+    _constr_call_post_  = ['__io_setup__']
     _constr_join_dicts_ = ['_hooks']
     _constr_join_lists_ = ['_io_blacklist_','_io_whitelist_','_constr_call_post_']
 
-        #Data accessed by IO through dict-like interface.
+    context = context.construct(include=['meta_graph','root_graph','subgraph','node'],as_name='socket_coll')
+    def _context_walk_(self):
+        with self.context.register():
+            for sg in self.groups.values():
+                sg._context_walk_()
 
-    #### Constructed Values ####
-    Groups    : list[socket_group]
-    Direction : str
 
-    @property
-    def Bases(self)->dict[str,Any]:
-        return self.context.root_graph.module_col.items_by_attr('_io_bin_name_','socket')
+    #### Class Methods ####
 
     @classmethod
     def construct_if_not(cls,name:str,/,Groups:list[socket_group]|list[socket], Direction:str, **kwargs):
@@ -307,11 +306,10 @@ class socket_collection(BaseModel,collection_typed_base,ConstrBase,Hookable):
         return type(name,(cls,),kwargs)
 
 
-    context = context.construct(include=['meta_graph','root_graph','sub_graph','node'],as_name='socket_coll')
-    def _context_walk_(self):
-        with self.context.register():
-            for sg in self.groups.values():
-                sg._context_walk_()
+    #### Constructed Values ####
+    Groups    : list[socket_group]
+    Direction : str
+
 
     #### Instance Values ####
     groups  : dict[socket_group]
@@ -327,6 +325,10 @@ class socket_collection(BaseModel,collection_typed_base,ConstrBase,Hookable):
     def default_sockets(self):
         for k,v in self.groups.items():
             v.default_sockets()
+
+    @property
+    def Bases(self)->dict[str,Any]:
+        return self.context.root_graph.module_col.items_by_attr('_io_bin_name_','socket')
 
 from inspect import isclass
 
@@ -350,7 +352,7 @@ class node(BaseModel,ConstrBase,Hookable):
         cls.out_sockets  = socket_collection.construct_if_not('out_sockets',  Direction='out',  Groups=getattr(cls,'out_sockets',[]))
         cls.side_sockets = socket_collection.construct_if_not('side_sockets', Direction='side', Groups=getattr(cls,'side_sockets',[]))
 
-    context = context.construct(include=['meta_graph','root_graph','sub_graph'],as_name='node')
+    context = context.construct(include=['meta_graph','root_graph','subgraph'],as_name='node')
     def _context_walk_(self):
         with self.context.register():
             self.in_sockets._context_walk_()
@@ -387,7 +389,7 @@ class node_collection(BaseModel, collection_typed_base, ConstrBase,Hookable):
 
     data : list[node_archtype]
 
-    context = context.construct(include=['meta_graph','root_graph','sub_graph'])
+    context = context.construct(include=['meta_graph','root_graph','subgraph'])
     def _context_walk_(self):
         with self.context.register():
             for v in self.data:
@@ -413,7 +415,7 @@ class subgraph(BaseModel, item_base, ConstrBase,Hookable):
         #Retroactivly Populated via subcollection[link] on sockets
         # In memory only
 
-    context = context.construct(include=['meta_graph','root_graph'],as_name = 'sub_graph')
+    context = context.construct(include=['meta_graph','root_graph'],as_name = 'subgraph')
     def _context_walk_(self):
         with self.context.register():
             self.nodes._context_walk_()
@@ -443,7 +445,7 @@ class subgraph_collection[SubgraphType=subgraph](BaseModel, collection_base, Con
         self.data = []
 
 
-    context = context.construct(include=['meta_graph','root_graph','sub_graph'])
+    context = context.construct(include=['meta_graph','root_graph','subgraph'])
     def _context_walk_(self):
         with self.context.register():
             for v in self.data:
@@ -523,14 +525,20 @@ class meta_graph(BaseModel, ConstrBase,Hookable):
     _graphs  : flat_bin[graph]
     graphs   : flat_col[graph_collection]
 
-    def __init__(self):
-        self.graphs = graph_collection() 
-        self.context = self.context(self)
-
     context = context.construct(as_name='meta_graph')
     def _context_walk_(self):
         with self.context.register():
             self.graph._context_walk_()
+
+    def __init__(self):
+        self.graphs = graph_collection() 
+        self.context = self.context(self)
+
+    def _run_tests(self):
+        self.Global_Module_Pool.load()
+        for mod in self.Global_Module_Pool:
+            print(f'TESTING: {mod.UID} : {mod.Version}')
+            mod._run_tests(self)
 
     def _Set_As_Active_Construction(self,graph_inst:graph):
         ''' Construct in place all types using modules list '''
@@ -548,7 +556,6 @@ class meta_graph(BaseModel, ConstrBase,Hookable):
         for x in module_col.mixins:
             key = getattr(x,'_constr_bases_key_','_uncatagorized')
             mixins[key].append(x)
-        print(f'MIXINS PRE SET: {mixins}')
         
         t = Bases.set(mixins)
 

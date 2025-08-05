@@ -60,7 +60,6 @@ class ConstrBase():
                 
                 other_bases = Bases.get()[k]
 
-                print(f'SOURCE BASES OF {k} ARE = {other_bases}')
 
                 temp = type('temp', tuple(other_bases), {})
                 other_bases = list(temp.__bases__) 
@@ -74,7 +73,6 @@ class ConstrBase():
 
                 # Removing anything in orig classes' chain from the constr, 
                 # Prevents loops
-                print(f'FILTERED BASES OF {k} ARE: {other_bases}')
 
             else: 
                 other_bases = []
