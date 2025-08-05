@@ -1,4 +1,5 @@
-from ..models.struct_module import module, socket_group
+from ..models.struct_module import module
+from ..models.base_node     import socket_group
 from .Execution_Types       import item,_mixin
 
 class main(module):
@@ -74,7 +75,7 @@ def adv_exec_test(graph):
     assert v == 'abc'
     v = nodeb.out_sockets[0].value
 
-main._test_module.extend([
+main._test_module_.extend([
     basic_exec_test,
     adv_exec_test,
 ])

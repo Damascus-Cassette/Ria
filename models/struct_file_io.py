@@ -1,8 +1,7 @@
 from typing import ForwardRef,Generic
 from typing import Any, Self 
-from typing import AnnotatedAlias
+from typing import Annotated
 from types  import UnionType, GenericAlias
-
 from contextlib  import contextmanager, ExitStack
 from contextvars import ContextVar
 from collections import OrderedDict,defaultdict
@@ -28,7 +27,7 @@ def collapse_type_chain(ty:list)->list:
         if x.__class__ is UnionType:
             for e in x.__args__:
                 res.extend(collapse_type_chain(e))
-        if x.__class__ is AnnotatedAlias:
+        if x.__class__ is Annotated:
             for e in x.__args__:
                 res.extend(collapse_type_chain(e))
         if issubclass(x,defered_archtype):

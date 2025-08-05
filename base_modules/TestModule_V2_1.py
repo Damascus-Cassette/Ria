@@ -1,4 +1,4 @@
-from ..models.struct_module import module, socket_group
+from ..models.struct_module import module
 from ..models import base_node
 from .Execution_Types       import item,_mixin
 from ..model.factories      import node_factory

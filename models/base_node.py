@@ -284,7 +284,15 @@ class socket_collection(BaseModel,collection_typed_base,ConstrBase,Hookable):
         return self.context.root_graph.module_col.items_by_attr('_io_bin_name_','socket')
 
     @classmethod
+    def construct_if_not(cls,name:str,/,Groups:list[socket_group]|list[socket], Direction:str, **kwargs):
+        if isclass(Groups):
+            if issubclass(Groups,cls):
+                return Groups
+        return cls.construct(name,Groups,Direction,**kwargs)
+
+    @classmethod
     def construct(cls,name:str,/,Groups:list[socket_group]|list[socket], Direction:str, **kwargs):
+
         if not isinstance(Groups,(list,tuple,set)):
             Groups = [Groups]
         if len(Groups):
@@ -320,6 +328,7 @@ class socket_collection(BaseModel,collection_typed_base,ConstrBase,Hookable):
         for k,v in self.groups.items():
             v.default_sockets()
 
+from inspect import isclass
 
 class node(BaseModel,ConstrBase,Hookable):
     ''' Base Node type, inherited into actionable forms '''
@@ -337,9 +346,9 @@ class node(BaseModel,ConstrBase,Hookable):
     side_sockets : socket_collection
 
     def __init_subclass__(cls):
-        cls.in_sockets   = socket_collection.construct('in_sockets',   Direction='in',   Groups=getattr(cls,'in_sockets',[]))
-        cls.out_sockets  = socket_collection.construct('out_sockets',  Direction='out',  Groups=getattr(cls,'out_sockets',[]))
-        cls.side_sockets = socket_collection.construct('side_sockets', Direction='side', Groups=getattr(cls,'side_sockets',[]))
+        cls.in_sockets   = socket_collection.construct_if_not('in_sockets',   Direction='in',   Groups=getattr(cls,'in_sockets',[]))
+        cls.out_sockets  = socket_collection.construct_if_not('out_sockets',  Direction='out',  Groups=getattr(cls,'out_sockets',[]))
+        cls.side_sockets = socket_collection.construct_if_not('side_sockets', Direction='side', Groups=getattr(cls,'side_sockets',[]))
 
     context = context.construct(include=['meta_graph','root_graph','sub_graph'],as_name='node')
     def _context_walk_(self):

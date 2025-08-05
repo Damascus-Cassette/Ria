@@ -83,7 +83,7 @@ class collection_base[T=item_base]():
         for v in self.values():
             yield v
 
-class collection_typed_base(collection_base):
+class collection_typed_base[T](collection_base):
     ''' Collection of multiple allowable types '''
 
     #### Constructed Values ####

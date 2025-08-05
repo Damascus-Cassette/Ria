@@ -16,12 +16,6 @@ class meta_metadata():
 class mixin(mixin):
     class exec_node(_mixin.node):
         _constr_bases_key_ = 'node:exec_node'
-        Deterministic : bool
-
-        def __init_subclass__(cls):
-            assert hasattr(cls.Deterministic)
-            super().__init_subclass_(cls)
-
     class meta_node(_mixin.node):
         _constr_bases_key_ = 'node:meta_node'
     class exec_placeholder_node(_mixin.node):
@@ -36,6 +30,10 @@ class item(_item):
         ''' Execution node base. '''
         _constr_bases_key_ = 'node:exec_node'
 
+        def __init_subclass__(cls):
+            # assert hasattr(cls.Deterministic)
+
+            super().__init_subclass__()
 
         #### User Constructed Values ####
         
@@ -50,9 +48,9 @@ class item(_item):
         chain_deterministic : bool          = True
         metadata            : exec_metadata
 
-        value_sum           : property[str]
+        value_sum           : property
         _value_sum          : str|list[str]
-        walk_sum            : property[str]
+        walk_sum            : property
         _walk_sum           : str
 
         def execute(self):

@@ -29,7 +29,9 @@ class main_hash(module):
             determ   = True
 
             for k,v in self.links:
-                _hash, _determ += v.out_socket.out_walk()
+                _h, _d  = v.out_socket.out_walk()
+                _hash   += _h 
+                _determ += _d
                 if not _determ: 
                     determ = False
             

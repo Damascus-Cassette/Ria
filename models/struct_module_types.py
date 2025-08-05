@@ -2,7 +2,7 @@ from .struct_module import _mixin_base, _item_base
 
 from typing import Generic,TypeVar
 
-from .base_node import pointer_socket      as _pointer_socket
+from .base_node import link      as _link
 from .base_node import socket              as _socket
 from .base_node import socket_group        as _socket_group
 from .base_node import socket_collection   as _socket_collection
@@ -25,8 +25,8 @@ class mixin:
 
 class _mixin:
     ''' For internal module mixins, use in optional modules at great risk! '''
-    class pointer_socket(_mixin_base,_pointer_socket if TYPE_CHECKING else object):
-        _constr_bases_key_ = _pointer_socket._constr_bases_key_
+    class links(_mixin_base,_link if TYPE_CHECKING else object):
+        _constr_bases_key_ = _link._constr_bases_key_
     class socket(_mixin_base,_socket if TYPE_CHECKING else object):
         _constr_bases_key_ = _socket._constr_bases_key_
     class socket_group(_mixin_base,_socket_group if TYPE_CHECKING else object):
@@ -49,5 +49,6 @@ class _mixin:
         _constr_bases_key_ = _meta_graph._constr_bases_key_
 
 class item:
+    # class link(_link,_item_base):...
     class node(_node,_item_base):...
     class socket(_socket,_item_base):...
