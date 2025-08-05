@@ -4,7 +4,7 @@ from ..models.struct_module import module
 from .Execution_Types import _mixin, item
 from .utils.statics   import get_data_uuid, get_file_uid, INVALID_UUID
 from contextvars      import ContextVar
-
+from typing import Any
 walk_force = ContextVar('walk_force',default=False)
 
 # class deterministic_chain():
@@ -179,11 +179,38 @@ class main(module):
     Desc         = ''' Core execution method  '''
     ChangeLog    = ''' '''
     Version      = '2.0'
+
+    class socket_mixin(_mixin.socket):
+        value : property
+
+    class node_mixin(_mixin.node):
+        Value_Type  : Any       = Any
+        Value_Allow : list[Any] = [Any]
+            # Fallback values from socket_group.
+
+        Disc_Cachable   : bool = True
+            # If this socket can be cached to disc or not
+            # If false, invalidates disc_cachable on exec_node
+
+        Call_Cache_Dump : bool = False
+        Call_Cache_Load : bool = False
+            # If true, calls dump and load on execution
+
+
+        #### Constructed Methods ####
+        def cache_dump(self,dir):
+            ''' Dump cache infor to location w/a, set disc_loc and disc_cached for cache_load'''
+        def cache_load(self):
+            ''' Load cache from disc_loc, set to self.value '''
+        
+        disc_cached   : bool = False
+        disc_location : str
+            #Hooks will convert spaces from & to `<SpaceID>/...` Format
+        
+        value    : Any
+
+
     class exec_node_mixin(_mixin.exec_node):
-        #### Properties ####
-
-        #### Execution Logic ####
-
         def execute(self):
             ''' Exeuction Function '''
             raise Exception(f'Execution has not been defined on {self.UID} of ({self.module.UID} : {self.module.Version}) !')
@@ -192,9 +219,7 @@ class main(module):
             ''' Calls execute on all inputs '''
             for x in self.in_sockets:
                 ...
-                
 
-        #### Properties ####
 
 
     class placeholder_node_mixin(_mixin.exec_placeholder_node):

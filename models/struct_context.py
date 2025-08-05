@@ -58,10 +58,15 @@ class context():
         _c_temp = {}
         for k,v in self._Global_Context_Copy.items():
             _c_temp[k]=_context[k].set(v)
-        yield
+        with self.register():
+            yield
         for k,v in _c_temp.items():
             _context[k].reset(_c_temp[k])
-            
+    
+    @contextmanager
+    def Cached(self):
+        with self.In_Last_Context():
+            yield
 
     @contextmanager
     def register(self):

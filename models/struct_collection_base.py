@@ -84,6 +84,16 @@ class collection_base[T=item_base]():
         for v in self.values():
             yield v
 
+    # def _UKey_Generator(self,item,key:str):
+    #     ''' Verify ID is Unique before attaching, '''
+    #     key_base = getattr(item,'key',key)
+    #     key = key_base
+    #     i = 0
+    #     while key in self.keys():
+    #         i=+1
+    #         key = key_base + '.' + str(i).zfill(3)
+    #     return key
+
 class collection_typed_base[T](collection_base):
     ''' Collection of multiple allowable types '''
 
@@ -113,7 +123,6 @@ class collection_typed_base[T](collection_base):
     
     def __setitem__(self,k,item):
         x = tuple(self.Bases.values())
-        print(x)
         assert isinstance(item,x)
         item.key = k
         self.data.append(item)

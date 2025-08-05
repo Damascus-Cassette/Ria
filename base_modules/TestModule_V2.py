@@ -13,7 +13,7 @@ class main(module):
         ('required','Core_Execution','=(2.0)','Failure_Message')
         ]
     
-    _module_tests_ = [module_test('TestA', module_iten={UID:Version,'Core_Execution':'2.0'}, funcs=[])]
+    _module_tests_ = []
         #FUGLY. Eventually fix/change to be inherited struct?
         #testing funcs go in here
 
@@ -45,18 +45,20 @@ class new_exec_node(item.exec_node):
         self.out_sockets[0].value = self.in_sockets[0].value + self.in_sockets[1].value
         self.test_module_executed = True
 
-def basic_exec_test(r_graph,graph):
-    nodea = new_exec_node(default_sockets=True)
-    nodeb = new_exec_node(default_sockets=True)
+def basic_exec_test(graph,subgraph):
+    with subgraph.context.Cached():
+        nodea = new_exec_node(default_sockets=True)
+        nodeb = new_exec_node(default_sockets=True)
 
-    nodea.in_sockets[0].value = 'a'
-    nodea.in_sockets[1].value = 'b'
-    nodeb.in_sockets[1].value = 'c'
-    # nodea.in_sockets.set(['a','b'])
-    
-    graph.nodes.extend([nodea,nodeb])
-    graph.links.new(out_socket = nodea.out_sockets[0], 
-                    in_socket  = nodeb.in_sockets[0])
+        nodea.in_sockets[0].value = 'a'
+        nodea.in_sockets[1].value = 'b'
+        nodeb.in_sockets[1].value = 'c'
+        # nodea.in_sockets.set(['a','b'])
+        
+        subgraph.nodes['nodea'] = nodea
+        subgraph.nodes['nodeb'] = nodeb
+        subgraph.links.new(key='',out_socket = nodea.out_sockets[0], 
+                        in_socket  = nodeb.in_sockets[0])
 
     v = nodeb.out_sockets[0].value
     assert nodea.test_module_executed == True
@@ -76,7 +78,12 @@ def adv_exec_test(r_graph,graph):
     assert v == 'abc'
     v = nodeb.out_sockets[0].value
 
-main._module_tests_[0].funcs.extend([basic_exec_test,adv_exec_test])
+main._module_tests_.append(module_test('TestA',
+                module      = main,
+                funcs       = [basic_exec_test,adv_exec_test],
+                module_iten = {main.UID:main.Version,
+                               'Core_Execution':'2.0'}, 
+                ))
 
 main._loader_items_.extend([
     new_socket,

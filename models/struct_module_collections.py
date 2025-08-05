@@ -51,7 +51,7 @@ class global_module_collection():
                     return highest
 
                 for module in subset:
-                    if module.Version == VersionType(key[1]).release:
+                    if module._Version.release == VersionType(key[1]).release:
                         return module
 
                     

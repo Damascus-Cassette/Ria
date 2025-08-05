@@ -10,8 +10,9 @@ from .struct_construction    import ConstrBase, Bases, Constructed
 from .struct_hook_base       import Hookable
 
 from types                   import FunctionType
-from typing                  import Any,Self
+from typing                  import Any,Self,Callable
 from collections             import defaultdict
+from inspect                 import isclass
 
 class node_archtype(defered_archtype):...
 class socket_archtype(defered_archtype):...
@@ -19,7 +20,7 @@ class socket_archtype(defered_archtype):...
 # class graph_archtype(defered_archtype):...
 
 
-class link(BaseModel,ConstrBase,Hookable):
+class link(BaseModel,item_base,ConstrBase,Hookable):
     ''' Pointer to a socket via node.{dir}_socket.[socket_id] '''
     _io_bin_name_       = 'link'
     _io_blacklist_      = ['name']
@@ -32,43 +33,64 @@ class link(BaseModel,ConstrBase,Hookable):
     name : str
         #Collection Name, not written
 
-    to_socket_node     : flat_ref[node_archtype] = None
-    to_socket_dir      : str                     = 'in'
-    to_socket_id       : str                     = None
+    in_socket_node     : flat_ref[node_archtype] = None
+    in_socket_dir      : str                     = 'in'
+    in_socket_id       : str                     = None
         #Does NOT refer to socket.name (used by collection), as that is not recorded
 
-    from_socket_node   : flat_ref[node_archtype] = None
-    from_socket_dir    : str                     = 'out'
-    from_socket_id     : str                     = None
+    out_socket_node   : flat_ref[node_archtype] = None
+    out_socket_dir    : str                     = 'out'
+    out_socket_id     : str                     = None
         #Does NOT refer to socket.name (used by collection), as that is not recorded
 
-    def __init__(self, from_socket=None, to_socket=None):
+    def __init__(self, out_socket=None, in_socket=None):
         self.context = self.context(self)
-        self.from_socket = from_socket
-        self.to_socket   = to_socket
+        self.out_socket = out_socket
+        self.in_socket   = in_socket
     
     @property
-    def from_socket(self):
-        if (self.from_socket_node) and (self.from_socket_dir) and (self.from_socket_id is not None):
-            return getattr(self.from_socket_node,self.from_socket_dir+'sockets')[self.from_socket_id]
-    @from_socket.setter
-    def from_socket(self,socket):
-        self.from_socket_node = socket.context.node
-        self.from_socket_dir  = socket.context.socket_collection.Direction
-        self.from_socket_id   = socket.id
+    def out_socket(self):
+        if (self.out_socket_node) and (self.out_socket_dir) and (self.out_socket_id is not None):
+            return getattr(self.out_socket_node,self.out_socket_dir+'sockets')[self.out_socket_id]
+    @out_socket.setter
+    def out_socket(self,socket):
+        self.out_socket_node = socket.context.node
+        self.out_socket_dir  = socket.context.socket_coll.Direction
+        self.out_socket_id   = socket.id
 
     @property
-    def to_socket(self):
-        if (self.to_socket_node) and (self.to_socket_dir) and (self.to_socket_id is not None):
-            return getattr(self.to_socket_node,self.to_socket_dir+'sockets')[self.to_socket_id]
-    @to_socket.setter
-    def to_socket(self,socket):
-        self.to_socket_node = socket.context.node
-        self.to_socket_dir  = socket.context.socket_collection.Direction
-        self.to_socket_id   = socket.id
+    def in_socket(self):
+        if (self.in_socket_node) and (self.in_socket_dir) and (self.in_socket_id is not None):
+            return getattr(self.in_socket_node,self.in_socket_dir+'sockets')[self.in_socket_id]
+    @in_socket.setter
+    def in_socket(self,socket):
+        self.in_socket_node = socket.context.node
+        self.in_socket_dir  = socket.context.socket_coll.Direction
+        self.in_socket_id   = socket.id
 
     context = context.construct(include=['meta_graph','root_graph','subgraph','node','socket_coll','socket_group','socket'])
     def _context_walk_(self):...
+
+class link_collection[SocketType = link](BaseModel,collection_base,ConstrBase,Hookable):
+    ''' subgraph.links, filtered in the socket's view via a constructed function 
+    May consider making typed if there is any good argument to do so.
+    '''
+    _io_bin_name_       = 'link'
+    _io_dict_like_      = True
+    _io_blacklist_      = ['Groups','groups','data']
+
+    _constr_bases_key_  = 'socket_collection'
+    _constr_call_post_  = ['__io_setup__']
+    _constr_join_dicts_ = ['_hooks']
+    _constr_join_lists_ = ['_io_blacklist_','_io_whitelist_','_constr_call_post_']
+
+    context = context.construct(include=['meta_graph','root_graph','subgraph'], as_name='link_col')
+    def _context_walk_(self):
+        with self.context.register():
+            for sg in self.groups.values():
+                sg._context_walk_()
+    
+    Base = link
 
 
 class socket(BaseModel,item_base,ConstrBase,Hookable):
@@ -129,24 +151,22 @@ class socket(BaseModel,item_base,ConstrBase,Hookable):
     disc_location : str
         #Hooks will convert spaces from & to `<SpaceID>/...` Format
 
-    out_links  : typed_subcollection[link]
-    in_links   : typed_subcollection[link]
-
-
-    #### Internal Methods ####
-
-    def __init__(self):
-        self.out_links = []
-        self.context = self.context(self)
-        self.out_links = typed_subcollection(self.context.subgraph.links, self._in_link_filter, lambda link :  link.to_socket == self)
-        self.in_links  = typed_subcollection(self.context.subgraph.links, self._out_link_filter, lambda link : link.from_socket == self)
-
+    out_links  : subcollection[link]
+    in_links   : subcollection[link]
 
     context = context.construct(include=['meta_graph','root_graph','subgraph','node','socket_coll','socket_group'],as_name='socket')
     def _context_walk_(self):
         with self.context.register():        
             for sl in self.out_links:
                 sl.context._Get()
+
+    #### Internal Methods ####
+
+    def __init__(self):
+        self.out_links = []
+        self.context = self.context(self)
+        self.out_links = subcollection(self.context.subgraph.links, lambda link :  link.in_socket == self)
+        self.in_links  = subcollection(self.context.subgraph.links, lambda link : link.out_socket == self)
     
     @property
     def dir(self):
@@ -180,19 +200,9 @@ class socket_group[SocketType=socket](ConstrBase,Hookable):
     Socket_Mutable      : bool        
     Socket_Mutatle_Pool : list[socket]
 
-    def Socket_Label_Generator(self,socket:socket):
-        return getattr(socket,'Default_Label',socket.Label)
-    def Socket_ID_Generator(self,socket:socket):
-        ''' Verify ID is Unique before attaching '''
-        uid_base = getattr(socket,'Default_ID',socket.UID)
-        uid = uid_base
-        i = 0
-        while uid in self.parent_col.keys():
-            i=+1
-            uid = uid_base + '.' + str(i).zfill(3)
-        return uid
 
     #### Base Methods ####
+
     @classmethod
     def construct(cls,
                   group_id:str,
@@ -206,10 +216,31 @@ class socket_group[SocketType=socket](ConstrBase,Hookable):
         kwargs['Socket_Set_Base'] = Sockets
         return type(f'S_GROUP_{group_id}',(cls,),kwargs)
 
+    context = context.construct(include=['meta_graph','root_graph','subgraph','node','socket_coll',],as_name='socket_group')
+    def _context_walk_(self):
+        with self.context.register():        
+            for s in self.sockets.values():
+                s._context_walk_()
 
+
+    #### Instance Methods ###
+    
     def __init__(self,parent_col):
         self.context = self.context(self)
         self.parent_col = parent_col
+
+    def Socket_Label_Generator(self,socket:socket):
+        return getattr(socket,'Default_Label',socket.Label)
+    
+    def Socket_ID_Generator(self,socket:socket):
+        ''' Verify ID is Unique before attaching '''
+        uid_base = getattr(socket,'Default_ID',socket.UID)
+        uid = uid_base
+        i = 0
+        while uid in self.parent_col.keys():
+            i=+1
+            uid = uid_base + '.' + str(i).zfill(3)
+        return uid
 
     def default_sockets(self):
         for i in range(self.Socket_Quantity_Min):
@@ -254,13 +285,6 @@ class socket_group[SocketType=socket](ConstrBase,Hookable):
         socket.group_id = self.Group_ID
         if socket not in self.parent_col.values():
             self.parent_col[key] = socket
-
-    context = context.construct(include=['meta_graph','root_graph','subgraph','node','socket_coll',],as_name='socket_group')
-    def _context_walk_(self):
-        with self.context.register():        
-            for s in self.sockets.values():
-                s._context_walk_()
-
 
 class socket_collection(BaseModel,collection_typed_base,ConstrBase,Hookable):
     ''' Accessor of sockets and socket_groups '''
@@ -330,7 +354,6 @@ class socket_collection(BaseModel,collection_typed_base,ConstrBase,Hookable):
     def Bases(self)->dict[str,Any]:
         return self.context.root_graph.module_col.items_by_attr('_io_bin_name_','socket')
 
-from inspect import isclass
 
 class node(BaseModel,ConstrBase,Hookable):
     ''' Base Node type, inherited into actionable forms '''
@@ -371,7 +394,6 @@ class node(BaseModel,ConstrBase,Hookable):
         self.in_sockets.default_sockets()
         self.out_sockets.default_sockets()
         self.side_sockets.default_sockets()
-
 
 class node_collection(BaseModel, collection_typed_base, ConstrBase,Hookable):
     _io_bin_name_  = 'node'
@@ -421,9 +443,10 @@ class subgraph(BaseModel, item_base, ConstrBase,Hookable):
             self.nodes._context_walk_()
 
     def __init__(self,):
-        self.links   = collection_typed_base()
         self.context = self.context(self)
-        self.nodes   = node_collection()
+        with self.context.register():
+            self.links   = link_collection()
+            self.nodes   = node_collection()
 
 
 class subgraph_collection[SubgraphType=subgraph](BaseModel, collection_base, ConstrBase,Hookable):
@@ -560,6 +583,7 @@ class meta_graph(BaseModel, ConstrBase,Hookable):
         t = Bases.set(mixins)
 
         link.Construct(recur=False)
+        link_collection.Construct(recur=False)
         socket.Construct(recur=False)
         socket_group.Construct(recur=False)
         socket_collection.Construct(recur=False)

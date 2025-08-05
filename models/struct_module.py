@@ -8,8 +8,8 @@ class _mixin_base:
 
     _loader_mixin_ = True
     # _constr_asbase_discard_ = True
-    Module_Id : str
-    Module_V  : str
+    Module_Id    : str
+    Module_V     : str
     Deps         : list[tuple[str,str,str,str]] 
     Module       : Any
 
@@ -31,8 +31,10 @@ class _item_base:
         assert getattr(cls, 'Label'  , None) is not None
         assert getattr(cls, 'Desc'  ,  None) is not None
 
-        cls._Version = VersionType(cls.Version)
-        cls.Version  = cls._Version.release
+
+        cls._Version  = VersionType(cls.Version)
+        # cls.Version_R = cls._Version.release
+        # cls.Version   = cls._Version.release
 
 class module_test():
     ''' Consolidated test object, can allow implicit setup and loading of modules not directly defined. '''
@@ -40,10 +42,12 @@ class module_test():
     module : 'module' = None
 
     def __init__(self,test_name :str ,/,*,
+                 module = None,
                 #  implicit_load  :bool           = True,
                  module_iten    :dict           = None, 
                  funcs          :list[Callable] = None):
         self.name        = test_name
+        self.module      = module
         self.module_iten = module_iten
         self.funcs       = funcs
         assert funcs is not None
@@ -84,14 +88,15 @@ class module():
     def __init_subclass__(cls):
         assert getattr(cls,'UID',None)     is not None
         assert getattr(cls,'Version',None) is not None
-        assert getattr(cls,'Label',None)   is not None
-        assert getattr(cls,'Desc',None)    is not None
+
+        cls.Label = getattr(cls,'Label',f'({cls.UID}:{cls.Version})')
+        cls.Desc  = getattr(cls,'Desc',cls.__doc__)
         
         cls._Version = VersionType(cls.Version)
-        cls.Version  = cls._Version.release
 
         _mixins = cls.__module_set_components__(_mixin_base, '_loader_mixins_' )
         _items  = cls.__module_set_components__(_item_base,  '_loader_items_'  )
+
         for x in _items:
             x.Module = cls
 
