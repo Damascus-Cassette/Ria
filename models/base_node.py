@@ -110,29 +110,8 @@ class socket(BaseModel,item_base,ConstrBase,Hookable):
 
 
     #### Constructed Values, Not Stored ####
-
-    Value_Type  : Any       = Any
-    Value_Allow : list[Any] = [Any]
-        # Fallback values from socket_group.
-
-    Disc_Cachable   : bool = True
-        # If this socket can be cached to disc or not
-        # If false, invalidates disc_cachable on exec_node
-
-    Call_Cache_Dump : bool = False
-    Call_Cache_Load : bool = False
-        # If true, calls dump and load on execution
-
     Default_ID      : str
     Default_Label   : str
-
-
-    #### Constructed Methods ####
-
-    def cache_dump(self,dir):
-        ''' Dump cache infor to location w/a, set disc_loc and disc_cached for cache_load'''
-    def cache_load(self):
-        ''' Load cache from disc_loc, set to self.value '''
 
 
     ####  Inst Props, Stored ####
@@ -144,12 +123,6 @@ class socket(BaseModel,item_base,ConstrBase,Hookable):
     group_id : str 
     group_set_id : str
         #IDs for socket_group container & subset
-
-    value    : Any
-    
-    disc_cached   : bool = False
-    disc_location : str
-        #Hooks will convert spaces from & to `<SpaceID>/...` Format
 
     out_links  : subcollection[link]
     in_links   : subcollection[link]

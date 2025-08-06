@@ -172,6 +172,114 @@ walk_force = ContextVar('walk_force',default=False)
 #     ''' Will expand later to include args such as contextual cache invalidation'''
 #     return _node_execution(func)
 
+from types import UnionType, FunctionType
+from inspect import isclass
+class _unset():...
+
+context = ContextVar('execution context', default=defaultDict(default=None))
+
+
+class context_function():
+    ''' Context holding & altering function for sourced seeded randomness and similar. Operates within the execution-traversal context on a limited scope of keys '''
+    ''' May or may not become a disc-cachable type. Minimal use case. '''
+    ''' System Should treat same as FunctionType '''
+
+    def __init__(self,func,c_keys:list=None, base_context:dict=None):
+        if c_keys == None: c_keys = []
+        if base_context == None: base_context = {} 
+        self.func = func
+
+        self.base_context = base_context
+
+    def __call__(self,*args,**kwargs):
+        '''Resolve context from self.base_context first, then otherwise & run func '''
+        ''' Could alternativly just have a few context keys to create a new dict. '''
+        with context.copy().get().join(self.base_context).intersect[self.c_keys]:
+            return self.func(*args,*kwargs)
+
+        
+
+class socket_shapes():
+    class mutable[T]():
+        def get(cls,socket)->list[T]|T|_unset:
+            if socket.Links_Max > 1:
+                res = []
+                for x in socket.links: 
+                    res.append(cls.Resolve(x.out_socket.value))
+                if res:
+                    return res
+                else:
+                    return _unset
+                
+            else:
+                if len(socket.links):
+                    return socket.links[0].out_socket.value
+                else:
+                    return _unset
+
+    class single[T]():
+        @classmethod
+        def get(cls,socket)->T|_unset:
+            ''' Calls upstream socket.value and returns it. 
+            Resolves FunctionType|context_function w/a.
+            Base is any input formatted, no resolution of functions 
+            _unset is returned to allow for fallback values
+            '''
+            if len(socket.links) > 0:
+                ...
+            else:
+                return _unset
+
+        def Resolve[T](value:T)->T:
+            return value
+
+    class multi[T]():
+        @classmethod
+        def get(cls,socket)->list[T]|_unset:
+            ''' Calls upstream [socket.value] and returns it '''
+            res = []
+            for x in socket.links: 
+                res.append(cls.Resolve(x.out_socket.value))
+            if res:
+                return res
+            else:
+                return _unset
+        
+        def Resolve[T](value:T)->T:
+            return value
+
+    class c_func(single):
+        def Resolve[T](value:T)->T:
+            # if isclass(value):
+            #     return value
+            if not isinstance(value,(FunctionType,context_function)):
+                value = lambda *args, **kwargs: value
+            return value
+    
+    class c_funcs(multi):
+        def Resolve[T](value:T)->T:
+            if not isinstance(value,(FunctionType,context_function)):
+                value = lambda *args, **kwargs: value
+            return value
+
+    
+    class value(single):
+        ''' Collapsing to a value on a socket automatically can throw errors with missing arguments. Be aware! '''
+        def Resolve[T](value:T)->T:
+            if isinstance(value,(FunctionType,context_function)):
+                value = value()
+            return value
+        
+    class values(multi):
+        def Resolve[T](value:T)->T:
+            if isinstance(value,(FunctionType,context_function)):
+                value = value()
+            return value
+
+    _single = [c_func ,value ]
+    _multi  = [c_funcs,values]
+
+st = socket_shapes
 
 class main(module):
     UID          = 'Core_Execution'
@@ -181,26 +289,123 @@ class main(module):
     Version      = '2.0'
 
     class socket_mixin(_mixin.socket):
-        value : property
+        
+        Value_Shape   : st.single|st.multi
+            #Statement to make inputs typed single or multi
+        Value_Type    : Any|set[Any]|UnionType
+            #Statemnt of type(s) produced by socket.
+        Value_Default : Any = _unset
+            #Not saved to file.
+            
+        From_Value_Type_Whitelist : set|Any
+        From_Value_Type_Blacklist : set = set()
+
+        To_Value_Type_Whitelist   : set|Any
+        To_Value_Type_Blacklist   : set = set()
+            #Works via checking Value_Type
+            #Whitelist is opertunistic (any-in:allow), blacklist is pesimistic (any-in:disalllow)
+
+        def __init_subclass__(cls):
+            assert getattr(cls,'Value_Type',   _unset) is not _unset
+            assert getattr(cls,'Value_Default',_unset) is not _unset
+
+            if isclass((ty:=getattr(cls,'Value_Type'))):
+                if issubclass(ty,(st.single,st.multi,st.mutable)):
+                    cls.Value_Shape = ty.__origin__
+                    cls.Value_Type  = set[ty.__args__]
+                elif issubclass(ty,UnionType):
+                    cls.Value_Type  = set[ty.__args__]
+            else:
+                assert isinstance(ty,(list,set,tuple))
+
+            if not hasattr(getattr(cls,'Value_Shape',_unset),'get'):
+                cls.Value_Shape = st.mutable
+
+            super().__init_subclass__()
+
+            
+        In_Value_Resolution_Chain  = {'value_graph','user_value','value_default','Value_Default'}
+        Out_Value_Resolution_Chain = {'value_graph'}
+            #these could be a property for custom things that connect to UI
+
+        @property
+        def value(self):
+            if self.Direction in ['in','side']:
+                attr_chain = self.In_Value_Resolution_Chain
+            else:
+                attr_chain = self.Out_Value_Resolution_Chain
+
+            for attr in attr_chain:
+                if val:=getattr(self,attr) is not _unset:
+                    return val
+            return _unset
+            
+        # In_Value_Set  : list|str = ['_value']
+        # Out_Value_Set : list|str = ['_value']
+        # @value.setter
+        # def value(self,value):
+        #     ''' Set Via Set chains? May just not allow to be setable '''
+        # Could set Exec_Value on out, raise error on in
+
+        _value_exec    : any = _unset  
+        _value_graph   : any = _unset
+        _value_user    : any = _unset
+        value_default  : any = _unset
+            #socket Inst  value default
+            #TODO: ay need to be typed differently to save correctly
+
+        @property
+        def value_user(self):
+            return self._value_user 
+        @value_user.setter
+        def value_user(self,value):
+            self._value_user = value 
+            
+            #From the node itself
+            #Only set if mem-cachable & Deterministic
+        @property
+        def value_exec(self):
+            ''' Property that can only be accessed on the '''
+            assert self.Direction == 'out'
+            return getattr(self,'_value_exec',_unset)
+        @value_exec.setter
+        def value_exec(self,value):
+            assert self.Direction == 'out'
+            self._value_exec = value
+
+        @property
+        def value_graph(self):
+            ''' Auto execution property '''
+            if self.Direction in ['in','side']:
+                return self.Value_Shape.get(self)
+            else:
+                val = self.value_exec
+                if val is _unset:
+                    self.context.node.execute()
+                val = self.value_exec
+                if val is _unset:
+                    raise Exception('SOCKET value_exec WAS NOT SET DURING EXECUTION')
+                return val
+
 
     class node_mixin(_mixin.node):
         Value_Type  : Any       = Any
         Value_Allow : list[Any] = [Any]
             # Fallback values from socket_group.
 
-        Disc_Cachable   : bool = True
+        Mem_Cachable    : bool #= True
+        Disc_Cachable   : bool #= True
             # If this socket can be cached to disc or not
             # If false, invalidates disc_cachable on exec_node
 
+
+        #### Constructed Methods & Vars ####
         Call_Cache_Dump : bool = False
         Call_Cache_Load : bool = False
-            # If true, calls dump and load on execution
 
-
-        #### Constructed Methods ####
-        def cache_dump(self,dir):
+        def Cache_Dump(self,dir):
             ''' Dump cache infor to location w/a, set disc_loc and disc_cached for cache_load'''
-        def cache_load(self):
+        def Cache_Load(self):
             ''' Load cache from disc_loc, set to self.value '''
         
         disc_cached   : bool = False
@@ -208,7 +413,6 @@ class main(module):
             #Hooks will convert spaces from & to `<SpaceID>/...` Format
         
         value    : Any
-
 
     class exec_node_mixin(_mixin.exec_node):
         def execute(self):
@@ -219,7 +423,6 @@ class main(module):
             ''' Calls execute on all inputs '''
             for x in self.in_sockets:
                 ...
-
 
 
     class placeholder_node_mixin(_mixin.exec_placeholder_node):
