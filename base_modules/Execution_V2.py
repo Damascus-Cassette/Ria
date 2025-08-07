@@ -179,25 +179,10 @@ class _unset():...
 context = ContextVar('execution context', default=defaultDict(default=None))
 
 
-class context_function():
-    ''' Context holding & altering function for sourced seeded randomness and similar. Operates within the execution-traversal context on a limited scope of keys '''
-    ''' May or may not become a disc-cachable type. Minimal use case. '''
-    ''' System Should treat same as FunctionType '''
-
-    def __init__(self,func,c_keys:list=None, base_context:dict=None):
-        if c_keys == None: c_keys = []
-        if base_context == None: base_context = {} 
-        self.func = func
-
-        self.base_context = base_context
-
-    def __call__(self,*args,**kwargs):
-        '''Resolve context from self.base_context first, then otherwise & run func '''
-        ''' Could alternativly just have a few context keys to create a new dict. '''
-        with context.copy().get().join(self.base_context).intersect[self.c_keys]:
-            return self.func(*args,*kwargs)
-
-        
+from .Execution_V2_type_containers import (locked_data_container,
+                                           locked_func_container,
+                                           locked_prop_container,
+                                           unlocked_func_container)
 
 class socket_shapes():
     class mutable[T]():
@@ -393,11 +378,16 @@ class main(module):
         Value_Allow : list[Any] = [Any]
             # Fallback values from socket_group.
 
+        Deterministic   : bool
+            #Invalidates mem|disc cachable
+                #Is not sharable
+            #Any calls directly to this node will be re-run
+
         Mem_Cachable    : bool #= True
         Disc_Cachable   : bool #= True
             # If this socket can be cached to disc or not
             # If false, invalidates disc_cachable on exec_node
-
+            # Check against all sockets being disc/mem cachable
 
         #### Constructed Methods & Vars ####
         Call_Cache_Dump : bool = False
@@ -410,9 +400,7 @@ class main(module):
         
         disc_cached   : bool = False
         disc_location : str
-            #Hooks will convert spaces from & to `<SpaceID>/...` Format
-        
-        value    : Any
+
 
     class exec_node_mixin(_mixin.exec_node):
         def execute(self):
