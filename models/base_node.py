@@ -51,7 +51,7 @@ class link(BaseModel,item_base,ConstrBase,Hookable):
     @property
     def out_socket(self):
         if (self.out_socket_node) and (self.out_socket_dir) and (self.out_socket_id is not None):
-            return getattr(self.out_socket_node,self.out_socket_dir+'sockets')[self.out_socket_id]
+            return getattr(self.out_socket_node,self.out_socket_dir+'_sockets')[self.out_socket_id]
     @out_socket.setter
     def out_socket(self,socket):
         self.out_socket_node = socket.context.node
@@ -113,10 +113,10 @@ class socket(BaseModel,item_base,ConstrBase,Hookable):
     Default_ID      : str
     Default_Label   : str
 
+    Link_Quantity_Min : int = 1
+    Link_Quantity_Max : int = 1
 
     ####  Inst Props, Stored ####
-
-
     id       : str
     label    : str
 

@@ -7,8 +7,8 @@ from ..models.struct_module import module
 from .Execution_Types       import socket_shapes as st
 from .Execution_Types       import unlocked_func_container
 
-from typing           import Any, Self, get_type_hints, ForwardRef, TypeAlias
-from types            import UnionType, FunctionType
+from typing           import Any, Self, get_type_hints, ForwardRef, TypeAlias, Callable
+from types            import UnionType, FunctionType, MethodType
 from collections      import defaultdict
 from contextvars      import ContextVar
 from inspect          import isclass
@@ -65,11 +65,13 @@ class main(module):
         #     #TODO
         #     return True 
 
-        user_value    : Any = _unset
-        value_default : Any = _unset
+        user_value    : Any|_unset = _unset
+        value_default : Any|_unset = _unset
+        _value        : Any|_unset = _unset
 
-        @property
-        def value(self):
+        # @property
+            #was  is giving me horrendus headaches with error traces
+        def value_get(self):
             ''' Simplifying interface '''
             return self.get_value()
 
@@ -80,44 +82,58 @@ class main(module):
                 return self.get_out_value()
             
         def get_out_value(self):
-            for attr in self.In_Value_Resolution_Chain:
-                if val:=getattr(self,attr,_unset) is not _unset:
+            for attr in self.Out_Value_Resolution_Chain:
+                if (val:=getattr(self,attr,_unset)) is not _unset:
+                    if isinstance(val,(FunctionType, MethodType)): val = val()
+                    print('GET_OUT_VALUE IS', attr, val)
                     return val
-            raise Exception(f'ERROR Socket {self} could not resolve via In_Value_Resolution_Chain!!')
+            raise Exception(f'ERROR {self} value could not resolve via Out_Value_Resolution_Chain!!')
+        
         def get_in_value(self):
             for attr in self.In_Value_Resolution_Chain:
-                if val:=getattr(self,attr,_unset) is not _unset:
+                if (val:=getattr(self,attr,_unset)) is not _unset:
+                    if isinstance(val,(FunctionType, MethodType)): val = val()
                     return val
-            raise Exception(f'ERROR Socket {self} could not resolve via In_Value_Resolution_Chain!!')
+            raise Exception(f'ERROR  {self} value could not resolve via In_Value_Resolution_Chain!!')
 
-        @value.setter
-        def value(self,value):
+        # @value.setter
+        def value_set(self,value):
             if self.dir in ['in','side']:
                 return self.set_in_value(value)
             else: #self.dir in ['out']:
                 return self.set_out_value(value)
         def set_out_value(self,value):
             self._value = value
+            return value
         def set_in_value(self,value):
             self.user_value = value
+            return value
 
-        @property
+        # @property
         def in_graph_value_getter(self):
             ''' Graph value getter on input, uses Shape_Value.get for resolving shape of unput. May return None'''
             return self.Value_Shape.get(self)
 
-        @property
+        # @property
         def out_graph_value_getter_errorless(self):
             ''' Execute/Compile without error if no values (use in defaultvalue-resolution chains) '''
+            # print('out_graph_value_getter ERRORLESS CALLED')
             if self._value is _unset:
-                getattr(self.context.node,self.context.node.Call_Func_Name)()
+                n  = self.context.node
+                fn = self.context.node.Call_Func_Name
+                func = getattr(n, fn,lambda: print(f'NO FUNC FOUND OF {n}.{fn}'))
+                func()
+
             return self._value
         
-        @property
+        # @property
         def out_graph_value_getter(self):
             ''' Execute/Compile with errors if no values '''
-            if val:=self.out_graph_value_getter_errorless is _unset:
-                raise Exception(f'ERROR Socket {self} is unset after nodes execution!!!')
+
+            val = self.out_graph_value_getter_errorless()
+            if val is _unset:
+                raise Exception(f'ERROR {self} is unset after nodes execution!!!')
+
             return val
 
 

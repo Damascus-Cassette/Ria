@@ -69,17 +69,17 @@ class socket_shapes():
     class mutable[T=Any]():
         @classmethod
         def get(cls,socket)->list[T]|T|_unset:
-            if socket.Links_Max > 1:
+            if socket.Link_Quantity_Max > 1:
                 res = []
-                for x in socket.links: 
+                for x in socket.in_links: 
                     res.append(cls.Resolve(x.out_socket.value, x.out_socket.context.node))
                 if res:
                     return res
                 else:
                     return _unset
             else:
-                if len(socket.links):
-                    x = socket.links[0]
+                if len(socket.in_links):
+                    x = socket.in_links[0]
                     return (cls.Resolve(x.out_socket.value, x.out_socket.context.node))
                 else:
                     return _unset
@@ -114,10 +114,10 @@ class socket_shapes():
             Base is any input formatted, no resolution of functions 
             _unset is returned to allow for fallback values
             '''
-            if len(socket.links) == 1:
-                s = socket.links[0].out_socket
+            if len(socket.in_links) == 1:
+                s = socket.in_links[0].out_socket
                 cls.Resolve(s.value,s.context.node)
-            elif len(socket.links) > 1:
+            elif len(socket.in_links) > 1:
                 raise Exception(f'Singular {cls.__name__} is an incorrect shape declaration for multiple input links!')
             else:
                 return _unset
@@ -132,7 +132,7 @@ class socket_shapes():
         def get(cls,socket)->list[T]|_unset:
             ''' Calls upstream [socket.value] and returns it '''
             res = []
-            for x in socket.links: 
+            for x in socket.in_links: 
                 res.append(cls.Resolve(x.out_socket.value,x.out_socket.context.node))
             if res:
                 return res

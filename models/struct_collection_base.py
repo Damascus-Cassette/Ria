@@ -84,6 +84,9 @@ class collection_base[T=item_base]():
         for v in self.values():
             yield v
 
+    def __len__(self):
+        return len(self.values())
+
     # def _UKey_Generator(self,item,key:str):
     #     ''' Verify ID is Unique before attaching, '''
     #     key_base = getattr(item,'key',key)
@@ -132,7 +135,7 @@ class subcollection[T](collection_base):
     ''' A collection initlizied with another collection's data and containing a lambda filter. '''
     
     def __init__(self, base_collection:collection_base, filter_func:Callable):
-        self.data   = base_collection
+        self._data   = base_collection
         self.filter = filter_func
 
     def __getitem__(self,key)->T|None:

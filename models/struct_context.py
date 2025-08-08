@@ -2,6 +2,8 @@ from contextvars import ContextVar
 from contextlib  import contextmanager
 from typing      import Any
 
+from ..statics   import _unset
+
 class _defaultdict(dict):
     def __missing__(self, key):
         res = self[key] = ContextVar(key, default=None)
@@ -82,3 +84,7 @@ class context():
         finally:
             if t:
                 _context[self._As_Name].reset(t)
+
+    def __repr__(self):
+        res = ' '.join([f' | {x} : {getattr(self,x,_unset)} ' for x in self._Include])
+        res = f'<Context object of chain: {res}>'
