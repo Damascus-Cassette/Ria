@@ -61,7 +61,7 @@ class link(BaseModel,item_base,ConstrBase,Hookable):
     @property
     def in_socket(self):
         if (self.in_socket_node) and (self.in_socket_dir) and (self.in_socket_id is not None):
-            return getattr(self.in_socket_node,self.in_socket_dir+'sockets')[self.in_socket_id]
+            return getattr(self.in_socket_node,self.in_socket_dir+'_sockets')[self.in_socket_id]
     @in_socket.setter
     def in_socket(self,socket):
         self.in_socket_node = socket.context.node

@@ -83,16 +83,21 @@ class main(module):
             
         def get_out_value(self):
             for attr in self.Out_Value_Resolution_Chain:
-                if (val:=getattr(self,attr,_unset)) is not _unset:
-                    if isinstance(val,(FunctionType, MethodType)): val = val()
-                    print('GET_OUT_VALUE IS', attr, val)
+                val = getattr(self,attr,_unset)
+                if isinstance(val,(FunctionType, MethodType)):
+                    val = val()
+                if val is not _unset:
+                    # print('Get_Out_Value:', val)
                     return val
             raise Exception(f'ERROR {self} value could not resolve via Out_Value_Resolution_Chain!!')
         
         def get_in_value(self):
             for attr in self.In_Value_Resolution_Chain:
-                if (val:=getattr(self,attr,_unset)) is not _unset:
-                    if isinstance(val,(FunctionType, MethodType)): val = val()
+                val = getattr(self,attr,_unset)
+                if isinstance(val,(FunctionType, MethodType)):
+                    val = val()
+                if val is not _unset:
+                    # print('Get_In_Value:', val)
                     return val
             raise Exception(f'ERROR  {self} value could not resolve via In_Value_Resolution_Chain!!')
 

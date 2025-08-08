@@ -1,3 +1,5 @@
+''' TODO: re-write this module to simplify structure of a collection w/ subcollections in mind'''
+
 
 from typing import Callable, Any
 #Generic collection
@@ -123,6 +125,7 @@ class collection_typed_base[T](collection_base):
         # self._context_new_item_(inst)
         
         return inst
+
     
     def __setitem__(self,k,item):
         x = tuple(self.Bases.values())
@@ -131,23 +134,36 @@ class collection_typed_base[T](collection_base):
         self.data.append(item)
         self._context_new_item_(item)
 
+from collections import OrderedDict
+
 class subcollection[T](collection_base):
     ''' A collection initlizied with another collection's data and containing a lambda filter. '''
+    #TODO: SCUFFED, Rewrite entire module
     
     def __init__(self, base_collection:collection_base, filter_func:Callable):
-        self._data   = base_collection
-        self.filter = filter_func
+        self.data   = base_collection
+        self.filter     = filter_func
 
-    def __getitem__(self,key)->T|None:
-        x = self.data[key]
-        if self.filter(x):
-            return x
-        return None
+    data : collection_base
 
     def __iter__(self):
-        for v in self.values():
+        for v in self.data:
             if self.filter(v):
                 yield v
+
+    @property
+    def _data(self)->dict:
+        return OrderedDict({x.key:x for x in self})
+        
+    def __getitem__(self,key:str|int)->T|None:
+        return self.data[key]
+
+    def __setitem__(self, k, item):
+        self._data[k] = item
+    
+    def new(self, key, label=None, *args, **kwargs):
+        item = self._data.new(key, label, *args, **kwargs)
+
 
 class typed_subcollection[T](subcollection,collection_typed_base):
     ...
