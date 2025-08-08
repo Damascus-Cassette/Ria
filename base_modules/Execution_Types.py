@@ -1,6 +1,10 @@
 from ..models.struct_module_types import mixin,_mixin
 from ..models.struct_module_types import item as _item
+from ..statics                    import _unset
 
+from typing  import Any,get_type_hints,Self
+from types   import FunctionType
+from inspect import isclass
 
 class exec_metadata():
     ''' Metadata for display, stats and debug '''
@@ -12,12 +16,58 @@ class exec_metadata():
 class meta_metadata():
     ...
     
-from inspect import isclass
-from ..statics import _unset
+
+class unlocked_func_container[RT=Any,FUNC=FunctionType]():
+    ''' Unlocked func Container that is NEVER Disc-Cachable. Provide UID of function behavior for optimized caching behavior '''
+
+    Module        : Any
+
+    Deterministic : bool        = True   #Refers to the result of the SELF.FUNC
+    Mem_Cachable  : bool        = True   #Refers to the SELF object
+    Disc_Cachable : bool        = False  #
+    Result_Disc_Cachable : bool = True
+
+    UID           : str
+    Version       : str
+    DataType      : RT
+    func          : FUNC
+
+    construct     = None
+
+    def __init_subclass__(cls):
+        assert not cls.Disc_Cachable #NEVER on unlocked_func_container
+        assert getattr(cls, 'UID'     , None) is not None
+        assert getattr(cls, 'Version' , None) is not None
+        if not getattr(cls,'Deterministic'):
+            assert getattr(cls, 'Result_Disc_Cachable', None) #Must be disc-cachable if non-determ
+
+    def __init__[R=Any,F=FunctionType](self, src_node, func:F, return_type:R=Any, f_id=''): #->unlocked_func_container[F,R]
+        self : Self[R,F]
+        self.f_id = f_id
+        self.func = func
+
+        self.Deterministic = src_node.Deterministic
+        self.Mem_Cachable  = src_node.Mem_Cachable and src_node.Deterministic
+
+        self.value_hash    = src_node.value_hash 
+            #value input of node
+            #In cases where a func is built up, it's restung
+
+    # @determ_unknown #memo in job.
+    def __call__(self,*args,**kwargs)->RT:
+        # if not self.Determinstic:
+            #TODO: Memo & retrieve memo if non-deterministic
+            # ...
+
+        if self.Func_Include_Container:
+            return self.Func(self,*args,**kwargs)
+        else:
+            return self.Func(*args,**kwargs)
 
 class socket_shapes():
     ''' socket value shape get method containers '''
     class mutable[T=Any]():
+        @classmethod
         def get(cls,socket)->list[T]|T|_unset:
             if socket.Links_Max > 1:
                 res = []

@@ -106,8 +106,6 @@ class hook_dict(dict):
 
                 if x.req_unique_name:
                     filter_list[k].append(x.name)
-        
-        print('filter list:', filter_list)
 
         return new
     

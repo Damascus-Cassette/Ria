@@ -19,7 +19,8 @@ class new_socket(item.socket):
     Version    = '1.0'
     Label      = 'StringSocket'
     Desc       = ''' Test String Socket '''
-    Value_Type = str
+    Value_Type    = str
+    Value_Default = ''
 
 class new_exec_node(item.exec_node):
     Module  = main 

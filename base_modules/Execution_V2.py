@@ -5,6 +5,7 @@ from .Execution_Types       import _mixin, item
 from ..statics              import _unset
 from ..models.struct_module import module
 from .Execution_Types       import socket_shapes as st
+from .Execution_Types       import unlocked_func_container
 
 from typing           import Any, Self, get_type_hints, ForwardRef, TypeAlias
 from types            import UnionType, FunctionType
@@ -14,58 +15,6 @@ from inspect          import isclass
 
 
 context = ContextVar('execution context', default=defaultdict(default=None))
-
-fwd_ref : TypeAlias = 'unlocked_func_container'
-
-class unlocked_func_container[RT=Any,FUNC=FunctionType]():
-    ''' Unlocked func Container that is NEVER Disc-Cachable. Provide UID of function behavior for optimized caching behavior '''
-
-    Module        : Any
-
-    Deterministic : bool        = True   #Refers to the result of the SELF.FUNC
-    Mem_Cachable  : bool        = True   #Refers to the SELF object
-    Disc_Cachable : bool        = False  #
-    Result_Disc_Cachable : bool = True
-
-    UID           : str
-    Version       : str
-    DataType      : RT
-    func          : FUNC
-
-    construct     = None
-
-    def __init_subclass__(cls):
-        assert not cls.Disc_Cachable #NEVER on unlocked_func_container
-        assert getattr(cls, 'UID'     , None) is not None
-        assert getattr(cls, 'Version' , None) is not None
-        if not getattr(cls,'Deterministic'):
-            assert getattr(cls, 'Result_Disc_Cachable', None) #Must be disc-cachable if non-determ
-
-    def __init__[R=Any,F=FunctionType](self, src_node, func:F, return_type:R=Any, f_id=''): #->unlocked_func_container[F,R]
-        self : Self[R,F]
-        self.f_id = f_id
-        self.func = func
-
-        self.Deterministic = src_node.Deterministic
-        self.Mem_Cachable  = src_node.Mem_Cachable and src_node.Deterministic
-
-        self.value_hash    = src_node.value_hash 
-            #value input of node
-            #In cases where a func is built up, it's restung
-
-    # @determ_unknown #memo in job.
-    def __call__(self,*args,**kwargs)->RT:
-        # if not self.Determinstic:
-            #TODO: Memo & retrieve memo if non-deterministic
-            # ...
-
-        if self.Func_Include_Container:
-            return self.Func(self,*args,**kwargs)
-        else:
-            return self.Func(*args,**kwargs)
-
-
-
 
 
 class main(module):
@@ -125,9 +74,9 @@ class main(module):
             return self.get_value()
 
         def get_value(self):
-            if self.Direction in ['in','side']:
+            if self.dir in ['in','side']:
                 return self.get_in_value()
-            else: #self.Direction in ['out']:
+            else: #self.dir in ['out']:
                 return self.get_out_value()
             
         def get_out_value(self):
@@ -142,17 +91,20 @@ class main(module):
             raise Exception(f'ERROR Socket {self} could not resolve via In_Value_Resolution_Chain!!')
 
         @value.setter
-        def value_setter(self,value):
-            ''' Simplifying interface '''
-            assert self.Direction in ['out']
-            self.set_value(value)
-        def set_value(self,value):
+        def value(self,value):
+            if self.dir in ['in','side']:
+                return self.set_in_value(value)
+            else: #self.dir in ['out']:
+                return self.set_out_value(value)
+        def set_out_value(self,value):
             self._value = value
+        def set_in_value(self,value):
+            self.user_value = value
 
         @property
         def in_graph_value_getter(self):
             ''' Graph value getter on input, uses Shape_Value.get for resolving shape of unput. May return None'''
-            return self.Value_Shape.get()
+            return self.Value_Shape.get(self)
 
         @property
         def out_graph_value_getter_errorless(self):
