@@ -14,11 +14,12 @@ class main(module):
         ]
 
 class new_socket(item.socket):
-    Module  = main 
-    UID     = 'StringSocket'
-    Version = '1.0'
-    Label   = 'StringSocket'
-    Desc    = ''' Test String Socket '''
+    Module     = main 
+    UID        = 'StringSocket'
+    Version    = '1.0'
+    Label      = 'StringSocket'
+    Desc       = ''' Test String Socket '''
+    Value_Type = str
 
 class new_exec_node(item.exec_node):
     Module  = main 

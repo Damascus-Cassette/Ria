@@ -15,6 +15,13 @@ from copy   import copy
 
 import inspect
 
+
+from typing           import Any, Self, get_type_hints, ForwardRef, TypeAlias
+from types            import UnionType, FunctionType
+from collections      import defaultdict
+from contextvars      import ContextVar
+from inspect          import isclass
+
 class container_base():
     Module        : Any
     Deterministic : bool #SELF-TYPE|OPERATION will always give the same result (TODO: if false, must memo/job-cache on call) 

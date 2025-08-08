@@ -1,6 +1,7 @@
 from packaging.version import Version as VersionType
 from inspect import isclass
 from typing import Any,Callable, ForwardRef
+# from collections import defaultdict
 
 class _mixin_base:
     ''' Mixes into all specified's base class 
@@ -89,13 +90,15 @@ class module():
         assert getattr(cls,'UID',None)     is not None
         assert getattr(cls,'Version',None) is not None
 
+        cls._module_tests_  = getattr(cls,'_module_tests_',[])
+        
         cls.Label = getattr(cls,'Label',f'({cls.UID}:{cls.Version})')
         cls.Desc  = getattr(cls,'Desc',cls.__doc__)
-        
+
         cls._Version = VersionType(cls.Version)
 
         _mixins = cls.__module_set_components__(_mixin_base, '_loader_mixins_' )
-        _items  = cls.__module_set_components__(_item_base,  '_loader_items_'  )
+        _items  = cls.__module_set_components__(_item_base,  '_loader_items_'  )    
 
         for x in _items:
             x.Module = cls
@@ -159,5 +162,4 @@ class ver_expr():
     
     operations = ['>','<','=','!']
 
-from collections import defaultdict
 
