@@ -5,7 +5,7 @@ Graph Execution logic in a module constructed onto this set
 
 from .struct_file_io         import BaseModel, defered_archtype,flat_bin,flat_col,flat_ref 
 from .struct_context         import context
-from .struct_collection_base import item_base, collection_base, collection_typed_base, subcollection,typed_subcollection
+from .struct_collection_base import item_base,collection_base,typed_collection_base, subcollection_base, typed_subcollection_base
 from .struct_construction    import ConstrBase, Bases, Constructed
 from .struct_hook_base       import Hookable
 
@@ -19,6 +19,7 @@ class socket_archtype(defered_archtype):...
 # class subgraph_archtype(defered_archtype):...
 # class graph_archtype(defered_archtype):...
 
+from collections import OrderedDict
 
 class link(BaseModel,item_base,ConstrBase,Hookable):
     ''' Pointer to a socket via node.{dir}_socket.[socket_id] '''
@@ -124,8 +125,8 @@ class socket(BaseModel,item_base,ConstrBase,Hookable):
     group_set_id : str
         #IDs for socket_group container & subset
 
-    out_links  : subcollection[link]
-    in_links   : subcollection[link]
+    out_links  : subcollection_base[link]
+    in_links   : subcollection_base[link]
 
     context = context.construct(include=['meta_graph','root_graph','subgraph','node','socket_coll','socket_group'],as_name='socket')
     def _context_walk_(self):
@@ -138,8 +139,8 @@ class socket(BaseModel,item_base,ConstrBase,Hookable):
     def __init__(self):
         self.out_links = []
         self.context = self.context(self)
-        self.out_links = subcollection(self.context.subgraph.links, lambda link :  link.in_socket == self)
-        self.in_links  = subcollection(self.context.subgraph.links, lambda link : link.out_socket == self)
+        self.out_links = subcollection_base(self.context.subgraph.links, lambda link :  link.in_socket == self)
+        self.in_links  = subcollection_base(self.context.subgraph.links, lambda link : link.out_socket == self)
     
     @property
     def dir(self):
@@ -259,7 +260,7 @@ class socket_group[SocketType=socket](ConstrBase,Hookable):
         if socket not in self.parent_col.values():
             self.parent_col[key] = socket
 
-class socket_collection(BaseModel,collection_typed_base,ConstrBase,Hookable):
+class socket_collection(BaseModel,typed_collection_base,ConstrBase,Hookable):
     ''' Accessor of sockets and socket_groups '''
     _io_bin_name_       = 'socket'
     _io_dict_like_      = True
@@ -314,7 +315,7 @@ class socket_collection(BaseModel,collection_typed_base,ConstrBase,Hookable):
 
     def __init__(self):
         self.context = self.context(self)
-        self.data    = []
+        self._data   = OrderedDict()
         self.groups  = {}
         for v in self.Groups:
             self.groups[v.Group_ID] = v(self)
@@ -368,7 +369,7 @@ class node(BaseModel,ConstrBase,Hookable):
         self.out_sockets.default_sockets()
         self.side_sockets.default_sockets()
 
-class node_collection(BaseModel, collection_typed_base, ConstrBase,Hookable):
+class node_collection(BaseModel, typed_collection_base, ConstrBase,Hookable):
     _io_bin_name_  = 'node'
     _io_dict_like_ = True
     _io_blacklist_ = ['data']
@@ -392,7 +393,7 @@ class node_collection(BaseModel, collection_typed_base, ConstrBase,Hookable):
 
     def __init__(self):
         self.context = self.context(self)
-        self.data = []
+        self._data   = OrderedDict()
 
 
 class subgraph(BaseModel, item_base, ConstrBase,Hookable):
@@ -406,7 +407,7 @@ class subgraph(BaseModel, item_base, ConstrBase,Hookable):
     _constr_join_lists_ = ['_io_blacklist_','_io_whitelist_','_constr_call_post_']
 
     nodes : flat_col[node_collection]
-    links : collection_typed_base[link]
+    links : typed_collection_base[link]
         #Retroactivly Populated via subcollection[link] on sockets
         # In memory only
 
@@ -438,7 +439,7 @@ class subgraph_collection[SubgraphType=subgraph](BaseModel, collection_base, Con
 
     def __init__(self):
         self.context = self.context(self)
-        self.data = []
+        self._data   = OrderedDict()
 
 
     context = context.construct(include=['meta_graph','root_graph','subgraph'])
@@ -504,7 +505,7 @@ class graph_collection(BaseModel, collection_base, ConstrBase,Hookable):
                 v._context_walk_()
 
     def __init__(self):
-        self.data = []
+        self._data   = OrderedDict()
         self.context = self.context(self)
 
 

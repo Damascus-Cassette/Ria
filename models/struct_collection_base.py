@@ -1,169 +1,254 @@
-''' TODO: re-write this module to simplify structure of a collection w/ subcollections in mind'''
+''' Collection base classes to mixin to other classes & Format
+Subtypes should be able to Merge left when Mergable_Base = True
+'''
 
 
-from typing import Callable, Any
-#Generic collection
+from .struct_merge_tools import merge_wrapper
+from .struct_context     import context
+# from .struct_file_io import BaseModel
+    #Want to keep each struct module as seperate as possible.
 
-from .struct_context import context
-from contextlib import contextmanager
+from collections import OrderedDict
+from typing      import Self,Callable,Type
+from types       import FunctionType
+
 
 class item_base():
     key   : str
     label : str
 
 class collection_base[T=item_base]():
-    #### Constructed Values ####
-    Base : T
+    ''' OrdereDict wrapper that allows typing via bases prop or func '''
 
-    #### Instance Values ####
-    data : list[T]
-    
+    #### Constructed Values #### 
+    Base           : Type
+    Merge_By_Keys  : bool = False   #Can merge by keys (merge left w/a with merge_bases) or make keys unique
+    Mergeable_Base : bool = False   
+        #Subtypes should allow merging when this is true
+        #If this is not True, it will replace like a dict and not deep replace-refs
+
+    Allow_Unique_Generation : bool = True
+
+    #### Instance ####
+    _data   : OrderedDict  = None
+    _order  : FunctionType    = lambda s,ikv: ikv[0]
+
     context = context.construct()
     def _context_walk_(self):
         with self.context.register():
-            for x in self.data:
+            for x in self.data.values():
                 if func:=getattr(x,'_context_walk_',None):
                     func()
     def _context_new_item_(self,item):
         if func:=getattr(item,'_context_walk_',None):
             with self.context.In_Last_Context():
-                func()            
+                func()
+
+    def ensure_unique_key(self,key):
+        if key not in self._data.keys():
+            return key
+        elif not self.Allow_Unique_Generation:
+            raise Exception('KEY NOT UNIQUE WHILE CLASS DEMANDS UNIQUE')
+        
+        key_base = key
+        i = 0
+        while key in self._data.keys():
+            if i > 999: raise Exception('WHAT ARE YOU DOING???')
+            i   =+ 1
+            key = key_base + '.' + str(i).zfill(3)
+        
+        return key
 
     @property
-    def _data(self):
-        ret = {}
-        for x in self.data:
-            ret[x.key] = x
-        return ret
-    
+    def data(self)->OrderedDict:
+        ''' filtered data '''
+        values = sorted([(i,k,v) for i,(k,v) in enumerate(self._data.items())],key = self._order)
+        res    = OrderedDict({k:v for i,k,v in values})
+        return res
+
+    def __init__(self):
+        self.context = self.context(self)
+        self._data   = OrderedDict()
+
     def new(self,key,label=None,*args,**kwargs):
-        assert key not in self._data.keys()
+        key = self.ensure_unique_key(key)
         if label is None: label = key
-        inst = self.Base(*args,**kwargs)
+        inst       = self.Base(*args,**kwargs)
         inst.label = label
         inst.key   = key
-        self.data.append(inst)
+        self._data[key] = inst
         self._context_new_item_(inst)
         return inst
 
-    def set(self,key,item):
-        self._context_new_item_(item)
-        self[key] = item
+    def __setitem__(self,key,item):
+        ''' Replace key if mergable or generate new key and move'''
+        assert self.matches_base(item)
+        
+        if key in self._data.keys():
+            if self.Mergeable_Base and self.Merge_By_Keys:
+                item = item | self._data[key]
+                self._context_new_item_(item)
 
-    def clear(self):
-        for k in self._data.keys():
-            self.remove(self,k)
+            elif not self.Merge_By_Keys:
+                key = self.ensure_unique_key(key)
 
-    def remove(self,key):        
-        item = self._data[key]
-        self.data.remove(item)
+        self._data[key] = item
 
-    def __getitem__(self,k):
-        if isinstance(k,int):
-            return self.data[k]
-        return self._data[k]
+    def __setmerge__(self,key,item):
+        ''' add/merge local w/a or discard incoming '''
+        assert self.matches_base(item)
+        
+        if key in self._data.keys():
+            if self.Mergeable_Base:
+                item = item | self._data[key]
+                self._context_new_item_(item)
+                self._data[key] = item
+                return item
+            # Do not merge otherwise. 
+            # TODO have to add to memo for merge that one was chosen over another
+        
+        else:
+            self._data[key]=item
 
-    def __setitem__(self,k,item):
-        assert isinstance(k,self.Base)
-        item.key = k
-        self.data.append(item)
-        self._context_new_item_(item)
-
-    def values(self): 
-        return self._data.values()
-
-    def items(self):  
-        return self._data.items()
-
-    def keys(self):   
-        return self._data.keys()
-    
-    def __init__(self):
-        self.context = self.context(self)
-        self.data = []
-
-    def __iter__(self):
-        for v in self.values():
-            yield v
+    def __getitem__(self,key):
+        return self.data[key]
 
     def __len__(self):
-        return len(self.values())
-
-    # def _UKey_Generator(self,item,key:str):
-    #     ''' Verify ID is Unique before attaching, '''
-    #     key_base = getattr(item,'key',key)
-    #     key = key_base
-    #     i = 0
-    #     while key in self.keys():
-    #         i=+1
-    #         key = key_base + '.' + str(i).zfill(3)
-    #     return key
-
-class collection_typed_base[T](collection_base):
-    ''' Collection of multiple allowable types '''
-
-    #### Constructed Values ####
-    Bases : dict[str,Any]
-        #Replaced in inherited to be filtered property of root_graph.
+        return len(self.data)
     
-    def new(self, type:str|Any, key, label=None,*args,**kwargs):
-        Bases = self.Bases
+    def __iter__(self):
+        for v in self.data.values():
+            yield v
+    
+    def iter(self):
+        for i,(k,v) in enumerate(self.data.items()):
+            yield i,k,v
+        
+    def items(self):
+        for k,v in self.data.items():
+            yield k,v
+    def keys(self):
+        for k in self.data.keys():
+            yield k
+    def values(self):
+        for v in self.data.values():
+            yield v
+
+    def matches_base(self,item):
+        return isinstance(item,self.Base)
+
+    @merge_wrapper
+    def __or__(self, other:Self|OrderedDict):
+        ''' Merge via set_item, merge left. Maintain filter & Order'''
+        assert other.__class__ is self.__class__
+        
+        for i,k,v in other:
+            self.__setmerge__(k,v)
+
+class subcollection_base[T](collection_base):
+    # @property
+    # def _io_write_(self): return self._data.__class__ != collection_base
+    
+    _io_write_ : bool            = False
+    _data      : collection_base 
+    _filter    : FunctionType    = lambda i,k,v: True
+    _order     : FunctionType    = lambda s,ikv: ikv[0]
+    # _order     : FunctionType    = lambda i,k,v: i
+
+    def __init__(self, parent:collection_base, _filter:FunctionType=None):
+        self._data   = parent
+        self._filter = _filter
+    
+    @property
+    def data(self)->OrderedDict[str,T]:
+        ''' filtered data '''
+        values = sorted([(i,k,v) for i,(k,v) in enumerate(self._data.items()) if self._filter(i,k,v)],key = self._order)
+        res    = OrderedDict({k:v for i,k,v in values})
+        return res
+    
+    def new(self, *args, suppress_filter_check = False,**kwargs,)->T:
+        '''In a subcollection an item'''
+        inst = super().new(*args,**kwargs)
+    
+        if not suppress_filter_check:
+            assert self._filter(inst)
+        return inst
+
+    @merge_wrapper
+    def __or__(self,other:Self):
+        ''' Union, merge filters & cover gaps in parent's collection, merging filters may unwanted additional coverage '''
+        ''' Merge left '''
+        assert other.__class__ is self.__class__
+        
+        self._filter = lambda i,k,v : other._filter(v) or self._filter(v)
+        
+        for i,k,v in other:
+            self.__setmerge__(k,v)
+
+
+class typed_collection_base[T](collection_base):
+    
+    Bases : dict[str,Type]
+
+    def matches_base(self, item):
+        Bases = getattr(self,'Bases',{})
+        assert item in Bases.keys()
+    
+    def new(self, type:str, key, label=None,*args,**kwargs):
+        Bases = getattr(self,'Bases',{})
         if label is None: label = key
 
-        if isinstance(type,str): assert type in Bases.keys()
-        else:                    assert type in Bases.values()
-
-        assert key not in self._data.keys()
+        if isinstance(type,str): 
+            assert type in Bases.keys()
+            type = Bases[type]
+        else:                    
+            assert type in Bases.values()
 
         with self.context.In_Last_Context():
-            inst = Bases[type](*args,**kwargs)
+            inst = type(*args,**kwargs)
+        
         inst.label = label
         inst.key   = key
 
-        self.data.append(inst)
-
-        # self._context_new_item_(inst)
-        
+        self[key]  = inst
+        # self._context_new_item_(inst) #Ruyn within __setitem__ function
         return inst
 
+
+class typed_subcollection_base[T](typed_collection_base):
+    # @property
+    # def _io_write_(self): return self._data.__class__ != collection_base
     
-    def __setitem__(self,k,item):
-        x = tuple(self.Bases.values())
-        assert isinstance(item,x)
-        item.key = k
-        self.data.append(item)
-        self._context_new_item_(item)
+    _io_write_ : bool            = False
+    _data      : collection_base 
+    _filter    : FunctionType    = lambda i,k,v: True
+    _order     : FunctionType    = lambda s,ikv: ikv[0]
 
-from collections import OrderedDict
-
-class subcollection[T](collection_base):
-    ''' A collection initlizied with another collection's data and containing a lambda filter. '''
-    #TODO: SCUFFED, Rewrite entire module
+    def __init__(self, parent:collection_base, _filter:FunctionType=None):
+        self._data   = parent
+        self._filter = _filter
     
-    def __init__(self, base_collection:collection_base, filter_func:Callable):
-        self.data   = base_collection
-        self.filter     = filter_func
-
-    data : collection_base
-
-    def __iter__(self):
-        for v in self.data:
-            if self.filter(v):
-                yield v
-
     @property
-    def _data(self)->dict:
-        return OrderedDict({x.key:x for x in self})
-        
-    def __getitem__(self,key:str|int)->T|None:
-        return self.data[key]
-
-    def __setitem__(self, k, item):
-        self._data[k] = item
+    def data(self)->dict:
+        ''' filtered data '''
+        values = sorted([(i,k,v) for i,(k,v) in enumerate(self._data.items()) if self._filter(i,k,v)],key = self._order)
+        res    = OrderedDict({k:v for i,k,v in values})
+        return res
     
-    def new(self, key, label=None, *args, **kwargs):
-        item = self._data.new(key, label, *args, **kwargs)
+    def new(self, *args, suppress_filter_check = False,**kwargs,):
+        '''In a subcollection an item'''
+        inst = super().new(*args,**kwargs)
+    
+        if not suppress_filter_check:
+            assert self._filter(inst)
+        return inst
 
-
-class typed_subcollection[T](subcollection,collection_typed_base):
-    ...
+    def __or__(self,other:Self):
+        ''' Union, merge filters & cover gaps in parent's collection, merging filters may unwanted additional coverage '''
+        ''' Merge left '''
+        assert other.__class__ is self.__class__
+        
+        self._filter = lambda i,k,v : other._filter(v) or self._filter(v)
+        
+        for i,k,v in other:
+            self.__setmerge__(k,v)
