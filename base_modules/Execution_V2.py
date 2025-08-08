@@ -175,33 +175,46 @@ class main(module):
     Version      = '2.0'
 
     class socket_mixin(_mixin.socket):
-        
-        Value_Shape   : st.mutable = st.mutable # Statement to make assert shapes/forms
-                                                
+        #### Constructed Methods & Vars ####
+        Value_Shape   : st.mutable = st.mutable # Statement to make assert shapes/forms                                                
         Value_Type    : Any|set[Any]|UnionType  # Statemnt of type(s) produced by socket.
         Value_Default : Any = _unset            # Not saved to file.
-        Value_Strict  : bool = True
 
-        def Value_Verify(self,value):
-            #TODO
-            return True 
+        In_Value_Resolution_Chain  = {'in_graph_value_getter' ,'user_value','value_default','Value_Default'}
+        Out_Value_Resolution_Chain = {'out_graph_value_getter'} 
+            #out_graph_value_getter_errorless can be used for default chains, but not a usual use case
 
-        #### Constructed Methods & Vars ####
-        Call_Cache_Dump : bool = False
-        Call_Cache_Load : bool = False
+        #TODO: Attributes for caching
+        # Deterministic
+        # Result_Deterministic
+        # Mem_Cachable
+        # Disc_Cachable
 
-        def Cache_Dump(self,dir):
-            ''' Dump cache infor to location w/a, set disc_loc and disc_cached for cache_load'''
-        def Cache_Load(self):
-            ''' Load cache from disc_loc, set to self.value '''
 
-        From_Value_Type_Whitelist : set|Any
-        From_Value_Type_Blacklist : set = set()
+        #TODO: Defer Impliment bellow secondary implimentation?
+        # Call_Cache_Dump : bool = False
+        # Call_Cache_Load : bool = False
 
-        To_Value_Type_Whitelist   : set|Any
-        To_Value_Type_Blacklist   : set = set()
+        # def Cache_Dump(self,dir):
+        #     ''' Dump cache infor to location w/a, set disc_loc and disc_cached for cache_load'''
+        # def Cache_Load(self):
+        #     ''' Load cache from disc_loc, set to self.value '''
+
+
+        #TODO: Defer Event/Type checking attributes bellow in a type checking module?
+        # From_Value_Type_Whitelist : set|Any
+        # From_Value_Type_Blacklist : set = set()
+
+        # To_Value_Type_Whitelist   : set|Any
+        # To_Value_Type_Blacklist   : set = set()
             #Works via checking Value_Type
             #Whitelist is opertunistic (any-in:allow), blacklist is pesimistic (any-in:disalllow)
+
+        # Value_Strict  : bool = True
+        # def Value_Verify(self,value):
+        #     #TODO
+        #     return True 
+
 
         def __init_subclass__(cls):
             assert getattr(cls,'Value_Type',   _unset) is not _unset
@@ -213,35 +226,70 @@ class main(module):
                     cls.Value_Type  = set[ty.__args__]
             else:
                 assert isinstance(cls.Value_Type,(list,set,tuple))
-
             super().__init_subclass__()
 
-            
-        In_Value_Resolution_Chain  = {'value_graph','user_value','value_default','Value_Default'}
-        Out_Value_Resolution_Chain = {'value_graph'}
-            #these could be a property for custom things that connect to UI
+        user_value    : Any = _unset
+        value_default : Any = _unset
 
+        @property
+        def value(self):
+            if self.Direction in ['in','side']:
+                for attr in self.In_Value_Resolution_Chain:
+                    if val:=getattr(self,attr,_unset) is not _unset:
+                        return val
+                raise Exception(f'ERROR Socket {self} could not resolve via In_Value_Resolution_Chain!!')
+
+            else: #self.Direction in ['out']:
+                for attr in self.In_Value_Resolution_Chain:
+                    if val:=getattr(self,attr,_unset) is not _unset:
+                        return val
+                raise Exception(f'ERROR Socket {self} could not resolve via In_Value_Resolution_Chain!!')
+            
+        @value.setter
+        def value(self,value):
+            assert self.Direction in ['out']
+            self._value = value
+
+
+        @property
+        def in_graph_value_getter(self):
+            ''' Graph value getter on input, uses Shape_Value.get for resolving shape of unput. May return None'''
+            return self.Value_Shape.get()
+
+        @property
+        def out_graph_value_getter_errorless(self):
+            ''' Execute/Compile without error if no values (use in defaultvalue-resolution chains) '''
+            if self._value is _unset:
+                getattr(self.context.node,self.context.node.Call_Func_Name)()
+            return self._value
+        
+        @property
+        def out_graph_value_getter(self):
+            ''' Execute/Compile with errors if no values '''
+            if val:=self.out_graph_value_getter_errorless is _unset:
+                raise Exception(f'ERROR Socket {self} is unset after nodes execution!!!')
+            return val
 
 
     class node_mixin(_mixin.node):
-        Deterministic   : bool
-            # Any calls directly to this node will be re-run
-            # Invalidates disc cachable ie Is not sharable
-            # non-Determ is memo'd at evaluation in the context of the reader/executer (socket)
-        Result_Deterministic : bool = True
-            #Refers to the assumption if a resulting function is deterministic or not
+        Call_Func_Name  : str = 'execute'
 
-        Mem_Cachable    : bool #= True
-        Disc_Cachable   : bool #= True
-            # Values to invalidate disc/mem cachable inherited from the output sockets
-            # Check against all output sockets being disc cachable to verify. Otherwise throw an error.
+        #TODO: Attributes for caching
+        # Deterministic   : bool
+        #     # Any calls directly to this node will be re-run
+        #     # Invalidates disc cachable ie Is not sharable
+        #     # non-Determ is memo'd at evaluation in the context of the reader/executer (socket)
+        # Result_Deterministic : bool = True
+        #     #Refers to the assumption if a resulting function is deterministic or not
 
-        disc_cached   : bool = False
-        disc_location : str
-            #wrapper will utilize this
+        # Mem_Cachable    : bool #= True
+        # Disc_Cachable   : bool #= True
+        #     # Values to invalidate disc/mem cachable inherited from the output sockets
+        #     # Check against all output sockets being disc cachable to verify. Otherwise throw an error.
 
-
-
+        # disc_cached   : bool = False
+        # disc_location : str
+        #     #wrapper will utilize this
 
     class exec_node_mixin(_mixin.exec_node):
         def execute(): ...
