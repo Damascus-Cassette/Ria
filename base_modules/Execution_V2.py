@@ -233,23 +233,33 @@ class main(module):
 
         @property
         def value(self):
+            ''' Simplifying interface '''
+            return self.get_value()
+
+        def get_value(self):
             if self.Direction in ['in','side']:
-                for attr in self.In_Value_Resolution_Chain:
-                    if val:=getattr(self,attr,_unset) is not _unset:
-                        return val
-                raise Exception(f'ERROR Socket {self} could not resolve via In_Value_Resolution_Chain!!')
-
+                return self.get_in_value()
             else: #self.Direction in ['out']:
-                for attr in self.In_Value_Resolution_Chain:
-                    if val:=getattr(self,attr,_unset) is not _unset:
-                        return val
-                raise Exception(f'ERROR Socket {self} could not resolve via In_Value_Resolution_Chain!!')
+                return self.get_out_value()
             
-        @value.setter
-        def value(self,value):
-            assert self.Direction in ['out']
-            self._value = value
+        def get_out_value(self):
+            for attr in self.In_Value_Resolution_Chain:
+                if val:=getattr(self,attr,_unset) is not _unset:
+                    return val
+            raise Exception(f'ERROR Socket {self} could not resolve via In_Value_Resolution_Chain!!')
+        def get_in_value(self):
+            for attr in self.In_Value_Resolution_Chain:
+                if val:=getattr(self,attr,_unset) is not _unset:
+                    return val
+            raise Exception(f'ERROR Socket {self} could not resolve via In_Value_Resolution_Chain!!')
 
+        @value.setter
+        def value_setter(self,value):
+            ''' Simplifying interface '''
+            assert self.Direction in ['out']
+            self.set_value(value)
+        def set_value(self,value):
+            self._value = value
 
         @property
         def in_graph_value_getter(self):
@@ -292,11 +302,14 @@ class main(module):
         #     #wrapper will utilize this
 
     class exec_node_mixin(_mixin.exec_node):
-        def execute(): ...
+        Call_Func_Name  : str = 'execute'
+        def execute(): raise Exception('UNSET')
 
     class placeholder_node_mixin(_mixin.exec_placeholder_node):
-        def execute(): ...
+        Call_Func_Name  : str = 'execute'
+        def execute(): raise Exception('UNSET')
         
     class meta_node_mixin(_mixin.meta_node):
-        def compile(): ...
+        Call_Func_Name  : str = 'compile'
+        def compile(): raise Exception('UNSET')
 
