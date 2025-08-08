@@ -12,10 +12,6 @@ class main(module):
     Deps = [
         ('required','Core_Execution','=(2.0)','Failure_Message')
         ]
-    
-    _module_tests_ = []
-        #FUGLY. Eventually fix/change to be inherited struct?
-        #testing funcs go in here
 
 class new_socket(item.socket):
     Module  = main 
@@ -23,12 +19,6 @@ class new_socket(item.socket):
     Version = '1.0'
     Label   = 'StringSocket'
     Desc    = ''' Test String Socket '''
-    
-    Value_Types    = [str]
-    Value_Allow    = [str]
-
-    Value_Default  = ''
-    Disc_Cachable  = True
 
 class new_exec_node(item.exec_node):
     Module  = main 
@@ -44,6 +34,15 @@ class new_exec_node(item.exec_node):
     def execute(self):
         self.out_sockets[0].value = self.in_sockets[0].value + self.in_sockets[1].value
         self.test_module_executed = True
+
+main._loader_items_.extend([
+    new_socket,
+    new_exec_node,
+    ])
+
+
+
+###### TESTS ######
 
 def basic_exec_test(graph,subgraph):
     with subgraph.context.Cached():
@@ -81,11 +80,6 @@ def adv_exec_test(r_graph,graph):
 main._module_tests_.append(module_test('TestA',
                 module      = main,
                 funcs       = [basic_exec_test,adv_exec_test],
-                module_iten = {main.UID:main.Version,
+                module_iten = {main.UID : main.Version,
                                'Core_Execution':'2.0'}, 
                 ))
-
-main._loader_items_.extend([
-    new_socket,
-    new_exec_node,
-    ])
