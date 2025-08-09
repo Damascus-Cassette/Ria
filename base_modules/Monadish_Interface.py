@@ -14,7 +14,17 @@ class main(module):
     Version = '1.0'
 
     class node_mixin(_mixin.node):
-    
+        
+        def _monadish_fork_()->Self:
+            ...
+
+        def _monadish_replace_(self,socket_dir='in')->Self:
+            ...
+        def _monadish_append_(self,socket_dir='in')->Self:
+            ...
+        def _monadish_merge_(self, other)->Self:
+            ...
+
         @classmethod
         def M(cls,socket_values)->Self:
             inst = cls(default_sockets=True)
