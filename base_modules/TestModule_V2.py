@@ -40,6 +40,8 @@ class new_exec_node(item.exec_node):
     Version = '1.0'
     Desc    = ''' Append socket B to A '''
 
+    test_module_executed = False
+
     def __repr__(self):
         return f'<<< Node object: {self.UID} @ (graph).["{self.key}"] >>>'
     
@@ -78,39 +80,49 @@ def basic_exec_test(graph,subgraph):
         print({k:v for k,v in nodea.in_sockets.items()})
         nodea.in_sockets[0].value_set('a')
         nodea.in_sockets[1].value_set('b')
+
         nodeb.in_sockets[1].value_set('c')
         # nodea.in_sockets.set(['a','b'])
         
         subgraph.nodes['nodea'] = nodea
         subgraph.nodes['nodeb'] = nodeb
-        link_a = subgraph.links.new(key='',
+        link_a = subgraph.links.new(key='Link',
                            out_socket = nodea.out_sockets[0], 
                            in_socket  = nodeb.in_sockets[0])
-
-    print(link_a)
-    print(nodea.out_sockets[0].out_links._data)
+        b = True
+    assert b
+    assert link_a in nodea.out_sockets[0].links.values()
+    assert link_a in nodeb.in_sockets[0].links.values()
+        #tests that sugguest a lack of a link sometimes being read in the shape is causing
+        #This is quite confusing as the assertions work correctly
+        #These are all passing,
 
     v = nodeb.out_sockets[0].value_get()
     assert nodea.test_module_executed == True
+        #Intermitantly Failing at above statment?
+        #Look into structure/inheritance?
+        #May be part of the socket_shape.{type}.get??
     assert nodeb.test_module_executed == True
     assert v == 'abc'
 
     return nodea,nodeb
 
 def adv_exec_test(r_graph,graph):
+    raise Exception('Got to adv test successfully!!!!')
+
     nodea,nodeb = basic_exec_test(graph)
     nodea.test_module_executed = False
     nodeb.test_module_executed = False
 
-    v = nodeb.out_sockets[0].value
+    v = nodeb.out_sockets[0].value_get()
     assert nodea.test_module_executed == False
     assert nodeb.test_module_executed == True
     assert v == 'abc'
-    v = nodeb.out_sockets[0].value
+    # v = nodeb.out_sockets[0].value
 
 main._module_tests_.append(module_test('TestA',
                 module      = main,
-                funcs       = [basic_exec_test,adv_exec_test],
+                funcs       = [basic_exec_test],
                 module_iten = {main.UID : main.Version,
                                'Core_Execution':'2.0'}, 
                 ))

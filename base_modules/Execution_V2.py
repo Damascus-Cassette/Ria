@@ -30,8 +30,8 @@ class main(module):
         Value_Type    : Any|set[Any]|UnionType  # Statemnt of type(s) produced by socket.
         Value_Default : Any = _unset            # Not saved to file.
 
-        In_Value_Resolution_Chain  = {'in_graph_value_getter' ,'user_value','value_default','Value_Default'}
-        Out_Value_Resolution_Chain = {'out_graph_value_getter'} 
+        In_Value_Resolution_Chain  = ('in_graph_value_getter' ,'user_value','value_default','Value_Default')
+        Out_Value_Resolution_Chain = ('out_graph_value_getter',)
             #out_graph_value_getter_errorless can be used for default chains, but not a usual use case
 
         #TODO: Attributes for caching
@@ -87,7 +87,7 @@ class main(module):
                 if isinstance(val,(FunctionType, MethodType)):
                     val = val()
                 if val is not _unset:
-                    # print('Get_Out_Value:', val)
+                    print('Get_Out_Value:', val)
                     return val
             raise Exception(f'ERROR {self} value could not resolve via Out_Value_Resolution_Chain!!')
         
@@ -97,7 +97,7 @@ class main(module):
                 if isinstance(val,(FunctionType, MethodType)):
                     val = val()
                 if val is not _unset:
-                    # print('Get_In_Value:', val)
+                    print('Get_In_Value:', val)
                     return val
             raise Exception(f'ERROR  {self} value could not resolve via In_Value_Resolution_Chain!!')
 
@@ -117,8 +117,10 @@ class main(module):
         # @property
         def in_graph_value_getter(self):
             ''' Graph value getter on input, uses Shape_Value.get for resolving shape of unput. May return None'''
-            return self.Value_Shape.get(self)
-
+            val = self.Value_Shape.get(self)
+            print(self,'Graph Getter Value:', val)
+            return val 
+        
         # @property
         def out_graph_value_getter_errorless(self):
             ''' Execute/Compile without error if no values (use in defaultvalue-resolution chains) '''

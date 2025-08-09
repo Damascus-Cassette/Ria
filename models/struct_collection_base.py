@@ -78,7 +78,7 @@ class collection_base[T=item_base]():
         inst.label = label
         inst.key   = key
             #FUGLY, see note below
-            
+
         self._data[key] = inst
         self._context_new_item_(inst)
         return inst
@@ -164,7 +164,6 @@ class subcollection_base[T](collection_base):
     _data      : collection_base 
     _filter    : FunctionType    = lambda i,k,v: True
     _order     : FunctionType    = lambda s,ikv: ikv[0]
-    # _order     : FunctionType    = lambda i,k,v: i
 
     def __init__(self, parent:collection_base, _filter:FunctionType=None):
         self._data   = parent

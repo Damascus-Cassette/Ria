@@ -101,8 +101,8 @@ class socket(BaseModel,item_base,ConstrBase,Hookable):
     Responcible for writing & retrieving specific data types 
     '''
     _io_bin_name_       = 'socket'
-    _io_whitelist_      = ['id', 'label', 'group_id', 'value', 'disc_cached', 'disc_location', 'out_links']
-    _io_blacklist_      = ['in_links']
+    _io_whitelist_      = ['id', 'label', 'group_id', 'value', 'disc_cached', 'disc_location', 'links']
+    # _io_blacklist_      = ['in_links']
 
     _constr_bases_key_  = 'socket'
     _constr_call_post_  = ['__io_setup__']
@@ -125,23 +125,29 @@ class socket(BaseModel,item_base,ConstrBase,Hookable):
     group_set_id : str
         #IDs for socket_group container & subset
 
-    out_links  : subcollection_base[link]
-    in_links   : subcollection_base[link]
+    links  : subcollection_base[link]
+    # out_links  : subcollection_base[link]
+    # in_links   : subcollection_base[link]
 
     context = context.construct(include=['meta_graph','root_graph','subgraph','node','socket_coll','socket_group'],as_name='socket')
     def _context_walk_(self):
         with self.context.register():        
-            for sl in self.out_links:
+            for sl in self.links:
                 sl.context._Get()
 
     #### Internal Methods ####
 
     def __init__(self):
-        self.out_links = []
         self.context = self.context(self)
-        self.out_links = subcollection_base(self.context.subgraph.links, lambda link :  link.in_socket == self)
-        self.in_links  = subcollection_base(self.context.subgraph.links, lambda link : link.out_socket == self)
-    
+
+
+        # self.outgoing_links  = subcollection_base(self.context.subgraph.links, lambda i,k,link :  link.out_socket == self)
+        self.incoming_links  = subcollection_base(self.context.subgraph.links, lambda i,k,link :  link.in_socket  == self)
+            #This node 'owns' these links in the file format.
+        
+        self.links = subcollection_base(self.context.subgraph.links, lambda i,k,link : link.out_socket == self or link.in_socket == self)
+        #Refers to all links that mention self
+
     @property
     def dir(self):
         return self.context.socket_coll.Direction
