@@ -119,8 +119,6 @@ def adv_exec_test(graph,subgraph):
     assert nodea.test_module_executed == False
 
     assert v == 'abc'
-    # v = nodeb.out_soc
-    # kets[0].value
 
 main._module_tests_.append(module_test('TestA',
                 module      = main,
