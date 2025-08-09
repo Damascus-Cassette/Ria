@@ -1,16 +1,11 @@
-from .utils.statics         import get_data_uuid, get_file_uid, INVALID_UUID
-from .Execution_Types       import _mixin, item
-from ..statics              import _unset
-from ..models.struct_module import module
-from .Execution_Types       import socket_shapes as st
-
 from typing import Self
 
 from typing import TypeAlias
 import copy
 
 class ANSI:
-    #from blender builds interestingly: https://stackoverflow.com/questions/287871/how-do-i-print-colored-text-to-the-terminal
+    #from blender builds interestingly:
+    # https://stackoverflow.com/questions/287871/how-do-i-print-colored-text-to-the-terminal
     HEADER    = '\033[95m'
     OKBLUE    = '\033[94m'
     OKCYAN    = '\033[96m'
@@ -24,9 +19,6 @@ class ANSI:
 
 from contextvars import ContextVar
 from contextlib  import contextmanager
-
-def color_print(str,orig_len):
-    ...
 
 class text_line:
     align_index : int
@@ -94,52 +86,44 @@ class text_paragraph:
                 #Draws nothing for deired length
             yield self.items[self.align_index - y_i],self
 
-def link_line():
-    def __init__(colors,start_index:int,end_index:int):
-        ...
-    ...
+# class link_line():
+#     def __init__(colors,start_index:int,end_index:int):
+#         ...
 
-def yield_rows(paragraphs):
-    lst = []
-    for x in paragraphs: 
-        if isinstance(x,ellipsis): 
-            yield lst
-            lst = []
-            last_ellipsis = True
-        else:
-            lst.append(x)
-            last_ellipsis = False
-    if not last_ellipsis:
-        yield lst    
+# class link_paragraph():
+#     ...
 
+class utils:
+    def yield_rows(paragraphs):
+        lst = []
+        for x in paragraphs: 
+            if isinstance(x,ellipsis): 
+                yield lst
+                lst = []
+                last_ellipsis = True
+            else:
+                lst.append(x)
+                last_ellipsis = False
+        if not last_ellipsis:
+            yield lst    
 
-def formated_rows(paragraphs):
-    rows = []
-    for paragraph_set in yield_rows(paragraphs):
-        max_len    = max(x.max_width  for x in paragraph_set)
-        max_height = max(x.max_height for x in paragraph_set)
+    def formated_rows(paragraphs):
+        rows = []
+        for paragraph_set in yield_rows(paragraphs):
+            max_len    = max(x.max_width  for x in paragraph_set)
+            max_height = max(x.max_height for x in paragraph_set)
 
-        row : list[str] = [''] * max_height
-        for i,x in enumerate(paragraph_set):
-            max_len=paragraph_set.max_width
-            lines   : list[text_line] = list(x.y_offset_yield(max_height))
-            f_lines : list[str]       = [x.formatted_text(max_len) for x in lines]
-            new_row = []
-            for r,l in zip(row,f_lines):
-                new_row.append(r+l)
-            row = new_row
+            row : list[str] = [''] * max_height
+            for i,x in enumerate(paragraph_set):
+                max_len=paragraph_set.max_width
+                lines   : list[text_line] = list(x.y_offset_yield(max_height))
+                f_lines : list[str]       = [x.formatted_text(max_len) for x in lines]
+                new_row = []
+                for r,l in zip(row,f_lines):
+                    new_row.append(r+l)
+                row = new_row
+            
+            rows.extend(row)
         
-        rows.extend(row)
-    
-    return rows
-
-def line_paragraph():
-    ...
-
-class main(module):
-    ''' Quick n dirty way to debug node & graph shapes via text.  '''
-    UID     = 'Debug_Interface'
-    Version = '0.1a'
-
-    
+        return rows
 
