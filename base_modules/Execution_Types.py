@@ -72,7 +72,7 @@ class socket_shapes():
             if socket.Link_Quantity_Max > 1:
                 res = []
                 for x in socket.links: 
-                    res.append(cls.Resolve(x.out_socket.value_get(), x.out_socket.context.node))
+                    res.append(cls.Resolve(x.out_socket.value, x.out_socket.context.node))
                 if res:
                     return res
                 else:
@@ -80,7 +80,7 @@ class socket_shapes():
             else:
                 if len(socket.links):
                     x = socket.links[0]
-                    return (cls.Resolve(x.out_socket.value_get(), x.out_socket.context.node))
+                    return (cls.Resolve(x.out_socket.value, x.out_socket.context.node))
                 else:
                     return _unset
 
@@ -116,7 +116,7 @@ class socket_shapes():
             '''
             if len(socket.links) == 1:
                 s = socket.links[0].out_socket
-                cls.Resolve(s.value_get(),s.context.node)
+                cls.Resolve(s.value,s.context.node)
             elif len(socket.links) > 1:
                 raise Exception(f'Singular {cls.__name__} is an incorrect shape declaration for multiple input links!')
             else:
@@ -133,7 +133,7 @@ class socket_shapes():
             ''' Calls upstream [socket.value] and returns it '''
             res = []
             for x in socket.links: 
-                res.append(cls.Resolve(x.out_socket.value_get(),x.out_socket.context.node))
+                res.append(cls.Resolve(x.out_socket.value,x.out_socket.context.node))
             if res:
                 return res
             else:

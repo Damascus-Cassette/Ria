@@ -55,11 +55,11 @@ class new_exec_node(item.exec_node):
         # print('self.in_sockets[0]',self.in_sockets[0].Value_Shape.get(self.in_sockets[0]))
         #erros raised during implicit execution don't work????????
 
-        i1 = self.in_sockets[0].value_get()
-        i2 = self.in_sockets[1].value_get()
+        i1 = self.in_sockets[0].value
+        i2 = self.in_sockets[1].value
         print (i1,i2)
         val = i1 + i2
-        self.out_sockets[0].value_set(val)
+        self.out_sockets[0].value = val
         print(f'EXECUTED {self.key} Result = {val}') 
         return val
 
@@ -78,10 +78,10 @@ def basic_exec_test(graph,subgraph):
         nodeb = new_exec_node(default_sockets=True)
 
         print({k:v for k,v in nodea.in_sockets.items()})
-        nodea.in_sockets[0].value_set('a')
-        nodea.in_sockets[1].value_set('b')
+        nodea.in_sockets[0].value = 'a'
+        nodea.in_sockets[1].value = 'b'
 
-        nodeb.in_sockets[1].value_set('c')
+        nodeb.in_sockets[1].value = 'c'
         # nodea.in_sockets.set(['a','b'])
         
         subgraph.nodes['nodea'] = nodea
@@ -93,15 +93,9 @@ def basic_exec_test(graph,subgraph):
     assert b
     assert link_a in nodea.out_sockets[0].links.values()
     assert link_a in nodeb.in_sockets[0].links.values()
-        #tests that sugguest a lack of a link sometimes being read in the shape is causing
-        #This is quite confusing as the assertions work correctly
-        #These are all passing,
 
-    v = nodeb.out_sockets[0].value_get()
+    v = nodeb.out_sockets[0].value
     assert nodea.test_module_executed == True
-        #Intermitantly Failing at above statment?
-        #Look into structure/inheritance?
-        #May be part of the socket_shape.{type}.get??
     assert nodeb.test_module_executed == True
     assert v == 'abc'
 
@@ -115,17 +109,18 @@ def adv_exec_test(graph,subgraph):
     nodea.test_module_executed = False
     nodeb.test_module_executed = False
 
-    v = nodeb.out_sockets[0].value_get()
+    v = nodeb.out_sockets[0].value
     assert nodea.test_module_executed == False
     assert nodeb.test_module_executed == False
 
-    v = nodeb.out_sockets[0].value_set(_unset)
-    v = nodeb.out_sockets[0].value_get()
+    nodeb.out_sockets[0].value = _unset
+    v = nodeb.out_sockets[0].value 
     assert nodeb.test_module_executed == True
     assert nodea.test_module_executed == False
 
     assert v == 'abc'
-    # v = nodeb.out_sockets[0].value
+    # v = nodeb.out_soc
+    # kets[0].value
 
 main._module_tests_.append(module_test('TestA',
                 module      = main,

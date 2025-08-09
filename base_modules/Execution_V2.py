@@ -69,13 +69,13 @@ class main(module):
         value_default : Any|_unset = _unset
         _value        : Any|_unset = _unset
 
-        # @property
             #was  is giving me horrendus headaches with error traces
-        def value_get(self):
+        @property
+        def value(self):
             ''' Simplifying interface '''
-            return self.get_value()
+            return self.value_get()
 
-        def get_value(self):
+        def value_get(self):
             if self.dir in ['in','side']:
                 return self.get_in_value()
             else: #self.dir in ['out']:
@@ -90,7 +90,7 @@ class main(module):
                     print('Get_Out_Value:', val)
                     return val
             raise Exception(f'ERROR {self} value could not resolve via Out_Value_Resolution_Chain!!')
-        
+ 
         def get_in_value(self):
             for attr in self.In_Value_Resolution_Chain:
                 val = getattr(self,attr,_unset)
@@ -101,12 +101,15 @@ class main(module):
                     return val
             raise Exception(f'ERROR  {self} value could not resolve via In_Value_Resolution_Chain!!')
 
-        # @value.setter
+        
+        @value.setter
+        def value(self,value):
+            return self.value_set(value)
         def value_set(self,value):
             if self.dir in ['in','side']:
                 return self.set_in_value(value)
             else: #self.dir in ['out']:
-                return self.set_out_value(value)
+                return self.set_out_value(value)            
         def set_out_value(self,value):
             self._value = value
             return value
