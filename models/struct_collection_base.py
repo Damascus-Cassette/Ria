@@ -190,19 +190,23 @@ class typed_collection_base[T](collection_base):
     
     Bases : dict[str,Type]
 
-    def matches_base(self, item):
+    def matches_base(self, item:str|Type):
         Bases = getattr(self,'Bases',{})
-        assert item in Bases.keys()
+                
+        if isinstance(item,str):
+            return item in Bases.keys()
+        else:
+            return item.__class__ in Bases.values()
+        
     
-    def new(self, type:str, key, label=None,*args,**kwargs):
+    def new(self, type:str|Type, key, label=None, *args,**kwargs):
         Bases = getattr(self,'Bases',{})
+        assert self.matches_base(type)
+        
         if label is None: label = key
 
         if isinstance(type,str): 
-            assert type in Bases.keys()
-            type = Bases[type]
-        else:                    
-            assert type in Bases.values()
+            type : Type = Bases[type]
 
         with self.context.In_Last_Context():
             inst = type(*args,**kwargs)

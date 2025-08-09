@@ -85,6 +85,12 @@ class context():
             if t:
                 _context[self._As_Name].reset(t)
 
-    def __repr__(self):
-        res = ' '.join([f' | {x} : {getattr(self,x,_unset)} ' for x in self._Include])
-        res = f'<Context object of chain: {res}>'
+    # def __repr__(self):
+    #     res = ' '.join([f' | {x} : {getattr(self,x,_unset)} ' for x in self._Include])
+    #     res = f'<Context object of chain: {res}>'
+    def KeyRep(self,key:str):
+        ''' Rep with fallback for structures still initializing '''
+        if not (a := getattr(self,key,None)):
+            return f'(Context["{key}"])'
+        else:
+            a.__repr__().split('@')[-1].strip('<>')

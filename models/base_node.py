@@ -256,6 +256,7 @@ class socket_group[SocketType=socket](ConstrBase,Hookable):
         return self.sockets[key]
 
     def __setitem__(self,key,socket:SocketType):
+        # raise Exception(f'{key},{socket}')
         socket.group_id = self.Group_ID
         if socket not in self.parent_col.values():
             self.parent_col[key] = socket
