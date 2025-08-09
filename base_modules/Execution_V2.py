@@ -26,8 +26,8 @@ class main(module):
 
     class socket_mixin(_mixin.socket):
         #### Constructed Methods & Vars ####
-        Value_Shape   : st.mutable = st.mutable # Statement to make assert shapes/forms                                                
-        Value_Type    : Any|set[Any]|UnionType  # Statemnt of type(s) produced by socket.
+        Value_Shape   : st.mutable  = st.mutable # Statement to make assert shapes/forms                                                
+        Value_Type    : Any|tuple[Any]|UnionType  # Statemnt of type(s) produced by socket.
         Value_Default : Any = _unset            # Not saved to file.
 
         In_Value_Resolution_Chain  = ('in_graph_value_getter' ,'user_value','value_default','Value_Default')
@@ -52,11 +52,11 @@ class main(module):
 
 
         #TODO: Defer Event/Type checking attributes bellow in a type checking module?
-        # From_Value_Type_Whitelist : set|Any
-        # From_Value_Type_Blacklist : set = set()
+        # From_Value_Type_Whitelist : tuple|Any
+        # From_Value_Type_Blacklist : tuple = tuple()
 
-        # To_Value_Type_Whitelist   : set|Any
-        # To_Value_Type_Blacklist   : set = set()
+        # To_Value_Type_Whitelist   : tuple|Any
+        # To_Value_Type_Blacklist   : tuple = tuple()
             #Works via checking Value_Type
             #Whitelist is opertunistic (any-in:allow), blacklist is pesimistic (any-in:disalllow)
 
