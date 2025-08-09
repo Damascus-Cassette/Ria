@@ -74,8 +74,11 @@ class collection_base[T=item_base]():
         key = self.ensure_unique_key(key)
         if label is None: label = key
         inst       = self.Base(*args,**kwargs)
+        
         inst.label = label
         inst.key   = key
+            #FUGLY, see note below
+            
         self._data[key] = inst
         self._context_new_item_(inst)
         return inst
@@ -91,6 +94,11 @@ class collection_base[T=item_base]():
 
             elif not self.Merge_By_Keys:
                 key = self.ensure_unique_key(key)
+
+        item.key = key
+            #FUGLY AND NOT IDEAL AT ALL
+            #May tie back collection -> child via child.in_collections 
+            # or similar reflection, require key as a get and have repr choose the first collection.
 
         self._data[key] = item
         self._context_new_item_(item)
@@ -111,7 +119,9 @@ class collection_base[T=item_base]():
         else:
             self._data[key]=item
 
-    def __getitem__(self,key):
+    def __getitem__(self,key:str|int):
+        if isinstance(key,int):
+            return list(self.data.items())[key][1]
         return self.data[key]
 
     def __len__(self):
@@ -183,7 +193,7 @@ class subcollection_base[T](collection_base):
         
         self._filter = lambda i,k,v : other._filter(v) or self._filter(v)
         
-        for i,k,v in other:
+        for i,k,v in other.iter():
             self.__setmerge__(k,v)
 
 
@@ -255,5 +265,5 @@ class typed_subcollection_base[T](typed_collection_base):
         
         self._filter = lambda i,k,v : other._filter(v) or self._filter(v)
         
-        for i,k,v in other:
+        for i,k,v in other.iter():
             self.__setmerge__(k,v)
