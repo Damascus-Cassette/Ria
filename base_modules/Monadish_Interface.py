@@ -18,11 +18,12 @@ class main(module):
         def _monadish_fork_()->Self:
             ...
 
-        def _monadish_replace_(self,socket_dir='in')->Self:
+        def _monadish_replace_(self,socket_dir='in', *args,**kwargs)->Self:
             ...
-        def _monadish_append_(self,socket_dir='in')->Self:
+        def _monadish_append_(self,socket_dir='in',*args,**kwargs)->Self:
             ...
-        def _monadish_merge_(self, other)->Self:
+        def _monadish_merge_(self, other:Self)->Self:
+            #Merge socket IO,
             ...
 
         @classmethod
