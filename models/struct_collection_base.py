@@ -87,12 +87,13 @@ class collection_base[T=item_base]():
         if key in self._data.keys():
             if self.Mergeable_Base and self.Merge_By_Keys:
                 item = item | self._data[key]
-                self._context_new_item_(item)
+                # self._context_new_item_(item)
 
             elif not self.Merge_By_Keys:
                 key = self.ensure_unique_key(key)
 
         self._data[key] = item
+        self._context_new_item_(item)
 
     def __setmerge__(self,key,item):
         ''' add/merge local w/a or discard incoming '''
@@ -192,7 +193,7 @@ class typed_collection_base[T](collection_base):
 
     def matches_base(self, item:str|Type):
         Bases = getattr(self,'Bases',{})
-                
+
         if isinstance(item,str):
             return item in Bases.keys()
         else:

@@ -75,6 +75,7 @@ def basic_exec_test(graph,subgraph):
         nodea = new_exec_node(default_sockets=True)
         nodeb = new_exec_node(default_sockets=True)
 
+        print({k:v for k,v in nodea.in_sockets.items()})
         nodea.in_sockets[0].value_set('a')
         nodea.in_sockets[1].value_set('b')
         nodeb.in_sockets[1].value_set('c')
