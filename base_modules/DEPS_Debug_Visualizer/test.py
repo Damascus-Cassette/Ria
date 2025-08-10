@@ -8,81 +8,319 @@ OKBLUE    = '\033[94m'
 BLINKING  = '\033[9m'
     #Doesnt work in vscode terminol
 
+from typing import TypeAlias
+import copy
+
 ## Overlaying two arrays
 # a = np.full((8, 8), '', dtype='S1')
 # a = np.full((8, 8), '', dtype=np.dtypes.StringDType())
 # a = np.full((8, 8), '',              dtype= np.dtypes.ObjectDType())
 
+def bresenham(x0, y0, x1, y1):
+    '''https://github.com/encukou/bresenham/blob/master/bresenham.py'''
+    dx = x1 - x0
+    dy = y1 - y0
+
+    xsign = 1 if dx > 0 else -1
+    ysign = 1 if dy > 0 else -1
+
+    dx = abs(dx)
+    dy = abs(dy)
+
+    if dx > dy:
+        xx, xy, yx, yy = xsign, 0, 0, ysign
+    else:
+        dx, dy = dy, dx
+        xx, xy, yx, yy = 0, ysign, xsign, 0
+
+    D = 2*dy - dx
+    y = 0
+
+    for x in range(dx + 1):
+        yield x0 + x*xx + y*yx, y0 + x*xy + y*yy
+        if D >= 0:
+            y += 1
+            D -= 2*dx
+        D += 2*dy
  
+# def offset(np_arrays:tuple[np.array],shift=(0,0)):
+#     assert isinstance(np_arrays,(tuple,list))
+#     res = []
+#     for x in np_arrays:
+#         if isinstance(x,tuple):
+#             res.append(tuple((v+shift[i] for i,v in enumerate(x))))
+#         else:
+#             res.append( np.roll(x , shift = shift))
+#     return res
 
-def offset(np_arrays:tuple[np.array],shift=(0,0)):
-    assert isinstance(np_arrays,(tuple,list))
-    for x in np_arrays:
-        yield np.roll(x , shift = shift)
-
-def set_effect(
-            effect_arrays:np.array  , 
-            effect       : str      , 
-            mask_src     : np.array = None, 
-            mask_value   : str      = ''  , ):
-    if not isinstance(effect_arrays,(list,tuple,set)):
-        effect_arrays = [effect_arrays]
-    for x in effect_arrays:
-        if   mask_src: mask = mask_src != mask_value
-        else         : mask = x        != mask_value
-        yield np.where(mask,b,b+=mask_value)
+# def set_effect(
+#             effect_arrays:np.array  , 
+#             effect       : str      , 
+#             mask_src     : np.array = None, 
+#             mask_value   : str      = ''  , ):
+#     if not isinstance(effect_arrays,(list,tuple,set)):
+#         effect_arrays = [effect_arrays]
+#     for x in effect_arrays:
+#         if   mask_src: mask = mask_src != mask_value
+#         else         : mask = x        != mask_value
+#         yield np.where(mask,b,b+=mask_value)
 
 
-def overlay(bases:tuple[np.array],overlays:tuple[np.array],mask_value = '',mask_from_first = True):
-    ''' Assumption of mask from first in iterable of bases and overlays for multi-datatype overlays '''
-    assert isinstance(bases,(tuple,list))
-    assert isinstance(overlays,(tuple,list))
+# def overlay(bases:tuple[np.array],overlays:tuple[np.array],mask_value = '',mask_from_first = True):
+#     ''' Assumption of mask from first in iterable of bases and overlays for multi-datatype overlays '''
+#     assert isinstance(bases,(tuple,list))
+#     assert isinstance(overlays,(tuple,list))
+#     res = []
     
-    if mask_from_first:
-        b,o  = zip(bases,overlays)[0]
-        mask = b!=mask_value
+#     if mask_from_first:
+#         b,o  = zip(bases,overlays)[0]
+#         mask = b!=mask_value
 
-    for b,o in zip(bases,overlays):
-        if not mask_from_first:
-            mask = b!=mask_value
-        yield np.where(mask,b,o)
+#     for b,o in zip(bases,overlays):
+#         if not mask_from_first:
+#             mask = b!=mask_value
+#         res.append(np.where(mask,b,o))
+    
+#     return res
+
+# def print_collapse(text_array    :np.array        ,
+#                    color_array   :np.array        ,
+#                    default_color :str       = ENDC)->list[str]:
+#     color_compare  = np.roll (color_array, shift = 1,) #axis =1)
+#     color_dif_mask = np.where(color_array != color_compare, f'{default_color}'+ color_array, '')
+
+#     color_dif_mask + text_array
+#     res = []
+#     for row in np.where(text_array=='',' ',text_array):
+#         res.append(''.join(list(row)))
+#     return res
+
+###
+
+class point():
+    x:float
+    y:float
+
+    def __init__(self,x,y):
+        self.x = float(x)
+        self.y = float(y) 
+    
+    def __iter__(self):
+        yield self.x
+        yield self.y
+    
+    def __add__(self,other):
+        assert isinstance(other,(self.__class__,int,float))
+        return self.__class__(*[v+other[i] for i,v in self])
+    def __sub__(self,other):
+        assert isinstance(other,(self.__class__,int,float))
+        return self.__class__(*[v-other[i] for i,v in self])
+
+class line():
+    Fonts = {
+        'regular' : 'a',
+        'bold'    : 'A',
+    }
+
+    p1    : point
+    p2    : point
+    font  : str   = 'regular'   
+    color : str   = ENDC 
+        #string of character types, default is color-reset (white)
+        #May want to make some palettes?
 
 
-def print_collapse( text_array    :np.array,
-                    color_array   :np.array,
-                    default_color :str = ENDC):
-    color_compare  = np.roll(res_color, shift = 1,) #axis =1)
-    color_dif_mask = np.where(res_color != color_compare, f'{default_color}'+ res_color, '')
+    def __init__(self,
+                 p1    : point,
+                 p2    : point,
+                 color : str  = ENDC,
+                 font  : str  = 'regular',):
+        self.p1    = p1
+        self.p2    = p2
+        self.color = color
+        self.font  = font
 
-    color_dif_mask + res
-    for row in np.where(text_array=='',' ',text_array):
-        yield ''.join(list(row))
+    def determine_line(self,np_array)->list[point]:
+        return[point(x) for x in bresenham(*self.p1,*self.p2)]
+    
+    def shader(self,text,color,coords:list[point])->tuple[np.array,np.array]:
+        ### Apply shader to coordinates
+        _neg  = coords[0] - (coords[1] - coords[0]) 
+        _post = coords[-1] + (coords[-1] - coords[-2])
 
-#Testing creating colors
+        coords = copy.copy(coords)
+        coords.insert( 0,_neg )
+        coords.insert(-1,_post)
 
-# NP roll for offsetting object position:
+        color = color
+        text  = text
 
-a =       np.full((8, 8), '',   dtype= np.dtypes.StringDType())
-a_color = np.full((8, 8), ENDC, dtype= np.dtypes.StringDType())
+        for i,pos in enumerate(coords[1:-2]):
+            i=+1
+            _prev =  coords[i-1] 
+            _pos  =  pos
+            _next =  coords[i+1]
+            
+            char  = self.determine_character(_prev,_pos,_next)
+            col   = self.determine_color(_prev,_pos,_next)
 
+            color[pos] = char
+            text[pos ] = col
+        return text, color
 
-b =       np.full((8, 8), '',   dtype= np.dtypes.StringDType())
-b_color = np.full((8, 8), ENDC, dtype= np.dtypes.StringDType())
+    def determine_character(self,_prev:point,_pos:point,_next:point):
+        return self.Font[self.font]
+    def determine_color    (self,_prev:point,_pos:point,_next:point):
+        return self.color
 
+from typing import Self
+
+class sprite():
+    ''' Viewed inside of instance, pipeline should be obj->sprite->sprite_view->obj-> '''
+    text   : np.array
+    color  : np.array
+    lines  : list[line]
+
+    def __init__(self, color_default = ENDC, size =(100,100),):
+        self.text  = np.full(size, ''           , dtype= np.dtypes.StringDType())
+        self.color = np.full(size, color_default, dtype= np.dtypes.StringDType())
+        self.lines = []
+    
+    def offset   (self, shift : tuple|point):
+        new_lines = []
+        for x in self.lines:
+            new_lines.append(x+shift)
+        self.lines = new_lines
+
+        self.text  = np.roll(self.text ,shift = tuple(*shift)) 
+        self.color = np.roll(self.color,shift = tuple(*shift))
+
+    def overlay  (self, 
+                  other : Self         , 
+                  mask_color    = ''   , 
+                  mask_text     = ''   ,
+                  overlay_color = True ,
+                  overlay_text  = True , 
+                  merge_lines   = True ):
+        
+        if overlay_text:
+            text_mask  = self.text !=mask_text
+            self.text  = np.where(text_mask,self.text,other.text)
+        
+        if overlay_color:
+            color_mask = self.color!=mask_color
+            self.color = np.where(color_mask,self.color,other.color)
+
+        if merge_lines:
+            self.lines.extend(other.lines)
+    
+    def __add__(self,other):
+        new = copy.deepcopy(self)
+        new.overlay(other)
+        return new
+    def __or__(self,other):
+        new = copy.deepcopy(self)
+        new.overlay(other)
+        return new
+
+    def set_color (self, ps:list[point]|point, text, append = False):
+        if not isinstance(ps,list):ps=[ps]
+        for p in ps: 
+            if append: self.color[p]=+text 
+            else     : self.color[p]= text  
+    
+    def set_text  (self, ps:list[point]|point, text):
+        if not isinstance(ps,list):ps=[ps]
+        for p in ps: 
+            self.text[p]= text 
+        
+    def add_line  (self,
+                   p1:point|tuple,
+                   p2:point|tuple,
+                   **kwargs):
+        self.lines.append(line(p1,p2,**kwargs))
+
+    def __getitem__(self,k:point|tuple)->tuple[str,str,list[line]]:
+        if not isinstance(k,point):
+            k = point(*k)
+
+        lines = []
+        for x in self.lines:
+            if x.p1 == k or x.p2 == k:
+                lines.append(x)
+
+        return self.text[*k], self.color[*k], lines
+
+    def __setitem__(self,key:tuple,value):
+        ''' Set item, len 1 sets as pixel, color does otherwise '''
+        if len(value) == 1:
+            self.text[key]  = value
+        else:
+            self.color[key] = value
+
+    def draw_lines(self)->tuple[np.array,np.array]:
+        text  = self.text
+        color = self.color
+
+        for line in self.lines:
+            coords = line.determine_line()
+            text,color = line.shader(text,color,coords)
+        
+        return text,color
+        
+
+    def print_collapse(self, 
+                       default_text  = ' ',
+                       default_color = ENDC,
+                       draw_lines    = True):
+        color = self.color
+        text  = self.text
+
+        if draw_lines:
+            text,color = self.draw_lines(text,color)
+
+        color_compare  = np.roll (color, shift = 1,) #axis =1)
+        color_dif_mask = np.where(color != color_compare, f'{default_color}'+ color, '')
+        color_dif_mask + self.text
+        res = []
+        for row in np.where(text=='', default_text, text):
+            res.append(''.join(list(row)))
+        return res
+
+    def centered(self)->Self:
+        new = copy.deepcopy(self)
+        new.offset(new.color.shape/2)
+        return new
+
+    def bounds(self)->tuple[tuple[int],tuple[int]]:
+        array = self.text.astype(bool)
+        col_sum = np.sum(array,axis=0).as_type(bool)
+        row_sum = np.sum(array,axis=1).as_type(bool)
+
+        col_min = col_sum.index(True)
+        col_max = len(col_sum)-1-col_sum[::-1].index(True)
+
+        row_min = row_sum.index(True)
+        row_max = len(row_sum)-1-row_sum[::-1].index(True)
+
+        return ((row_min,row_max),(col_min,col_max))
+
+# a =       np.full((8, 8), '',   dtype= np.dtypes.StringDType())
+# a_color = np.full((8, 8), ENDC, dtype= np.dtypes.StringDType())
+
+# b =       np.full((8, 8), '',   dtype= np.dtypes.StringDType())
+# b_color = np.full((8, 8), ENDC, dtype= np.dtypes.StringDType())
+
+a = sprite(color_default=OKBLUE)
 a[0,0] = 'a'
-b[1,1] = 'b'
-# b_color[1,1] = BLINKING
+a.offset((2,3))
 
-#setting effects:
-b_color = set_effect(b_color,OKBLUE)
-a_set   = [a,a_color]
-b_set   = [b,b_color]
+b = sprite()
+b[2,2] = 'b'
 
-#Overlaying:
-c_set = overlay(a_set,b_set)
-
-#Printing:
-for x in print_collapse(c_set):
+c = a|b
+lines = c.print_collapse()
+for x in lines: 
     print(x)
 
 
@@ -229,33 +467,6 @@ for x in print_collapse(c_set):
 # res = solve_shader([(1,3),(5,5)],a)
 # print(res)
 
-
-def bresenham(x0, y0, x1, y1):
-    '''https://github.com/encukou/bresenham/blob/master/bresenham.py'''
-    dx = x1 - x0
-    dy = y1 - y0
-
-    xsign = 1 if dx > 0 else -1
-    ysign = 1 if dy > 0 else -1
-
-    dx = abs(dx)
-    dy = abs(dy)
-
-    if dx > dy:
-        xx, xy, yx, yy = xsign, 0, 0, ysign
-    else:
-        dx, dy = dy, dx
-        xx, xy, yx, yy = 0, ysign, xsign, 0
-
-    D = 2*dy - dx
-    y = 0
-
-    for x in range(dx + 1):
-        yield x0 + x*xx + y*yx, y0 + x*xy + y*yy
-        if D >= 0:
-            y += 1
-            D -= 2*dx
-        D += 2*dy
 
 #TODO PLAN:
 #Utilize above as a way to slice for mask creation
