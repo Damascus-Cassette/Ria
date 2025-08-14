@@ -36,6 +36,9 @@ Projection_Rules = '''
 
 '''
 
+
+#### Types  #####
+
 class operation_handler():
     Ops_Inv_Direction = {'ilshift':'ishift', #Directional inversion from_op : to_op
                          'lshift' :'rshift' }
@@ -196,8 +199,6 @@ class _op_elem_mixin:
     def __pos__(self): self.dir_flag = 'pos'
     def __neg__(self): self.dir_flag = 'neg'
 
-
-
 def _make_dunder(name_root)->dict[FunctionType]:
     name = name_root
     def f(self,other):
@@ -249,18 +250,9 @@ class object_set(_op_elem_mixin):
         else:
             self.items = items
 
-    Projection_Types = ['chain' , 'zip']
-    def project(self, mode:str, left:op_elem):
-        #TODO: 
-        #TODO: Ensure left of particular shape
-        assert mode in self.Projection_Types
-        raise NotImplementedError('TODO PROJECTION TYPES') 
-
-    def zip_project(self, left:op_elem):
-        raise NotImplementedError('TODO PROJECTION TYPES') 
-
-    def chain_project(self, left:op_elem):
-        raise NotImplementedError('TODO PROJECTION TYPES') 
+    def __iter__(self):
+        for x in self.items: 
+            yield x
 
     def __getitem__(self,key:int|str|slice|Type):
         #TODO: Needs some logic work tbh, uncertain.
@@ -288,7 +280,7 @@ class object_set(_op_elem_mixin):
                 res2 = []
 
             return object_set(*res1,*res2)
-
+        
     @property
     def nodes(self):
         socketslice_res = [x.nodes for x in self.items if isinstance(x,socket_slice)]
@@ -302,9 +294,20 @@ class object_set(_op_elem_mixin):
         res.append(socket_res)
         res.append(nodes_res)
         return tuple(iter_unseen(res))
+    
+    Projection_Types = ['chain' , 'zip']
+    def project(self, mode:str, left:op_elem):
+        #TODO: 
+        #TODO: Ensure left of particular shape
+        assert mode in self.Projection_Types
+        raise NotImplementedError('TODO PROJECTION TYPES') 
 
-    def __iter__(self):
-        for x in self.items: yield x
+    def zip_project(self, left:op_elem):
+        raise NotImplementedError('TODO PROJECTION TYPES') 
+
+    def chain_project(self, left:op_elem):
+        raise NotImplementedError('TODO PROJECTION TYPES') 
+
 
 class socket_slice(_op_elem_mixin):
     def __init__(self,o:object_set,i:object_set,s:object_set):
@@ -332,30 +335,94 @@ def _ensure_single_is_multi(item:object_set|tuple,Any):
     else:
         return item
 
-class socket_mixin(_op_elem_mixin,_mixin.socket): 
-    ...
 
-class node_mixin(_op_elem_mixin,_mixin.node):
-    def __iter__(self)->item.socket:
-        for s in self.out_sockets:
-            yield s
+#### Module  #####
+from contextlib import contextmanager
+
+class main(module):
+    ''' A monad-like interface for creating graphs'''
+    UID     = 'Monadish_Interface'
+    Version = '1.0'
+
+    class root_graph_mixin(_mixin.root_graph):
         
-    def __getitem__(self, key:sslice_keys)->object_set|socket_slice:
-        _dir = 'in out' #side is better suited for specific cases instead of generic 'in'
-        _key = key
-        single = False
-        if isinstance(key,tuple):
-            assert len(key) == 2
-            _dir, _key = key
+        @contextmanager
+        def monad_session(self)->_mixin.subgraph:
+            yield (inst:=self.subgraph.new())
+
+
+
+            #Creates then deletes a temporary subgraph.
+
+    class subgraph_mixin(_mixin.subgraph):
+        @contextmanager
+        def placeholder_session()->_mixin.subgraph:
+            yield
+            #Creates and manages the temorary change session on the current graph
+            ...
+
+        def intake(self,*header_nodes):
+            # walk and copy and append node structures from seperate graph(s)
+            # as a copy removes objects affected by temp env from env and thus reversion
+            ...
+
+    class socket_mixin(_op_elem_mixin,_mixin.socket): 
+        ...
+    
+    class node_set_mixin(_mixin.node_set):
+        #Produce a set and return it as a tuple
+        #Calls same inload
+        ...
+
+    class node_mixin(_op_elem_mixin,_mixin.node):
+        ''' Loads Base Monadish Required Methods '''
+
+        @classmethod
+        def M(cls,*args,**kwargs):
+            inst = cls(default_sockets=True)
+            inst.Monadish_Inload(*args,**kwargs)
+            return inst
+
+        def Monadish_Inload(self,*args,**kwargs)->None:
+            pass
             
-        if   _dir == 'out'  : return object_set(*_ensure_single_is_multi(self.out_sockets[_key])  )
-        elif _dir == 'in'   : return object_set(*_ensure_single_is_multi(self.in_sockets[_key])   )
-        elif _dir == 'side' : return object_set(*_ensure_single_is_multi(self.side_sockets[_key]) )
-        
-        else:
-            if   _dir == 'out'  : _out  =  object_set(*_ensure_single_is_multi(self.out_sockets[_key])) 
-            elif _dir == 'in'   : _in   =  object_set(*_ensure_single_is_multi(self.in_sockets[_key]))  
-            elif _dir == 'side' : _side =  object_set(*_ensure_single_is_multi(self.side_sockets[_key]))
-                #FUGLY, would be much better on the object set 
-            return socket_slice(o=_out,i=_in,s=_side)
+        def __iter__(self):
+            for s in self.out_sockets:
+                yield s
+            
+        def __getitem__(self, key:sslice_keys)->object_set|socket_slice:
+            _dir = 'in out' #side is better suited for specific cases instead of generic 'in'
+            _key = key
+            single = False
+            if isinstance(key,tuple):
+                assert len(key) == 2
+                _dir, _key = key
+                
+            if   _dir == 'out'  : return object_set(*_ensure_single_is_multi(self.out_sockets[_key])  )
+            elif _dir == 'in'   : return object_set(*_ensure_single_is_multi(self.in_sockets[_key])   )
+            elif _dir == 'side' : return object_set(*_ensure_single_is_multi(self.side_sockets[_key]) )
+            
+            else:
+                if   _dir == 'out'  : _out  =  object_set(*_ensure_single_is_multi(self.out_sockets[_key])) 
+                elif _dir == 'in'   : _in   =  object_set(*_ensure_single_is_multi(self.in_sockets[_key]))  
+                elif _dir == 'side' : _side =  object_set(*_ensure_single_is_multi(self.side_sockets[_key]))
+                    #FUGLY, would be much better on the object set 
+                return socket_slice(o=_out,i=_in,s=_side)
 
+
+
+class _tests:
+    def basic_test(graph,subgraph):
+        with _sb := graph.monad_session():
+            ...
+            
+            # with _sb.placeholder_session():
+            #     a @= b
+            
+
+main._module_tests_.append(module_test('TestSetA',
+            module      = main,
+            funcs       = [_tests.basic_test],
+            module_iten = {main.UID : main.Version,
+                            'Core_Execution':'2.0'}, 
+            ))
