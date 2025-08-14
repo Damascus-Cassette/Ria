@@ -4,251 +4,300 @@ from ..models.struct_module import module, module_test
 from ..models.base_node     import socket_group
 from .Execution_Types       import _mixin, item
 from .Execution_Types       import socket_shapes as st
-from typing                 import Self, TypeAlias,AnyStr
+from typing                 import Self, TypeAlias,AnyStr,Type,
 
 import itertools
 
-class op_mixin():
-    ''' Creates Op Handler instance'''
-class Node_Set(op_mixin):
-    ...
-class Socket_Slice(op_mixin):
-    ...
+#### TYPES
 
-op_compatable : TypeAlias = Node_Set|Socket_Slice|item.node|item.socket|tuple[item.node]|tuple[item.socket]
-op_elem       : TypeAlias = item.node|item.socket
+op_elem     : TypeAlias = item.socket|item.node|'object_set'|'socket_slice'
+sslice_keys : TypeAlias = str|int|Type|tuple[str,str|int|Type]
 
-class operation_handler():    
-    ''' (possiblly recursive) operation resolution handler with minor filtering of operations and logical left-right 
-    Interprets all but Node_Set->Node_Set projection w/out zip
-    Passes through (eventually) the base operation on a op_elem->op_elem basis to the shadow dunder handler (ie _or_ from __or__ )
-    ''' 
-    # Ops_Reset           = ['ilshift', 'ishift']
-    Ops_Socket_Directional = ['lshift', 'shift']     # Converts socket to directional tuple
-    Ops_Reserved           = ['and', 'iand']         # Operations that not passed onto other objects
-    Ops_Logical_Inverse    = {'lshift'  : 'shift' ,
-                              'ilshift' : 'ishift'}  # Convert to inverse operation
-    Ops_Desc = {
-        # '' : {'symbol':'', 'desc':' ', 'returns':type},
-        'iand'    : {'symbol':'&='   , 'desc':'Chain Last Operation'               , 'returns':Node_Set,
-            'Example' : '(x + y &= z) -> (x+y)&(x+z)'},
-        'and'     : {'symbol':'&'    , 'desc':'Joins to Node_Set'                  , 'returns':Node_Set,
-            'Example' : '(x & y) -> Node_Set(x,y)'},
-        
-        'shift'   : {'symbol':'>>'   , 'desc':'Append or apply value to sockets '  , 'returns':op_elem|Node_Set,
-            'Example' : 'w/ len(x.outs) == len(x.outs) and same type: (x >> y) -> (x.outs[n]->y.ins[n]) '},
-        'ishift'  : {'symbol':'>>='  , 'desc':'Reset Sockets and `shift` into'     , 'returns':op_elem|Node_Set,
-            'Example' : '(x>>y /n z>>=y) -> z>>y'},
+Projection_Rules = '''
+- LEFT op RIGHT cannot be of the same object_set type or base, as best projection is uncertain/obscured in the pattern of operation
+    - To declare operating modes inline:
+        - ~ inver operation as a Zip projection flag (On either party)
+        - * splat operation as a convertion to tuple, which is handled as a chain operatior.
+        - right.project(mode:str,left) for manual declaration and more options.
 
-        'lshift'  : {'symbol':'<<'   , 'desc':'`shift` with inverted syntax'       , 'returns':op_elem|Node_Set,
-            'Example' : '(x<<y) -> (y>>z)'},
-        'ilshift' : {'symbol':'<<='  , 'desc':'`ishift` with inverted syntax'      , 'returns':op_elem|Node_Set,
-            'Example' : '(x<<=y) -> (y>>=z)'},
+- Default projection between not (object_set op object_set) is chain 
+    - it's works for projection of 1 to many, and simplification of 
+    - chain utilizes left = itertools.repeat(left,len(right))
 
-        'imatmul' : {'symbol':'@='   , 'desc':'When on sockets or delayed nodes, A contextual value set (Reverted at c exit)', 'returns':op_elem|Node_Set|None,
-            'Example' : 'with delayed.context(): (z >> a @= b) -> (z >> b)  '},
-        
-        'invert'  : {'symbol':'~'    , 'desc':'Interpreted on op_elem as a zip flag. Zip uses zip(left,right) to match operations', 'returns':Node_Set,
-            'Example' : '(x&y) + ~(a&b) -> (x+a) & (y+b)'},
-        
-        '_other'   : {'symbol':AnyStr, 'desc':'Passed into the constituant op_elem', 'returns':op_elem|Node_Set|NotImplemented,
-            'Example' : '(left + right) -> res:= left._add_(right); res is NotImplimented: res:=right._ladd_(left); res is NotImplimented: raise Error'}, 
-    }
+- Zip Projection is non-default and throws error if safe(default) and acts as
+    - for l,r in zip(l,r): res.append(l.op(right))
 
-    def __init__(self,left:op_compatable,right:op_compatable,operation:str):
-        left,right,operation = self.resolve_dir(left,right,operation)
-        self.left      = left
-        self.right     = right
-        self.operation = operation
+'''
+
+class operation_handler():
+    Ops_Directional   = ['ishift','ishift']
+    Ops_Inv_Direction = {'irshift':'ishift'}
     
-    def resolve_dir(self,left,right,op):
-        if op in self.Ops_Logical_Inverse.keys(): 
-            return right, left, self.Ops_Logical_Inverse[op]
-        else:
-            return left , right, op
+    def __init__(self,left,right,op,is_root=False):
+        #TODO: Suboperations should have is_root as false
+        #TODO: Order left, right, and op (filtered)
+        ...
 
-    def Resolve(self)->op_compatable:
-        ''' Evaluate operation to sub-operations as required, Resolve
-        Returns are based on sub-operations'''
-        ... #TODO Resolve slices
-        ... #TODO Det op by l-r contributers, call correct op in matrix (bellow)
-        left,right,op = self.left, self.right, self.operation
+    def _ensure_objset_from_tuple(self,item):
+        if isinstance(item,tuple):
+            return object_set(*item)
+            #TEST IF WAS OBJECT_SET
+        return item
+         
+    def Resolve(self):
+        ''' Currently written as only regular arithmatic ops '''
+        left  = self._ensure_objset_from_tuple(self.left ) 
+        right = self._ensure_objset_from_tuple(self.right)
+        op    = self.op
 
-        left_is_sockets   = isinstance(left,  Socket_Slice)
-        right_is_sockets  = isinstance(left,  Socket_Slice)
-        if   op in self.Ops_Socket_Directional: 
-            if  left_is_sockets : left  = left['out']
-            if right_is_sockets : right = right['in']
+        #TODO: Check special op for
 
-        zip_flag   = getattr(left,'zip_flag',False) or getattr(left,'zip_flag',True)
-        # reset_flag = op in self.Ops_Reset
-
-        if   op == 'iand': return self._sop_iand_(left,right)
-        elif op == 'and' : return self._sop_and_( left,right)
-
-
-        left_is_ns      = isinstance(left, Node_Set) 
-        right_is_ns     = isinstance(right, Node_Set) 
-        left_is_multi   = left_is_ns  or left_is_sockets  or  isinstance(left,(list,tuple))
-        right_is_multi  = right_is_ns or right_is_sockets or  isinstance(right,(list,tuple))
-
-        if       left_is_ns    and     right_is_ns    : return self.nodeset_to_nodeset_nozip(left,right,op,zip_flag)
-
-        elif     left_is_ns    and     right_is_multi : return self.nodeset_to_tuple(left,right,op,zip_flag)
-        elif     left_is_multi and     right_is_ns    : return self.tuple_to_nodeset(left,right,op,zip_flag)
-        elif right_is_sockets  and     left_is_sockets: return self.socketSlice_to_socketSlice(left,right,op,zip_flag)
-        # elif     left_is_multi and     right_is_multi : #Not possible, both would be tuples
+        zip_flag = getattr(self.left,'zip_flag',False) or getattr(self.right,'zip_flag',False) 
         
+        _lwt  = isinstance(self.left ,tuple)
+        _rwt  = isinstance(self.right,tuple)
+        was_tupl = _lwt or _rwt
 
-        elif not left_is_multi and     right_is_multi : return self.one_to_tuple(left,right,op,zip_flag)
-        elif     left_is_multi and not right_is_multi : return self.tuple_to_one(left,right,op,zip_flag)
-        elif not left_is_multi and not right_is_multi : return self.one_to_one(left,right,op,zip_flag)
+        _l_is_multi = isinstance(left, object_set)
+        _r_is_multi = isinstance(right,object_set)
 
-        else: raise Exception(f'ERROR COULD NOT RESOLVE MATRIX FOR: {self._er}')
-
-
-    def _sop_iand_(self,l,r):
-        ''' &= operation : (x + y &= z) -> (x+y)&(x+z) '''
-    def _sop_and_(self,l,r):
-        ''' &  operation : (x&y) -> node_set(x,y)'''
-
-    def one_to_one(self,left,right,op,zip_flag):
-        #In zips, do 1 to 1 directional sockets projection.
-        ... 
-
-    def one_to_nodeset(self,left,right,op,zip_flag):
-        ...
-    def nodeset_to_one(self,left,right,op,zip_flag):
-        ...
-
-    def tuple_to_nodeset(self,left,right,op,zip_flag):
-        ... #Will call r{op}, will need to convert
-    def nodeset_to_tuple(self,left,right,op,zip_flag):
-        ...
-
-    def one_to_tuple(self,left,right,op,zip_flag):
-        ...
-    def tuple_to_one(self,left,right,op,zip_flag):
-        ...
-
-    ## UNSUPPORTED BY HANDLER:
-    def nodeset_to_nodeset(self,left,right,op,zip_flag):
-        if not zip_flag: raise Exception(self._er,)
-
-        ...
-
-    def socketSlice_to_socketSlice(self,left,right,op,zip_flag):
+        if isinstance(left,object_set) and isinstance(right,object_set) and not (zip_flag or was_tupl):
+            raise NotImplementedError(f'SEE PROJECTION RULES. Short  ~ -> zip_flag, * -> splat op to tuple for chain project ') 
         
-
-        if zip_flag: 
-            res = []
-            if   len(left)  == 1: left  = itertools.repeat(left,len(right))
-            elif len(right) == 1: right = itertools.repeat(right,len(left))
-            else: assert len(left) == len(right) #TODO: Consider 
-            for l,r in zip(left,right):
-                res.append(self.__class__(l,r,op).Resolve())
-            if not len(res) and len(left) and len(right) : raise Exception('')
-            if NotImplemented in res : raise NotImplementedError('')
-            if len(res) == 1:
-                res = res[0]
-            else:
-                res = Node_Set(*res)
+        # if (not _l_is_multi) and _r_is_multi and zip_flag:
+        #     left = itertools.repeat((left,),len(right))
+        
+        if   _r_is_multi and zip_flag:
+            res =  self.try_resolve_op_1_to_multi(left,right, op,'zip',)
+            if not (res is NotImplemented): return res
+            res =  right.project('zip', left)
+        elif _r_is_multi and was_tupl:
+            res =  self.try_resolve_op_1_to_multi(left,right, op,'chain',)
+            if not (res is NotImplemented): return res
+            res = right.project('chain', left)
+        
+        elif _l_is_multi and zip_flag: 
+            res =  self.try_resolve_op_multi_to_1(left,right, op,'zip',)
+            if not (res is NotImplemented): return res
+            res = left.lproject('zip', right)
+        elif _l_is_multi and was_tupl: 
+            res =  self.try_resolve_op_multi_to_1(left,right, op, 'chain')
+            if not (res is NotImplemented): return res
+            res = left.lproject('chain', right)
         else:
-            for l in left:
-                if func:=(l,'_m_{op}_',None): res.append(func) 
-            ...
-            
+            res = self.try_resolve_op_1_to_1(left,right,op,)
+        
+        if self.is_root and (res is NotImplemented):
+            raise  NotImplementedError(f'COULD NOT RESOLVE OPERATION: {self}')
+        
+        return res
 
+    @staticmethod
+    def _td(*a,**k): return NotImplemented
 
-    def _er(self)->str:
-        return f'{self.left} -[{self.op}]-> {self.right}'
-        ...
+    def try_resolve_op_1_to_many(self,left,right,op,chain_mode:str):
+        res = getattr(right,f'_m_{op}_',self._td)(right,chain_mode)
+        return res
 
-class main(module):
-    ''' A monad-like interface for creating graphs'''
-    UID     = 'Monadish_Interface'
-    Version = '1.0'
+    def try_resolve_op_many_to_1(self,left,right,op,chain_mode:str):
+        res = getattr(right,f'_m_r_{op}_',self._td)(left,chain_mode)
+        return res
 
-    class node_mixin(_mixin.node):
-        ...
-    class socket_mixin(_mixin.socket):
-        ...
+    def try_resolve_op_1_to_1(self,left,right,op, loud=False):
+        ''' Loud or Quiet evaluation of 1 to 1 shadow dunder methods for left._op_ and right._r_op_ '''
 
-#### Test Nodes: ####
+        res = getattr(left,f'_{op}_',self._td)(right)
+        if not (res is NotImplemented): return res
+        res = getattr(right,f'_r_{op}_',self._td)(left)
+        if not (res is NotImplemented): return res
+        else:    return NotImplemented
 
-class new_socket(item.socket):
-    Module     = main 
-    UID        = 'Test_MonadishNode'
-    Version    = '1.0'
-    Label      = 'Test_MonadishNode'
-    Desc       = ''' Test String Socket '''
-    Test_Only  = True
-    Value_Type    = str
-    Value_Default = 'c'
-    
     def __repr__(self):
-        try:
-            direction = self.dir
-        except:
-            direction = '?'
-        return f'<<< Socket object: {self.UID} @ {self.context.KeyRep('node')}.{direction}_sockets["{getattr(self,'key','?')}"] >>>'
+        return f'<Op Handler object: {self._desc} >'
     
-class new_exec_node(item.exec_node):
-    Module  = main 
-    UID     = 'Test_MonadishNode'
-    Label   = 'Test_MonadishNode'
-    Version = '1.0'
-    Desc    = ''' Append socket B to A '''
-    Test_Only  = True
-
-    in_sockets   = [socket_group.construct('set_a', Sockets=[new_socket]),
-                    socket_group.construct('set_b', Sockets=[new_socket])]
-    out_sockets  = [socket_group.construct('set_a', Sockets=[new_socket])]
-
-main._loader_items_ = [new_socket, new_exec_node]
-
-
-#### Test ####
+    @property
+    def _desc(self):
+        return f'{self.left} --[{self.op}]--> {self.right}'
     
-def _basic_test(graph,subgraph):
-    with _sb := graph.monad_subgraph(): 
-        #Temporary subgraph for housing objects
-        n_a = new_exec_node.M('a','b')
-        assert n_a.data == 'ab'
+    @property
+    def _expected_shape():
+        #Text for expected shape errors
+        ...
 
-        n_b = new_exec_node.M()
-        n_a >> n_b 
-        'a' >> n_b 
-        # n_b['out',1] << 'a' 
-        assert n_b['in',1].data  == 'a'
-        assert n_b.data == 'aba'
+class _op_elem_mixin:
+    ''' All subclasses generate an operational handler and return the result '''
+    zip_flag : bool = False  
+    dir_flag : str  = 'pos'
+
+    def __invert__(self): self.zip_flag = True
+    def __pos__(self): self.dir_flag = 'pos'
+    def __neg__(self): self.dir_flag = 'neg'
+
+    def __add__(self,other:op_elem)->op_elem:
+        '''self + other : handled via operation_handler'''
+        return operation_handler(self,other,'add',is_root=True).resolve()
+    def __sub__(self,other:op_elem)->op_elem:
+        '''self - other : handled via operation_handler'''
+        return operation_handler(self,other,'sub',is_root=True).resolve()
+    def __mul__(self,other:op_elem)->op_elem:
+        '''self * other : handled via operation_handler'''
+        return operation_handler(self,other,'mul',is_root=True).resolve()
+    def __truediv__(self,other:op_elem)->op_elem:
+        '''self / other : handled via operation_handler'''
+        return operation_handler(self,other,'truediv',is_root=True).resolve()
+    def __mod__(self,other:op_elem)->op_elem:
+        '''self % other : handled via operation_handler'''
+        return operation_handler(self,other,'mod',is_root=True).resolve()
+    def __floordiv__(self,other:op_elem)->op_elem:
+        '''self // other : handled via operation_handler'''
+        return operation_handler(self,other,'floordiv',is_root=True).resolve()
+    def __pow__(self,other:op_elem)->op_elem:
+        '''self ** other : handled via operation_handler'''
+        return operation_handler(self,other,'pow',is_root=True).resolve()
+    def __matmul__(self,other:op_elem)->op_elem:
+        '''self @ other : handled via operation_handler'''
+        return operation_handler(self,other,'matmul',is_root=True).resolve()
+    def __and__(self,other:op_elem)->op_elem:
+        '''self & other : handled via operation_handler'''
+        return operation_handler(self,other,'and',is_root=True).resolve()
+    def __or__(self,other:op_elem)->op_elem:
+        '''self | other : handled via operation_handler'''
+        return operation_handler(self,other,'or',is_root=True).resolve()
+    def __sor__(self,other:op_elem)->op_elem:
+        '''self ^ other : handled via operation_handler'''
+        return operation_handler(self,other,'xor',is_root=True).resolve()
+    def __rshift__(self,other:op_elem)->op_elem:
+        '''self >> other : handled via operation_handler'''
+        return operation_handler(self,other,'rshift',is_root=True).resolve()
+    def __lshift__(self,other:op_elem)->op_elem:
+        '''self << other : handled via operation_handler'''
+        return operation_handler(self,other,'lshift',is_root=True).resolve()
+
+    def __iadd__(self,other:op_elem)->op_elem:
+        '''self += other : handled via operation_handler'''
+        return operation_handler(self,other,'iadd',is_root=True).resolve()
+    def __isub__(self,other:op_elem)->op_elem:
+        '''self -= other : handled via operation_handler'''
+        return operation_handler(self,other,'isub',is_root=True).resolve()
+    def __imul__(self,other:op_elem)->op_elem:
+        '''self *= other : handled via operation_handler'''
+        return operation_handler(self,other,'imul',is_root=True).resolve()
+    def __itruediv__(self,other:op_elem)->op_elem:
+        '''self /= other : handled via operation_handler'''
+        return operation_handler(self,other,'itruediv',is_root=True).resolve()
+    def __imod__(self,other:op_elem)->op_elem:
+        '''self %= other : handled via operation_handler'''
+        return operation_handler(self,other,'imod',is_root=True).resolve()
+    def __ifloordiv__(self,other:op_elem)->op_elem:
+        '''self //= other : handled via operation_handler'''
+        return operation_handler(self,other,'ifloordiv',is_root=True).resolve()
+    def __ipow__(self,other:op_elem)->op_elem:
+        '''self **= other : handled via operation_handler'''
+        return operation_handler(self,other,'ipow',is_root=True).resolve()
+    def __imatmul__(self,other:op_elem)->op_elem:
+        '''self @= other : handled via operation_handler'''
+        return operation_handler(self,other,'imatmul',is_root=True).resolve()
+    def __iand__(self,other:op_elem)->op_elem:
+        '''self &= other : handled via operation_handler'''
+        return operation_handler(self,other,'iand',is_root=True).resolve()
+    def __ior__(self,other:op_elem)->op_elem:
+        '''self |= other : handled via operation_handler'''
+        return operation_handler(self,other,'ior',is_root=True).resolve()
+    def __isor__(self,other:op_elem)->op_elem:
+        '''self ^= other : handled via operation_handler'''
+        return operation_handler(self,other,'ixor',is_root=True).resolve()
+    def __irshift__(self,other:op_elem)->op_elem:
+        '''self >>= other : handled via operation_handler'''
+        return operation_handler(self,other,'irshift',is_root=True).resolve()
+    def __ilshift__(self,other:op_elem)->op_elem:
+        '''self <<= other : handled via operation_handler'''
+        return operation_handler(self,other,'ilshift',is_root=True).resolve()
+    ...
+
+class object_set(_op_elem_mixin):
+    ''' Generic set, which can intake multiple items 
+    Unpacks other object_sets 
+    '''
+    
+    items : list[item.node | item.socket]
+
+    def __init___(self, *args):
+        items = []
+
+        for item in args:
+            if isinstance(self,object_set):
+                items.extend(*item)
+            else:
+                items.append(item)
+
+        self.items = items
+
+    Projection_Types = ['chain' , 'zip']
+    def project(self, mode:str, left:op_elem):
+        #TODO: 
+        #TODO: Ensure left of particular shape
+        assert mode in self.Projection_Types
+        raise NotImplementedError('TODO PROJECTION TYPES') 
+
+    def zip_project(self, left:op_elem):
+        raise NotImplementedError('TODO PROJECTION TYPES') 
+
+    def chain_project(self, left:op_elem):
+        raise NotImplementedError('TODO PROJECTION TYPES') 
+
+    def __getitem__():
         
-        n_c = n_a[0] + n_b[0]
-        assert n_c.out_sockets[0].data == n_a.data + n_b.data
+        ...
 
-        n_c1_main = subgraph.monad_join_in(n_c)
+class socket_slice(_op_elem_mixin):
+    def __init__(self,o:object_set,i:object_set,s:object_set):
+        self.s_out  = o
+        self.s_in   = i
+        self.s_side = s
         
-        with operation_handler.delay_context():
-            n_b['out',1] @= 'c'
-            n_c2_main = subgraph.monad_join_in(n_c)
-        assert n_b['in',1].data  == 'a'
+    @property
+    def s(self): return self.s_side
+    @property
+    def o(self): return self.s_out
+    @property
+    def i(self): return self.s_in
 
-        assert n_c1_main.out_sockets[0].data == n_c.out_sockets[0].data
-        assert n_c1_main is not n_c
-        assert n_c2_main is not n_c
-        assert n_c2_main.out_sockets[0].data == 'abc'
+    def extend():
+        #used in & operations between self types.
+        #If between object_set & socket_slice, subsumed into object set. Projection of operations should still take care of that
+        ...
 
-        #Intakes input sockets 
+            
+def _ensure_single_is_multi(item:object_set|tuple,Any):
+    if not isinstance(item,(socket_slice,object_set,tuple)):
+        return (item,)
+    else:
+        return item
 
-        # subgraph.join(_sb)
+class socket_mixin(_op_elem_mixin,_mixin.socket): 
+    ...
 
-    
-    
+class node_mixin(_op_elem_mixin,_mixin.node):
+    def __iter__(self)->item.socket:
+        for s in self.out_sockets:
+            yield s
+        
+    def __getitem__(self, key:sslice_keys)->object_set|socket_slice:
+        _dir = 'in out' #side is better suited for specific cases instead of generic 'in'
+        _key = key
+        single = False
+        if isinstance(key,tuple):
+            assert len(key) == 2
+            _dir, _key = key
+            
+        if   _dir == 'out'  : return object_set(*_ensure_single_is_multi(self.out_sockets[_key])  )
+        elif _dir == 'in'   : return object_set(*_ensure_single_is_multi(self.in_sockets[_key])   )
+        elif _dir == 'side' : return object_set(*_ensure_single_is_multi(self.side_sockets[_key]) )
+        
+        else:
+            if   _dir == 'out'  : _out  =  object_set(*_ensure_single_is_multi(self.out_sockets[_key])) 
+            elif _dir == 'in'   : _in   =  object_set(*_ensure_single_is_multi(self.in_sockets[_key]))  
+            elif _dir == 'side' : _side =  object_set(*_ensure_single_is_multi(self.side_sockets[_key]))
+                #FUGLY, would be much better on the object set 
+            return socket_slice(o=_out,i=_in,s=_side)
 
-
-main._module_tests_.append(module_test('TestA',
-                module      = main,
-                funcs       = [_basic_test],
-                module_iten = {main.UID : main.Version,
-                               'Core_Execution':'2.0'}, 
-                ))
