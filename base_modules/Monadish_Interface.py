@@ -4,7 +4,7 @@ from ..models.struct_module import module, module_test
 from ..models.base_node     import socket_group
 from .Execution_Types       import _mixin, item
 from .Execution_Types       import socket_shapes as st
-from typing                 import Self, TypeAlias,AnyStr,Type,
+from typing                 import Self, TypeAlias,AnyStr,Type
 from types import FunctionType
 import itertools
 
@@ -414,10 +414,10 @@ class main(module):
 class _tests:
     def basic_test(graph,subgraph):
         with _sb := graph.monad_session():
+            # with _sb.placeholder_session():
+            #     a @= b            
             ...
             
-            # with _sb.placeholder_session():
-            #     a @= b
             
 
 main._module_tests_.append(module_test('TestSetA',
