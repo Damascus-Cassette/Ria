@@ -5,8 +5,15 @@ from ..models.base_node     import socket_group
 from .Execution_Types       import _mixin, item
 from .Execution_Types       import socket_shapes as st
 from typing                 import Self, TypeAlias,AnyStr,Type,
-
+from types import FunctionType
 import itertools
+
+def iter_unseen(*iterables):
+    seen = []
+    for iterable in iterables:
+        for x in iterable:
+            if not (x in seen):
+                yield x
 
 #### TYPES
 
@@ -30,29 +37,85 @@ Projection_Rules = '''
 '''
 
 class operation_handler():
-    Ops_Directional   = ['ishift','ishift']
-    Ops_Inv_Direction = {'irshift':'ishift'}
+    Ops_Inv_Direction = {'ilshift':'ishift', #Directional inversion from_op : to_op
+                         'lshift' :'rshift' }
     
+    Ops_Directional   = ['rshift' ,'irshift']
+        #Operations that require slice to relevent object_set
+        #Simplfieid if arithmatic
+    
+    Ops_Special       = ['iand'  ,'irshift','and'] #Ops that run a pre-process to change the operation on execution 
+    Ops_Mutagenic     = ['rshift' , ]
+
+    
+    def sop_and(self):
+        right = object_set(self.left,self.right)
+        return ..., right, 'pass'     
+
+    def sop_iand(self):
+        #TODO: Determine Operation based on contents, split graph for context, set value. Append goal to inverse operations.
+        return self.left,self.right,'iand'     
+
+    def sop_irshift(self):
+        #TODO: if in delyed context, Determine Operation based on contents, split graph for context, set value. Append goal to inverse operations.
+        return self.left,self.right,'rshift' 
+
+
+    def op_type(self,op):
+        if op in self.Ops_Special   : return 'Special'
+        if op in self.Ops_Mutagenic : return 'Mutagenic'
+        else                        : return 'Arithmatic'
+
     def __init__(self,left,right,op,is_root=False):
-        #TODO: Suboperations should have is_root as false
-        #TODO: Order left, right, and op (filtered)
-        ...
+        self.zip_flag = getattr(left,'zip_flag',False) or getattr(right,'zip_flag',False)
+            #As may mutate left,right, get zip_flag here
+        
+        if op in self.Ops_Inv_Direction.keys():
+            op = self.Ops_Inv_Direction[op]
+            left,right = right,left
+
+        if op in self.Ops_Directional:
+            op_t = self.op_type(op)
+            if   op_t == 'Arithmatic':
+                if isinstance(left ,socket_slice): left  = left.o
+                if isinstance(right,socket_slice): right = right.o
+            elif op_t == 'Mutagenic':
+
+                if isinstance(left ,socket_slice): left  = left.o
+                if isinstance(right,socket_slice): right = right.i
+            elif op_t == 'Special' :
+                pass #Special operations should socket slices
+            else:
+                raise Exception(f'Could Not Determine Op Type: {op}') 
+        
+        self.is_root = is_root
+        self.left    = left
+        self.right   = right
+        self.op      = op
 
     def _ensure_objset_from_tuple(self,item):
         if isinstance(item,tuple):
             return object_set(*item)
             #TEST IF WAS OBJECT_SET
         return item
-         
+        
     def Resolve(self):
         ''' Currently written as only regular arithmatic ops '''
-        left  = self._ensure_objset_from_tuple(self.left ) 
-        right = self._ensure_objset_from_tuple(self.right)
-        op    = self.op
+        if self.op in self.Ops_Special:
+            left,right,op = getattr(self,f'sop_{op}')()
+        else:
+            left  = self._ensure_objset_from_tuple(self.left ) 
+            right = self._ensure_objset_from_tuple(self.right)
+            op    = self.op
 
-        #TODO: Check special op for
+        if op == 'PASS':
+            if isinstance(right,ellipsis):
+                return left
+            return right 
+        if isinstance(right,ellipsis):
+            return left
 
-        zip_flag = getattr(self.left,'zip_flag',False) or getattr(self.right,'zip_flag',False) 
+        zip_flag = self.zip_flag
         
         _lwt  = isinstance(self.left ,tuple)
         _rwt  = isinstance(self.right,tuple)
@@ -133,86 +196,37 @@ class _op_elem_mixin:
     def __pos__(self): self.dir_flag = 'pos'
     def __neg__(self): self.dir_flag = 'neg'
 
-    def __add__(self,other:op_elem)->op_elem:
-        '''self + other : handled via operation_handler'''
-        return operation_handler(self,other,'add',is_root=True).resolve()
-    def __sub__(self,other:op_elem)->op_elem:
-        '''self - other : handled via operation_handler'''
-        return operation_handler(self,other,'sub',is_root=True).resolve()
-    def __mul__(self,other:op_elem)->op_elem:
-        '''self * other : handled via operation_handler'''
-        return operation_handler(self,other,'mul',is_root=True).resolve()
-    def __truediv__(self,other:op_elem)->op_elem:
-        '''self / other : handled via operation_handler'''
-        return operation_handler(self,other,'truediv',is_root=True).resolve()
-    def __mod__(self,other:op_elem)->op_elem:
-        '''self % other : handled via operation_handler'''
-        return operation_handler(self,other,'mod',is_root=True).resolve()
-    def __floordiv__(self,other:op_elem)->op_elem:
-        '''self // other : handled via operation_handler'''
-        return operation_handler(self,other,'floordiv',is_root=True).resolve()
-    def __pow__(self,other:op_elem)->op_elem:
-        '''self ** other : handled via operation_handler'''
-        return operation_handler(self,other,'pow',is_root=True).resolve()
-    def __matmul__(self,other:op_elem)->op_elem:
-        '''self @ other : handled via operation_handler'''
-        return operation_handler(self,other,'matmul',is_root=True).resolve()
-    def __and__(self,other:op_elem)->op_elem:
-        '''self & other : handled via operation_handler'''
-        return operation_handler(self,other,'and',is_root=True).resolve()
-    def __or__(self,other:op_elem)->op_elem:
-        '''self | other : handled via operation_handler'''
-        return operation_handler(self,other,'or',is_root=True).resolve()
-    def __sor__(self,other:op_elem)->op_elem:
-        '''self ^ other : handled via operation_handler'''
-        return operation_handler(self,other,'xor',is_root=True).resolve()
-    def __rshift__(self,other:op_elem)->op_elem:
-        '''self >> other : handled via operation_handler'''
-        return operation_handler(self,other,'rshift',is_root=True).resolve()
-    def __lshift__(self,other:op_elem)->op_elem:
-        '''self << other : handled via operation_handler'''
-        return operation_handler(self,other,'lshift',is_root=True).resolve()
 
-    def __iadd__(self,other:op_elem)->op_elem:
-        '''self += other : handled via operation_handler'''
-        return operation_handler(self,other,'iadd',is_root=True).resolve()
-    def __isub__(self,other:op_elem)->op_elem:
-        '''self -= other : handled via operation_handler'''
-        return operation_handler(self,other,'isub',is_root=True).resolve()
-    def __imul__(self,other:op_elem)->op_elem:
-        '''self *= other : handled via operation_handler'''
-        return operation_handler(self,other,'imul',is_root=True).resolve()
-    def __itruediv__(self,other:op_elem)->op_elem:
-        '''self /= other : handled via operation_handler'''
-        return operation_handler(self,other,'itruediv',is_root=True).resolve()
-    def __imod__(self,other:op_elem)->op_elem:
-        '''self %= other : handled via operation_handler'''
-        return operation_handler(self,other,'imod',is_root=True).resolve()
-    def __ifloordiv__(self,other:op_elem)->op_elem:
-        '''self //= other : handled via operation_handler'''
-        return operation_handler(self,other,'ifloordiv',is_root=True).resolve()
-    def __ipow__(self,other:op_elem)->op_elem:
-        '''self **= other : handled via operation_handler'''
-        return operation_handler(self,other,'ipow',is_root=True).resolve()
-    def __imatmul__(self,other:op_elem)->op_elem:
-        '''self @= other : handled via operation_handler'''
-        return operation_handler(self,other,'imatmul',is_root=True).resolve()
-    def __iand__(self,other:op_elem)->op_elem:
-        '''self &= other : handled via operation_handler'''
-        return operation_handler(self,other,'iand',is_root=True).resolve()
-    def __ior__(self,other:op_elem)->op_elem:
-        '''self |= other : handled via operation_handler'''
-        return operation_handler(self,other,'ior',is_root=True).resolve()
-    def __isor__(self,other:op_elem)->op_elem:
-        '''self ^= other : handled via operation_handler'''
-        return operation_handler(self,other,'ixor',is_root=True).resolve()
-    def __irshift__(self,other:op_elem)->op_elem:
-        '''self >>= other : handled via operation_handler'''
-        return operation_handler(self,other,'irshift',is_root=True).resolve()
-    def __ilshift__(self,other:op_elem)->op_elem:
-        '''self <<= other : handled via operation_handler'''
-        return operation_handler(self,other,'ilshift',is_root=True).resolve()
-    ...
+
+def _make_dunder(name_root)->dict[FunctionType]:
+    name = name_root
+    def f(self,other):
+        return operation_handler(self,other,name_root,is_root=True).resolve()        
+
+    def f_inclusionary(self,other):
+        return operation_handler(self,other,'i'+name_root,is_root=True).resolve()
+    
+    def f_reverse(self,other):
+        return operation_handler(other,self,'r'+name_root,is_root=True).resolve()
+
+    def f_reverse_inclusionary(self,other):
+        return operation_handler(other,self,'ri'+name_root,is_root=True).resolve()
+        ...
+    return {
+        f'__{name_root}__'  : f,
+        f'__i{name_root}__' : f_inclusionary,
+        f'__r{name_root}__' : f_reverse,
+        f'__ir{name_root}__': f_reverse_inclusionary,
+        }
+
+def _make_dunders_all()->dict:
+    _ops = ['add', 'sub', 'mul', 'truediv', 'mod', 'floordiv', 'pow', 'matmul', 'and', 'or', 'xor', 'rshift', 'lshift',]
+    res  = {}
+    for x in _ops: res|_make_dunder(x)
+    return res
+
+_op_elem_mixin = type('_op_elem_mixin',(_op_elem_mixin,),_make_dunders_all())
+
 
 class object_set(_op_elem_mixin):
     ''' Generic set, which can intake multiple items 
@@ -221,7 +235,7 @@ class object_set(_op_elem_mixin):
     
     items : list[item.node | item.socket]
 
-    def __init___(self, *args):
+    def __init___(self, *args,dedup=True):
         items = []
 
         for item in args:
@@ -230,7 +244,10 @@ class object_set(_op_elem_mixin):
             else:
                 items.append(item)
 
-        self.items = items
+        if dedup:
+            self.items = list(iter_unseen(items))
+        else:
+            self.items = items
 
     Projection_Types = ['chain' , 'zip']
     def project(self, mode:str, left:op_elem):
@@ -245,27 +262,68 @@ class object_set(_op_elem_mixin):
     def chain_project(self, left:op_elem):
         raise NotImplementedError('TODO PROJECTION TYPES') 
 
-    def __getitem__():
+    def __getitem__(self,key:int|str|slice|Type):
+        #TODO: Needs some logic work tbh, uncertain.
+        if   isinstance(key,(int,slice)): return self.items[key]
         
-        ...
+        elif issubclass(item.node)  : 
+            return [x for x in self.items if isinstance(x,key)] 
+        
+        elif isinstance(key,int)  : 
+            return self.items[key] 
+        elif isinstance(key,str)  : 
+            return [x for x in self.items if getattr(x,'name') == key] 
+        
+        elif issubclass(item.socket):
+            res1 = [x[key] for x in self.items if isinstance(x, sslice_keys)] 
+            res2 = [x      for x in self.items if isinstance(x, key)]
+            return socket_slice(*res1,*res2)
+        elif isinstance(key,tuple):
+            res1 = [x[key] for x in self.items if isinstance(x, sslice_keys)] 
+            if isinstance(key[1],str):
+                res2 = [x for x in self.items if key[1] == x.name]
+            elif issubclass(item.socket):
+                res2 = [x for x in self.items if isinstance(x, key[1])]
+            else:
+                res2 = []
+
+            return object_set(*res1,*res2)
+
+    @property
+    def nodes(self):
+        socketslice_res = [x.nodes for x in self.items if isinstance(x,socket_slice)]
+        objectset_res   = [x.nodes for x in self.items if isinstance(x,object_set)  ]
+        socket_res      = [x.context.node for x in self.items if issubclass(x.__class__,item.socket)  ]
+        nodes_res       = [x      for x in self.items if issubclass(x.__class__,item.node)   ]
+        
+        res = []
+        for x in socketslice_res:res.extend(x)
+        for x in object_set     :res.extend(x)
+        res.append(socket_res)
+        res.append(nodes_res)
+        return tuple(iter_unseen(res))
+
+    def __iter__(self):
+        for x in self.items: yield x
 
 class socket_slice(_op_elem_mixin):
     def __init__(self,o:object_set,i:object_set,s:object_set):
         self.s_out  = o
         self.s_in   = i
         self.s_side = s
-        
+    
+    @property
+    def nodes(self)->tuple:
+        #Determines all unqiue nodes from contained objects
+        return tuple(iter_unseen(self.s,self.o,self.i))
+            
+
     @property
     def s(self): return self.s_side
     @property
     def o(self): return self.s_out
     @property
     def i(self): return self.s_in
-
-    def extend():
-        #used in & operations between self types.
-        #If between object_set & socket_slice, subsumed into object set. Projection of operations should still take care of that
-        ...
 
             
 def _ensure_single_is_multi(item:object_set|tuple,Any):
