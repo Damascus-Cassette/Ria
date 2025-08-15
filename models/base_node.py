@@ -114,7 +114,7 @@ class socket(BaseModel,item_base,ConstrBase,Hookable):
     Default_ID      : str
     Default_Label   : str
 
-    Link_Quantity_Min : int = 1
+    Link_Quantity_Min : int = 0
     Link_Quantity_Max : int = 1
 
     ####  Inst Props, Stored ####
@@ -140,10 +140,9 @@ class socket(BaseModel,item_base,ConstrBase,Hookable):
     def __init__(self):
         self.context = self.context(self)
 
-
-        # self.outgoing_links  = subcollection_base(self.context.subgraph.links, lambda i,k,link :  link.out_socket == self)
         self.incoming_links  = subcollection_base(self.context.subgraph.links, lambda i,k,link :  link.in_socket  == self)
-            #This node 'owns' these links in the file format.
+        #This socket stores/'owns' these links in the file format for portability
+        self.outgoing_links  = subcollection_base(self.context.subgraph.links, lambda i,k,link :  link.out_socket == self)
         
         self.links = subcollection_base(self.context.subgraph.links, lambda i,k,link : link.out_socket == self or link.in_socket == self)
         #Refers to all links that mention self
@@ -173,12 +172,12 @@ class socket_group[SocketType=socket](item_base,ConstrBase,Hookable):
     Value_Allow  : list[Any]|None = None 
         #If none, defers to per socket type allowed types
 
-    Socket_Set_Base     : list[socket]
-    Socket_Quantity_Min : int = 1
-    Socket_Quantity_Max : int = 1
+    Socket_Set_Base          : list[socket]
+    SocketGroup_Quantity_Min : int = 1
+    SocketGroup_Quantity_Max : int = 1
 
-    Socket_Mutable      : bool        
-    Socket_Mutatle_Pool : list[socket]
+    # Socket_Mutable      : bool        
+    # Socket_Mutatle_Pool : list[socket]
 
 
     #### Base Methods ####
@@ -223,7 +222,7 @@ class socket_group[SocketType=socket](item_base,ConstrBase,Hookable):
         return uid
 
     def default_sockets(self):
-        for i in range(self.Socket_Quantity_Min):
+        for i in range(self.SocketGroup_Quantity_Min):
             self.create_set(i)
 
     def create_set(self,set_id:int=0):

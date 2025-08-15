@@ -158,17 +158,23 @@ class item(_item):
     
     class socket(_item.socket):
         def __init_subclass__(cls):
-            assert getattr(cls,'Value_Type',   _unset) is not _unset
-            assert getattr(cls,'Value_Default',_unset) is not _unset
+            #TODO: FFUGLY, Fix
+            cls.Value_In_Types =  getattr(cls,'Value_In_Types',getattr(cls,'Value_Type',_unset))
+            cls.Value_Out_Type =  getattr(cls,'Value_Out_Type',getattr(cls,'Value_Type',_unset))
+            
+            assert getattr(cls,'Value_In_Types', _unset) is not _unset
+            assert getattr(cls,'Value_Out_Type', _unset) is not _unset
+            assert getattr(cls,'Value_Default',  _unset) is not _unset
 
-            if isclass((ty:=getattr(cls,'Value_Type'))):
+            if isclass((ty:=getattr(cls,'Value_In_Types'))):
                 if issubclass(ty,(socket_shapes.mutable)):
                     cls.Value_Shape = ty.__origin__
                     cls.Value_Type  = set[ty.__args__]
-            else:
-                assert isinstance(cls.Value_Type,(list,set,tuple))
+            
+            if not isinstance(cls.Value_In_Types,(list,set,tuple)):
+                cls.Value_In_Types = (cls.Value_In_Types,)
+            
             super().__init_subclass__()
-        ...
 
     class exec_node(_item.node):
         ''' Execution node base. '''

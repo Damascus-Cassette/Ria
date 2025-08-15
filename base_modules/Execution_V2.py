@@ -26,9 +26,11 @@ class main(module):
 
     class socket_mixin(_mixin.socket):
         #### Constructed Methods & Vars ####
-        Value_Shape   : st.mutable  = st.mutable # Statement to make assert shapes/forms                                                
-        Value_Type    : Any|tuple[Any]|UnionType  # Statemnt of type(s) produced by socket.
-        Value_Default : Any = _unset            # Not saved to file.
+        Value_Shape    : st.mutable  = st.mutable  # Statement to make assert shapes/forms                                                
+        Value_In_Types : Any|tuple[Any]|UnionType  # Statemnt of type(s) produced by socket.
+        Value_Out_Type : Any                       # Out type must be singular
+        Value_Default  : Any = _unset              
+            #Note: None above are saved to file.
 
         In_Value_Resolution_Chain  = ('in_graph_value_getter' ,'user_value','value_default','Value_Default')
         Out_Value_Resolution_Chain = ('out_graph_value_getter',)
