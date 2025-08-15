@@ -319,6 +319,7 @@ class socket_collection(BaseModel,typed_collection_base,ConstrBase,Hookable):
     #### Instance Values ####
     groups  : dict[socket_group]
     data    : list[socket]
+        #TODO: CONVERT TO COLLECTION
 
     def __init__(self):
         self.context = self.context(self)
@@ -347,8 +348,8 @@ class node(BaseModel,ConstrBase,Hookable):
 
     _links       : flat_bin[link]
 
-    in_sockets   : socket_collection
-    out_sockets  : socket_collection
+    in_sockets   : socket_collection #Consider mandating this structure def as capital
+    out_sockets  : socket_collection #And inst as lowercase
     side_sockets : socket_collection
 
     def __init_subclass__(cls):
@@ -365,6 +366,9 @@ class node(BaseModel,ConstrBase,Hookable):
 
     def __init__(self,/,*,default_sockets:bool = False):
         self.context = self.context(self)
+        self._in_sockets   = self.in_sockets   #Consider mandating this structure def as capital
+        self._out_sockets  = self.out_sockets  
+        self._side_sockets = self.side_sockets 
         self.in_sockets   = self.in_sockets()
         self.out_sockets  = self.out_sockets()
         self.side_sockets = self.side_sockets()
