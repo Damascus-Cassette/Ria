@@ -152,7 +152,7 @@ class socket(BaseModel,item_base,ConstrBase,Hookable):
     def dir(self):
         return self.context.socket_coll.Direction
 
-class socket_group[SocketType=socket](ConstrBase,Hookable):
+class socket_group[SocketType=socket](item_base,ConstrBase,Hookable):
     ''' 
     Constructed Class for methods to allow sockets 0+ to interact
     Defines UI interaction & validation of a socket type
@@ -266,6 +266,10 @@ class socket_group[SocketType=socket](ConstrBase,Hookable):
         socket.group_id = self.Group_ID
         if socket not in self.parent_col.values():
             self.parent_col[key] = socket
+class socket_group_collection(collection_base,ConstrBase,Hookable):
+    ''' Shoudl be non-writable. Reconstructed on load. Accessor like an ordered dict '''
+    Base = socket_group
+
 
 class socket_collection(BaseModel,typed_collection_base,ConstrBase,Hookable):
     ''' Accessor of sockets and socket_groups '''
@@ -317,14 +321,15 @@ class socket_collection(BaseModel,typed_collection_base,ConstrBase,Hookable):
 
 
     #### Instance Values ####
-    groups  : dict[socket_group]
+    # groups  : dict[socket_group]
+    groups  : socket_group_collection
     data    : list[socket]
         #TODO: CONVERT TO COLLECTION
 
     def __init__(self):
         self.context = self.context(self)
         self._data   = OrderedDict()
-        self.groups  = {}
+        self.groups  = socket_group_collection()
         for v in self.Groups:
             self.groups[v.Group_ID] = v(self)
 
