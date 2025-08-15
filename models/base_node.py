@@ -266,6 +266,7 @@ class socket_group[SocketType=socket](item_base,ConstrBase,Hookable):
         socket.group_id = self.Group_ID
         if socket not in self.parent_col.values():
             self.parent_col[key] = socket
+
 class socket_group_collection(collection_base,ConstrBase,Hookable):
     ''' Shoudl be non-writable. Reconstructed on load. Accessor like an ordered dict '''
     Base = socket_group

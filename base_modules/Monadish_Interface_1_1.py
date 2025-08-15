@@ -45,6 +45,8 @@ class socket_group_mixin(_mixin.socket_group):
     def _inst_shape(self,is_left=False):
         ...
 
+main._loader_mixins_ = [socket_group_mixin]
+
 ############ NODES ############
 
 class new_socket(item.socket):
