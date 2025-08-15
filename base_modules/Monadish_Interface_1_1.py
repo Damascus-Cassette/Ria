@@ -192,10 +192,22 @@ def test_connection_a_to_c(graph,subgraph):
         right = node_a1_c1(default_sockets=True)
         assert [(0,0)] == (connection_mapping_res(left,right))
 
+def test_connection_b_to_a(graph,subgraph):
+    with subgraph.context.Cached():
+        left  = node_a1_b1(default_sockets=True)
+        right = node_a1_a1(default_sockets=True)
+        assert (connection_mapping_res(left,right)) is False
+
 def test_connection_b_to_c(graph,subgraph):
     with subgraph.context.Cached():
         left  = node_a1_b1(default_sockets=True)
         right = node_a1_c1(default_sockets=True)
+        assert [(0,0)] == (connection_mapping_res(left,right))
+
+def test_connection_b_to_b(graph,subgraph):
+    with subgraph.context.Cached():
+        left  = node_a1_b1(default_sockets=True)
+        right = node_a1_b1(default_sockets=True)
         assert [(0,0)] == (connection_mapping_res(left,right))
 
 
@@ -207,6 +219,8 @@ main._module_tests_.append(module_test('TestA',
                 funcs       = [test_connection_a_to_a ,
                                test_connection_a_to_b ,
                                test_connection_a_to_c , 
+                               test_connection_b_to_a , 
+                               test_connection_b_to_b , 
                                test_connection_b_to_c , 
                               ],
                 ))
