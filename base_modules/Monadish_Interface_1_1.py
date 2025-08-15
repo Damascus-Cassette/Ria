@@ -68,37 +68,14 @@ class socket_group_mixin(_mixin.socket_group):
                         })
         return res
 
-class shape_utils:
-    def _lr_shape_matcher(left:_shape,right:_shape)->bool|tuple[tuple]:
-        ls_shape_len = len(left)
-        rs_shape_len = len(right)
 
-        mapped_res         = []
-        used_right_indices = []
-        used_left_indices  = []
-
-        for li, ls_shape in enumerate(left):
-            for ri, rs_shape in enumerate(right):
-                if rs_shape['links_max'] <= rs_shape['links_used']: continue #If filled
-                if ri in used_right_indices: continue
-                if ls_shape['out_type'] in rs_shape['in_types']:
-                    mapped_res.append((li,ri))
-                    used_right_indices.append(ri)
-                    used_left_indices .append(ls_shape)
-                    break
-        
-        if len(used_left_indices) < len(left):
-            return False
-        else:
-            return mapped_res
-            
                 
 
 main._loader_mixins_ = [socket_group_mixin]
 
 
 
-############ NODES ############
+############ TEST NODES ############
 
 class a_socket(item.socket):
     Module     = main 
@@ -130,8 +107,6 @@ class c_socket(item.socket):
     Value_Out_Type    = str
     Value_Default     = 'c'
 
-
-    
 class node_a1_a1(item.exec_node):
     Module  = main 
     UID     = 'node_a1_a1'
@@ -142,85 +117,120 @@ class node_a1_a1(item.exec_node):
     out_sockets   = [socket_group.construct('set_a', Sockets=[a_socket])]
     # side_sockets  = [socket_group.construct('set_a', Sockets=[a_socket])]
 
-class node_a1_b1(node_a1_a1):
+class node_b1_b1(node_a1_a1):
     in_sockets    = [socket_group.construct('set_a', Sockets=[b_socket])]
+    out_sockets   = [socket_group.construct('set_a', Sockets=[b_socket])]
 
-class node_a1_c1(node_a1_a1):
+class node_c1_c1(node_a1_a1):
     in_sockets    = [socket_group.construct('set_a', Sockets=[c_socket])]
+    out_sockets   = [socket_group.construct('set_a', Sockets=[c_socket])]
 
-main._loader_items_ = [a_socket    ,
-                       b_socket    ,
-                       c_socket    ,
-                       node_a1_a1  , 
-                       node_a1_b1  ,
-                       node_a1_c1  ,
+
+class node_left_simple_1(node_a1_a1):
+    in_sockets   = []
+    side_sockets = []
+    out_sockets  = [socket_group.construct('set_a', Sockets=[a_socket,
+                                                             c_socket]),
+                    socket_group.construct('set_a', Sockets=[b_socket])]
+
+class node_right_simple_1(node_a1_a1):
+    side_sockets = []
+    out_sockets  = []
+    in_sockets   = [socket_group.construct('set_a', Sockets=[a_socket,
+                                                             c_socket]),
+                    socket_group.construct('set_a', Sockets=[b_socket])]
+
+main._loader_items_ = [a_socket            ,
+                       b_socket            ,
+                       c_socket            ,
+                       node_a1_a1          , 
+                       node_b1_b1          ,
+                       node_c1_c1          ,
+                       node_left_simple_1  ,
+                       node_right_simple_1 ,
                        ]
 
-############ TESTS ############
 
 
+############ FUNCTIONS ############
+
+class shape_utils:
+    def _lr_shape_matcher(left:_shape,right:_shape)->bool|tuple[tuple]:
+        ls_shape_len = len(left)
+        rs_shape_len = len(right)
+
+        mapped_res         = []
+        used_right_indices = []
+        used_left_indices  = []
+
+        for li, ls_shape in enumerate(left):
+            for ri, rs_shape in enumerate(right):
+                if rs_shape['links_max'] <= rs_shape['links_used']: continue #If filled
+                if ri in used_right_indices: continue
+                if ls_shape['out_type'] in rs_shape['in_types']:
+                    mapped_res.append((li,ri))
+                    used_right_indices.append(ri)
+                    used_left_indices .append(ls_shape)
+                    break
+        
+        if len(used_left_indices) < len(left):
+            return False
+        else:
+            return mapped_res
+            
 def connection_mapping_res(left,right):
+    #TODO: Make so iterate over each shape, find matches.
+    
     print(left.in_sockets.groups)
 
-    lg = left.in_sockets.groups[0]
+    lg = left.out_sockets.groups[0]
     rg = right.in_sockets.groups[0]    
 
     lg_shape = lg.shape(lg,is_left=True)
     rg_shape = rg.shape(rg,)
 
-    print(lg_shape)
-    print(rg_shape)
-
     return shape_utils._lr_shape_matcher(lg_shape,rg_shape)
 
-    
-def test_connection_a_to_a(graph,subgraph):
-    with subgraph.context.Cached():
-        left  = node_a1_a1(default_sockets=True)
-        right = node_a1_a1(default_sockets=True)
-        assert [(0,0)] == connection_mapping_res(left,right)
-
-def test_connection_a_to_b(graph,subgraph):
-    with subgraph.context.Cached():
-        left  = node_a1_a1(default_sockets=True)
-        right = node_a1_b1(default_sockets=True)
-        assert (connection_mapping_res(left,right)) is False
-        
-def test_connection_a_to_c(graph,subgraph):
-    with subgraph.context.Cached():
-        left  = node_a1_a1(default_sockets=True)
-        right = node_a1_c1(default_sockets=True)
-        assert [(0,0)] == (connection_mapping_res(left,right))
-
-def test_connection_b_to_a(graph,subgraph):
-    with subgraph.context.Cached():
-        left  = node_a1_b1(default_sockets=True)
-        right = node_a1_a1(default_sockets=True)
-        assert (connection_mapping_res(left,right)) is False
-
-def test_connection_b_to_c(graph,subgraph):
-    with subgraph.context.Cached():
-        left  = node_a1_b1(default_sockets=True)
-        right = node_a1_c1(default_sockets=True)
-        assert [(0,0)] == (connection_mapping_res(left,right))
-
-def test_connection_b_to_b(graph,subgraph):
-    with subgraph.context.Cached():
-        left  = node_a1_b1(default_sockets=True)
-        right = node_a1_b1(default_sockets=True)
-        assert [(0,0)] == (connection_mapping_res(left,right))
 
 
+############ TESTS ############
+
+mapping_tests = [
+    # (left,right,expected),
+    (node_a1_a1, node_a1_a1, [(0,0)]),
+    (node_a1_a1, node_b1_b1, False  ),
+    (node_a1_a1, node_c1_c1, [(0,0)]),
+    (node_a1_a1, node_c1_c1, [(0,0)]),
+    (node_b1_b1, node_a1_a1, False  ),
+    (node_b1_b1, node_c1_c1, [(0,0)]),
+    (node_b1_b1, node_b1_b1, [(0,0)]),
+]
+
+def test_indv(left_base,right_base,expected):
+    left   = left_base (default_sockets=True)
+    right  = right_base(default_sockets=True)
+    result = connection_mapping_res(left,right)
+    assert result == expected
+
+def test_simple_array(graph,subgraph):
+    with subgraph.context.Cached():
+        for l,r,res in mapping_tests:
+            test_indv(l,r,res)
+            
+
+def test_complex_left_right(graph,subgraph):
+    with subgraph.context.Cached():
+        left  = node_left_simple_1 (default_sockets=True)
+        right = node_right_simple_1(default_sockets=True)
+        res   = connection_mapping_res(left,right)
+        assert [(0,0),(1,1)] == res
 
 main._module_tests_.append(module_test('TestA',
                 module      = main,
                 module_iten = {main.UID : main.Version,
                                'Core_Execution':'2.0'}, 
-                funcs       = [test_connection_a_to_a ,
-                               test_connection_a_to_b ,
-                               test_connection_a_to_c , 
-                               test_connection_b_to_a , 
-                               test_connection_b_to_b , 
-                               test_connection_b_to_c , 
+                funcs       = [
+                               test_simple_array       ,
+                               test_complex_left_right ,
                               ],
                 ))

@@ -121,7 +121,8 @@ class collection_base[T=item_base]():
 
     def __getitem__(self,key:str|int):
         if isinstance(key,int):
-            return list(self.data.items())[key][1]
+            return list(self.data.values())[key]
+            # return list(self.data.items())[key][1]
         return self.data[key]
 
     def __len__(self):
