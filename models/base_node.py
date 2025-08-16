@@ -151,6 +151,9 @@ class socket(BaseModel,item_base,ConstrBase,Hookable):
     def dir(self):
         return self.context.socket_coll.Direction
 
+# global _temp_sg_constr_index
+# _temp_sg_constr_index = 0
+
 class socket_group[SocketType=socket](item_base,ConstrBase,Hookable):
     ''' 
     Constructed Class for methods to allow sockets 0+ to interact
@@ -193,7 +196,13 @@ class socket_group[SocketType=socket](item_base,ConstrBase,Hookable):
             Sockets = list(Sockets)
         kwargs['Group_ID']        = group_id
         kwargs['Socket_Set_Base'] = Sockets
+
         return type(f'S_GROUP_{group_id}',(cls,),kwargs)
+        
+        # global _temp_sg_constr_index 
+        # _temp_sg_constr_index = _temp_sg_constr_index + 1
+        # return type(f'S_GROUP_{_temp_sg_constr_index}_{group_id}',(cls,),kwargs)
+        
 
     context = context.construct(include=['meta_graph','root_graph','subgraph','node','socket_coll',],as_name='socket_group')
     def _context_walk_(self):
@@ -261,8 +270,10 @@ class socket_group[SocketType=socket](item_base,ConstrBase,Hookable):
         return self.sockets[key]
 
     def __setitem__(self,key,socket:SocketType):
-        # raise Exception(f'{key},{socket}')
-        socket.group_id = self.Group_ID
+        # socket.group_id = self.Group_ID   #BUG: Was causing sockets to see themselves in the wrong group. 
+
+        socket.group_id = self.key
+
         if socket not in self.parent_col.values():
             self.parent_col[key] = socket
 

@@ -83,27 +83,33 @@ class node_a1_a1(item.exec_node):
     # side_sockets  = [socket_group.construct('set_a', Sockets=[a_socket])]
 
 class node_b1_b1(node_a1_a1):
+    UID     = 'node_b1_b1'
     in_sockets    = [socket_group.construct('set_a', Sockets=[b_socket])]
     out_sockets   = [socket_group.construct('set_a', Sockets=[b_socket])]
 
 class node_c1_c1(node_a1_a1):
+    UID     = 'node_c1_c1'
     in_sockets    = [socket_group.construct('set_a', Sockets=[c_socket])]
     out_sockets   = [socket_group.construct('set_a', Sockets=[c_socket])]
 
-
 class node_left_simple_1(node_a1_a1):
+    UID     = 'node_left_simple_1'
     in_sockets   = []
     side_sockets = []
-    out_sockets  = [socket_group.construct('side_a1', Sockets=[a_socket,
+    out_sockets  = [socket_group.construct('side_a', Sockets=[a_socket,
                                                                c_socket]),
-                    socket_group.construct('side_a1', Sockets=[b_socket])]
+                    socket_group.construct('side_a', Sockets=[b_socket])]
 
 class node_right_simple_1(node_a1_a1):
+    UID     = 'node_right_simple_1'
     side_sockets = []
     out_sockets  = []
     in_sockets   = [socket_group.construct('side_b1', Sockets=[a_socket,
                                                                c_socket]),
                     socket_group.construct('side_b2', Sockets=[b_socket])]
+
+
+
 
 main._loader_items_ = [a_socket            ,
                        b_socket            ,
@@ -162,6 +168,7 @@ class shape_socket():
         #TODO: May have to add a counter of potentials in a context/temporary variable pre-application
         if (lm:=self.links_max) == 'n': return False
         return self.links_max <= self.links_used
+
 
     @property
     def is_potential(self):
@@ -234,6 +241,7 @@ class socket_group_shape():
                 if ri in used_indices_right: 
                     continue
                 if r.can_intake(l):
+                    # socket_claims.append(r)
                     used_indices_left.append(li)
                     used_indices_right.append(ri)
                     resulting_map.append((li,ri))
@@ -262,22 +270,23 @@ class socket_group_shape():
                 with self.src_node.context.cached():
                     item = self.src_item(self.src_node)
                     self.src_node.in_sockets.groups[self.src_item.Group_ID] = item
+                self.src_item = item
             for li,ri in res:
-                left.src_node.context.subgraph.links.new()
+                # left.src_node.context.subgraph.links.new()
                 left.src_item[li].connect(item.sockets[ri])
 
         return generated_intake_func
 
 class socket_collection_mixin(_mixin.socket_collection):
-    def _monadish_unused_socket_groups(self,claimed_potential_structures:list[socket_group]=None):
+    def _monadish_unused_socket_groups(self,claimed_groups:list[socket_group]=None):
         ''' Yield unused potential from structural definition & add number of times cls apears in claimed arg'''
 
-        if claimed_potential_structures is None: claimed_potential_structures = []
+        if claimed_groups is None: claimed_groups = []
 
         for potential_group in self.Groups:
             max_inst = potential_group.SocketGroup_Quantity_Max
             inst_current_or_claimed =  len([x for x in self.groups if (isinstance(x, potential_group))])
-            inst_current_or_claimed =+ len([x for x in self.groups if (x in claimed_potential_structures)])
+            inst_current_or_claimed =+ len([x for x in self.groups if (x in claimed_groups)])
             if max_inst < inst_current_or_claimed:
                 yield potential_group
 
@@ -292,8 +301,10 @@ class node_mixin(_mixin.node):
 
         left_used_indices    = []
         claimed_potential_s  = []
-        claimed_potential_sg = []
         resulting_functions  = []
+        claimed_groups       = [] 
+            #Temporary claimed groups, if group is filled or in claimed it cannot be connected to
+            #Groups can only be added to this is any(x.limit-1 for x in self.sockets)?
 
         # left_groups = []
 
@@ -313,13 +324,13 @@ class node_mixin(_mixin.node):
 
             if li in left_used_indices: continue
 
-            for potential_sg in self.in_sockets._monadish_unused_socket_groups(claimed_potential_sg):
+            for potential_sg in self.in_sockets._monadish_unused_socket_groups(claimed_groups):
                 p_r_shape = socket_group_shape(potential_sg)
                 res = p_r_shape.prep_intake(left_shape)
                 if res is False: continue
                 left_used_indices.append(li)
                 resulting_functions.append(res)
-                claimed_potential_sg.append(potential_sg)
+                claimed_groups.append(potential_sg)
                 break
         
         if len(left_used_indices) != len(left_info):
@@ -358,6 +369,8 @@ def new_test(graph,subgraph):
         with debug_targets({'Monadish_Interface_1_1': 4 }):
             left  = node_left_simple_1 (default_sockets=True)
             right = node_right_simple_1(default_sockets=True)
+            # assert left.out_sockets.groups[0].__class__ is not left.out_sockets.groups[1].__class__
+            # print(*(x.__class__ for x in (left.out_sockets.groups)))
             print(*left.out_sockets.groups)
             print(*right.in_sockets.groups)
 
