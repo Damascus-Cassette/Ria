@@ -260,7 +260,8 @@ class socket_group_shape():
             item = self.src_item
             if self.is_cls:     #is a potential structure item
                 with self.src_node.context.cached():
-                    item = self.src_node.in_sockets.groups[self.src_item.Group_ID] = self.src_item(self.src_node)
+                    item = self.src_item(self.src_node)
+                    self.src_node.in_sockets.groups[self.src_item.Group_ID] = item
             for li,ri in res:
                 left.src_node.context.subgraph.links.new()
                 left.src_item[li].connect(item.sockets[ri])
