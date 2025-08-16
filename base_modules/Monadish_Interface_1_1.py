@@ -9,6 +9,7 @@ from typing                 import Any, Self, TypeAlias,AnyStr,Type
 from types                  import FunctionType
 from inspect                import isclass
 
+from .utils.print_debug import (debug_print_wrapper as dp_wrap, debug_level,debug_targets, _debug_print as dprint)
 
 class utils:
     def iter_unseen(*iterables):
@@ -93,16 +94,16 @@ class node_c1_c1(node_a1_a1):
 class node_left_simple_1(node_a1_a1):
     in_sockets   = []
     side_sockets = []
-    out_sockets  = [socket_group.construct('set_a', Sockets=[a_socket,
+    out_sockets  = [socket_group.construct('side_a1', Sockets=[a_socket,
                                                              c_socket]),
-                    socket_group.construct('set_a', Sockets=[b_socket])]
+                    socket_group.construct('side_a2', Sockets=[b_socket])]
 
 class node_right_simple_1(node_a1_a1):
     side_sockets = []
     out_sockets  = []
-    in_sockets   = [socket_group.construct('set_a', Sockets=[a_socket,
+    in_sockets   = [socket_group.construct('side_b1', Sockets=[a_socket,
                                                              c_socket]),
-                    socket_group.construct('set_a', Sockets=[b_socket])]
+                    socket_group.construct('side_b2', Sockets=[b_socket])]
 
 main._loader_items_ = [a_socket            ,
                        b_socket            ,
@@ -218,6 +219,7 @@ class socket_group_shape():
     def __len__(self):
         return len(self.items)
 
+    @dp_wrap(print_result=True)
     def generate_mapping(self, left:Self, socket_claims:list=None)->bool|list[tuple]:
         ''' Attempts to generate mapping from left.items to self.items for connection, if it's not able to, return false '''
         ''' Actual object references are not exactltly possible, as the structure may be potential. The resulting func however will get the l_sg and r_sg passed in'''
@@ -241,7 +243,7 @@ class socket_group_shape():
             return False
         return resulting_map
                 
-
+    @dp_wrap(print_result=True)
     def prep_intake(self, left:Self, socket_claims:list=None)->bool|FunctionType:
         ''' FunctionType executes the mapping of two aligned shapes '''
         ''' Assumes will intake if can, so if not all internal sockets are multi, self.filled = True which blocks other items'''
@@ -252,14 +254,16 @@ class socket_group_shape():
         if (res:=self.generate_mapping(left,socket_claims)) is False: return False 
             
         def generated_intake_func(debug_return_fullfillment=False):
-            if debug_return_fullfillment: return (left.item,self.item,res)
-            item = self.item
+
+            if debug_return_fullfillment: 
+                return (left.src_item,self.src_item,res)
+            item = self.src_item
             if self.is_cls:     #is a potential structure item
                 with self.src_node.context.cached():
-                    item = self.src_node.in_sockets.groups[self.item.Group_ID] = self.item(self.src_node)
+                    item = self.src_node.in_sockets.groups[self.src_item.Group_ID] = self.src_item(self.src_node)
             for li,ri in res:
                 left.src_node.context.subgraph.links.new()
-                left.item[li].connect(item.sockets[ri])
+                left.src_item[li].connect(item.sockets[ri])
 
         return generated_intake_func
 
@@ -281,6 +285,7 @@ class node_mixin(_mixin.node):
         ''' Check if left_group can connect to self, left could be tuple[socket],tuple[sg],tuple[node],sg,node, '''
         #TODO Make and Check pool first for patches
 
+    @dp_wrap(print_result=True)
     def _monadish_prep_intake_node(self, left_node)->bool|FunctionType:
         ''' Intake a series of socket groups to match to this node '''
 
@@ -316,16 +321,15 @@ class node_mixin(_mixin.node):
                 claimed_potential_sg.append(potential_sg)
                 break
         
-        if left_used_indices != len(left_info):
+        if len(left_used_indices) != len(left_info):
             return False
         
         def monadish_connect(debug_return_fullfillment:bool=False):
-            if debug_return_fullfillment: 
-                res  =[]
-                for x in resulting_functions: 
-                    res.append(x(debug_return_fullfillment=True))
+            res  = []
             for fullfillment_function in resulting_functions: 
-                fullfillment_function()
+                res.append(fullfillment_function(debug_return_fullfillment=debug_return_fullfillment))
+            return res
+        
         return monadish_connect
 
 
@@ -347,38 +351,17 @@ main._loader_mixins_ = [
 #     (node_b1_b1, node_b1_b1, [(0, 0, [(0, 0)])]),
 # ]
 
-# def test_indv(left_base,right_base,expected):
-#     left   = left_base (default_sockets=True)
-#     right  = right_base(default_sockets=True)
-#     result = connection_mapping_res(left,right)
-#     if not result == expected:
-#         raise Exception(f'TEST INDV WAS NOT AS EXPECTED: {result} != {expected} w/ {left_base.__name__} -> {right_base.__name__}', )
-
-# def test_simple_array(graph,subgraph):
-#     with subgraph.context.Cached():
-#         for l,r,res in mapping_tests:
-#             test_indv(l,r,res)
-            
-
-# def test_complex_left_right(graph,subgraph):
-#     _debug_print.set(True)
-#     debug_print('STARTED TEST COMPLEX ')
-#     with subgraph.context.Cached():
-#         left  = node_left_simple_1 (default_sockets=True)
-#         right = node_right_simple_1(default_sockets=True)
-#         res   = connection_mapping_res(left,right)
-#         debug_print(res)
-#         assert [(0,0,[(0,0),(1,1)]),(1,1,[0,0])] == res
-
-
 def new_test(graph,subgraph):
     with subgraph.context.Cached():
-        left  = node_left_simple_1 (default_sockets=True)
-        right = node_right_simple_1(default_sockets=True)
-        res = right._monadish_prep_intake_node(left)
-        assert isinstance(res,FunctionType)
-        res = res(debug_return_fullfillment=True)
-        print(res)
+        # with debug_level(4):
+        with debug_targets({'Monadish_Interface_1_1': 4 }):
+            left  = node_left_simple_1 (default_sockets=True)
+            right = node_right_simple_1(default_sockets=True)
+            res = right._monadish_prep_intake_node(left)
+            # assert isinstance(res,FunctionType)
+            res = res(debug_return_fullfillment=True)
+            dprint(res)
+            raise Exception('')
 
 main._module_tests_.append(module_test('TestA',
                 module      = main,
