@@ -375,7 +375,9 @@ def new_test(graph,subgraph):
     with subgraph.context.Cached():
         left  = node_left_simple_1 (default_sockets=True)
         right = node_right_simple_1(default_sockets=True)
-        res = right._monadish_prep_intake_node(left)(debug_return_fullfillment=True)
+        res = right._monadish_prep_intake_node(left)
+        assert isinstance(res,FunctionType)
+        res = res(debug_return_fullfillment=True)
         print(res)
 
 main._module_tests_.append(module_test('TestA',
