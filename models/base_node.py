@@ -271,6 +271,8 @@ class socket_group_collection(collection_base,ConstrBase,Hookable):
     Base = socket_group
 
 
+    #BUG HERE. Not ensuring unique keys.
+
 class socket_collection(BaseModel,typed_collection_base,ConstrBase,Hookable):
     ''' Accessor of sockets and socket_groups '''
     _io_bin_name_       = 'socket'

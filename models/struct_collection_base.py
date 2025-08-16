@@ -22,12 +22,14 @@ class collection_base[T=item_base]():
 
     #### Constructed Values #### 
     Base           : Type
-    Merge_By_Keys  : bool = False   #Can merge by keys (merge left w/a with merge_bases) or make keys unique
-    Mergeable_Base : bool = False   
+    _coll_generate_unique_keys_ : bool = True
+
+    _coll_merge_on_setitem_ : bool = False   #Can merge by keys (merge left w/a with merge_bases) or make keys unique
+    _coll_mergeable_base_   : bool = False
         #Subtypes should allow merging when this is true
         #If this is not True, it will replace like a dict and not deep replace-refs
-
-    Allow_Unique_Generation : bool = True
+    def _coll_merge_handler_(self,left,right):
+        return left | right
 
     #### Instance ####
     _data   : OrderedDict  = None
@@ -47,7 +49,7 @@ class collection_base[T=item_base]():
     def ensure_unique_key(self,key):
         if key not in self._data.keys():
             return key
-        elif not self.Allow_Unique_Generation:
+        elif not self._coll_generate_unique_keys_:
             raise Exception('KEY NOT UNIQUE WHILE CLASS DEMANDS UNIQUE')
         
         key_base = key
@@ -56,7 +58,7 @@ class collection_base[T=item_base]():
             if i > 999: raise Exception('WHAT ARE YOU DOING???')
             i   =+ 1
             key = key_base + '.' + str(i).zfill(3)
-        
+        # print (f'MAKING KEY UNIQUE {key_base} TO {key}')
         return key
 
     @property
@@ -88,11 +90,11 @@ class collection_base[T=item_base]():
         assert self.matches_base(item)
         
         if key in self._data.keys():
-            if self.Mergeable_Base and self.Merge_By_Keys:
-                item = item | self._data[key]
+            if self._coll_mergeable_base_ and self._coll_merge_on_setitem_:
+                item = self._coll_merge_handler_(item, self._data[key])
                 # self._context_new_item_(item)
 
-            elif not self.Merge_By_Keys:
+            elif not self._coll_merge_on_setitem_:
                 key = self.ensure_unique_key(key)
 
         item.key = key
@@ -108,8 +110,8 @@ class collection_base[T=item_base]():
         assert self.matches_base(item)
         
         if key in self._data.keys():
-            if self.Mergeable_Base:
-                item = item | self._data[key]
+            if self._coll_mergeable_base_:
+                item = self._coll_merge_handler_(item, self._data[key]) 
                 self._context_new_item_(item)
                 self._data[key] = item
                 return item

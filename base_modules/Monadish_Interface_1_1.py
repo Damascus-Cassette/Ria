@@ -95,14 +95,14 @@ class node_left_simple_1(node_a1_a1):
     in_sockets   = []
     side_sockets = []
     out_sockets  = [socket_group.construct('side_a1', Sockets=[a_socket,
-                                                             c_socket]),
-                    socket_group.construct('side_a2', Sockets=[b_socket])]
+                                                               c_socket]),
+                    socket_group.construct('side_a1', Sockets=[b_socket])]
 
 class node_right_simple_1(node_a1_a1):
     side_sockets = []
     out_sockets  = []
     in_sockets   = [socket_group.construct('side_b1', Sockets=[a_socket,
-                                                             c_socket]),
+                                                               c_socket]),
                     socket_group.construct('side_b2', Sockets=[b_socket])]
 
 main._loader_items_ = [a_socket            ,
@@ -275,8 +275,8 @@ class socket_collection_mixin(_mixin.socket_collection):
 
         for potential_group in self.Groups:
             max_inst = potential_group.SocketGroup_Quantity_Max
-            inst_current_or_claimed =  len(x for x in self.groups if (isinstance(potential_group)))
-            inst_current_or_claimed =+ len(x for x in self.groups if (x in claimed_potential_structures))
+            inst_current_or_claimed =  len([x for x in self.groups if (isinstance(x, potential_group))])
+            inst_current_or_claimed =+ len([x for x in self.groups if (x in claimed_potential_structures)])
             if max_inst < inst_current_or_claimed:
                 yield potential_group
 
@@ -357,10 +357,14 @@ def new_test(graph,subgraph):
         with debug_targets({'Monadish_Interface_1_1': 4 }):
             left  = node_left_simple_1 (default_sockets=True)
             right = node_right_simple_1(default_sockets=True)
+            print(*left.out_sockets.groups)
+            print(*right.in_sockets.groups)
+
             res = right._monadish_prep_intake_node(left)
             # assert isinstance(res,FunctionType)
             res = res(debug_return_fullfillment=True)
             dprint(res)
+
             raise Exception('')
 
 main._module_tests_.append(module_test('TestA',
