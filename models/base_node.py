@@ -371,9 +371,9 @@ class node(BaseModel,ConstrBase,Hookable):
 
     def __init__(self,/,*,default_sockets:bool = False):
         self.context = self.context(self)
-        self._in_sockets   = self.in_sockets   #Consider mandating this structure def as capital
-        self._out_sockets  = self.out_sockets  
-        self._side_sockets = self.side_sockets 
+        self.In_Sockets   = self.in_sockets   #Consider mandating this structure def as capital
+        self.Out_Sockets  = self.out_sockets  
+        self.Side_Sockets = self.side_sockets 
         self.in_sockets   = self.in_sockets()
         self.out_sockets  = self.out_sockets()
         self.side_sockets = self.side_sockets()
