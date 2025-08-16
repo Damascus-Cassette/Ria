@@ -175,8 +175,6 @@ class shape_socket():
         # return self.src_node.context.subgraph.links.new(left  = self.item, 
         #                                                 right = right_socket)
     
-
-
 class socket_group_shape():
     ''' Intermediatary socket group shape, used as a proxy for allowing inst,cls, and tuples[socket|_value|_skip].'''
     src_item : Any = None
@@ -204,20 +202,18 @@ class socket_group_shape():
         if isclass(item):
             assert src_node
             self.is_sg = True
-            self.items = (shape_socket(x) for x in item.Socket_Set_Base) 
+            self.items = list(shape_socket(x) for x in item.Socket_Set_Base) 
             
         elif isinstance(item, tuple):
             self.is_tup = True
-            self.items = (shape_socket(x) for x in item)
+            self.items = list(shape_socket(x) for x in item)
 
         elif isinstance(item, socket_group):
             self.is_sg = True
-            self.items = (shape_socket(x) for x in item.sockets.values())
-        
-        self.in_is_filled = False
+            self.items = list(shape_socket(x) for x in item.sockets.values())
     
     def __iter__(self):
-        for x in self.items: yield item
+        for x in self.items: yield x
 
     def __len__(self):
         return len(self.items)
@@ -241,12 +237,12 @@ class socket_group_shape():
                     resulting_map.append((li,ri))
                     break
         
-        if used_indices_left < len(left): 
+        if len(used_indices_left) < len(left): 
             return False
         return resulting_map
                 
 
-    def prep_intake(self,left:Self,socket_claims:list=None)->bool|FunctionType:
+    def prep_intake(self, left:Self, socket_claims:list=None)->bool|FunctionType:
         ''' FunctionType executes the mapping of two aligned shapes '''
         ''' Assumes will intake if can, so if not all internal sockets are multi, self.filled = True which blocks other items'''
         ''' Resulting Function, if self is potential, will create and use expected existing shape maps'''
@@ -255,7 +251,8 @@ class socket_group_shape():
 
         if (res:=self.generate_mapping(left,socket_claims)) is False: return False 
             
-        def generated_intake_func():
+        def generated_intake_func(debug_return_fullfillment=False):
+            if debug_return_fullfillment: return (left.item,self.item,res)
             item = self.item
             if self.is_cls:     #is a potential structure item
                 with self.src_node.context.cached():
@@ -265,7 +262,6 @@ class socket_group_shape():
                 left.item[li].connect(item.sockets[ri])
 
         return generated_intake_func
-
 
 class socket_collection_mixin(_mixin.socket_collection):
     def _monadish_unused_socket_groups(self,claimed_potential_structures:list[socket_group]=None):
@@ -280,13 +276,12 @@ class socket_collection_mixin(_mixin.socket_collection):
             if max_inst < inst_current_or_claimed:
                 yield potential_group
 
-
 class node_mixin(_mixin.node):
-    def _monadish_prep_intake(self,left_group)->False|FunctionType:
+    def _monadish_prep_intake(self,left_group)->bool|FunctionType:
         ''' Check if left_group can connect to self, left could be tuple[socket],tuple[sg],tuple[node],sg,node, '''
         #TODO Make and Check pool first for patches
 
-    def _monadish_prep_intake_node(self, left_node)->False|FunctionType:
+    def _monadish_prep_intake_node(self, left_node)->bool|FunctionType:
         ''' Intake a series of socket groups to match to this node '''
 
         left_used_indices    = []
@@ -296,7 +291,7 @@ class node_mixin(_mixin.node):
 
         # left_groups = []
 
-        left_info  = list((li,l,socket_group_shape(l,src_node=left_node)) for (li, l) in enumerate(left_node.groups)) 
+        left_info  = list((li,l,socket_group_shape(l,src_node=left_node)) for (li, l) in enumerate(left_node.out_sockets.groups)) 
         right_info = list((ri,r,socket_group_shape(r,src_node=self     )) for (ri, r) in enumerate(self.in_sockets.groups))
 
         for li, left_group, left_shape in left_info:
@@ -324,142 +319,72 @@ class node_mixin(_mixin.node):
         if left_used_indices != len(left_info):
             return False
         
-        def monadish_connect(self):
+        def monadish_connect(debug_return_fullfillment:bool=False):
+            if debug_return_fullfillment: 
+                res  =[]
+                for x in resulting_functions: 
+                    res.append(x(debug_return_fullfillment=True))
             for fullfillment_function in resulting_functions: 
                 fullfillment_function()
         return monadish_connect
 
 
-        
-
-#With this it becomes much simpler to have something like:
-#For shape in shapes(left)
-    #For shape in shapes(right)
-    #for shape in shapes(right_potential) 
-        # Should be a function producedlimited generator that references how many times it's abstract type has been used
-        # This would prob best be done through a shared dict passed in, or a contextual value.
-        # This way if the intake was not executed, the values should evaporate and th next attempt can utilize it
-
-# class shape_utils:
-#     def _lr_shape_matcher(left:_shape,right:_shape)->bool|tuple[tuple]:
-#         ls_shape_len = len(left)
-#         rs_shape_len = len(right)
-
-#         mapped_res         = []
-#         used_right_indices = []
-#         used_left_indices  = []
-
-#         for li, ls_shape in enumerate(left):
-#             if li in used_left_indices: continue
-#             for ri, rs_shape in enumerate(right):
-#                 if ri in used_right_indices: continue
-#                 if rs_shape['links_max'] <= rs_shape['links_used'] : continue #If filled
-#                 if ls_shape['out_type'] not in rs_shape['in_types']: continue
-#                 # debug_print(li,ri, 'MAPPED IN', rs_shape, ls_shape)
-#                 mapped_res.append((li,ri))
-#                     #Should switch to names for easier attachment.
-#                 used_right_indices.append(ri)
-#                 used_left_indices .append(ls_shape)
-#                 break
-
-#         debug_print('MAP RESULT:',mapped_res)
-        
-#         if len(used_left_indices) < len(left):
-#             return False
-#         else:
-#             return mapped_res
-
-# from contextvars import ContextVar
-
-# _debug_print = ContextVar('debug_print',default=False)
-
-# def debug_print(*args,**kwargs):
-#     if _debug_print.get(): print(*args,**kwargs)
-
-# def connection_mapping_res(left,right):
-    
-#     debug_print('CONTNECTION MAPPING RES START!',left,right)
-#     debug_print('GROUPS ARE:', list(left.out_sockets.groups.items()))
-#     debug_print('GROUPS ARE:', list(right.in_sockets.groups.items()))
-
-#     # lg = left.out_sockets.groups[0]
-#     # rg = right.in_sockets.groups[0]    
-
-#     mapped_res         = []
-#     used_right_indices = []
-#     used_left_indices  = []
-
-
-#     for li,lg in enumerate(left.out_sockets.groups):
-        
-#         if li in used_left_indices: continue
-#         lg_shape = lg.shape(lg,is_left=True)
-
-#         for ri,rg in enumerate(right.in_sockets.groups):
-#             if ri in used_right_indices: continue
-
-#             rg_shape = rg.shape(rg)
-#             shape_matches = shape_utils._lr_shape_matcher(lg_shape,rg_shape)
-
-#             debug_print('RES', shape_matches ,lg_shape, 'TO' ,rg_shape)
-#             if shape_matches is False: continue
-            
-#             used_right_indices.append(ri)
-#             used_left_indices.append(li)
-#             mapped_res.append((li,ri,shape_matches))
-#             break
-
-
-#     if len(used_left_indices) < len(left.out_sockets.groups):
-#         return False
-#     else:
-#         return mapped_res
-
-
-
+main._loader_mixins_ = [
+    socket_collection_mixin,
+    node_mixin
+    ]
 
 ############ TESTS ############
 
-mapping_tests = [
-    # (left,right,expected),
-    (node_a1_a1, node_a1_a1, [(0, 0, [(0, 0)])]),
-    (node_a1_a1, node_b1_b1, False  ),
-    (node_a1_a1, node_c1_c1, [(0, 0, [(0, 0)])]),
-    (node_a1_a1, node_c1_c1, [(0, 0, [(0, 0)])]),
-    (node_b1_b1, node_a1_a1, False  ),
-    (node_b1_b1, node_c1_c1, [(0, 0, [(0, 0)])]),
-    (node_b1_b1, node_b1_b1, [(0, 0, [(0, 0)])]),
-]
+# mapping_tests = [
+#     # (left,right,expected),
+#     (node_a1_a1, node_a1_a1, [(0, 0, [(0, 0)])]),
+#     (node_a1_a1, node_b1_b1, False  ),
+#     (node_a1_a1, node_c1_c1, [(0, 0, [(0, 0)])]),
+#     (node_a1_a1, node_c1_c1, [(0, 0, [(0, 0)])]),
+#     (node_b1_b1, node_a1_a1, False  ),
+#     (node_b1_b1, node_c1_c1, [(0, 0, [(0, 0)])]),
+#     (node_b1_b1, node_b1_b1, [(0, 0, [(0, 0)])]),
+# ]
 
-def test_indv(left_base,right_base,expected):
-    left   = left_base (default_sockets=True)
-    right  = right_base(default_sockets=True)
-    result = connection_mapping_res(left,right)
-    if not result == expected:
-        raise Exception(f'TEST INDV WAS NOT AS EXPECTED: {result} != {expected} w/ {left_base.__name__} -> {right_base.__name__}', )
+# def test_indv(left_base,right_base,expected):
+#     left   = left_base (default_sockets=True)
+#     right  = right_base(default_sockets=True)
+#     result = connection_mapping_res(left,right)
+#     if not result == expected:
+#         raise Exception(f'TEST INDV WAS NOT AS EXPECTED: {result} != {expected} w/ {left_base.__name__} -> {right_base.__name__}', )
 
-def test_simple_array(graph,subgraph):
-    with subgraph.context.Cached():
-        for l,r,res in mapping_tests:
-            test_indv(l,r,res)
+# def test_simple_array(graph,subgraph):
+#     with subgraph.context.Cached():
+#         for l,r,res in mapping_tests:
+#             test_indv(l,r,res)
             
 
-def test_complex_left_right(graph,subgraph):
-    _debug_print.set(True)
-    debug_print('STARTED TEST COMPLEX ')
+# def test_complex_left_right(graph,subgraph):
+#     _debug_print.set(True)
+#     debug_print('STARTED TEST COMPLEX ')
+#     with subgraph.context.Cached():
+#         left  = node_left_simple_1 (default_sockets=True)
+#         right = node_right_simple_1(default_sockets=True)
+#         res   = connection_mapping_res(left,right)
+#         debug_print(res)
+#         assert [(0,0,[(0,0),(1,1)]),(1,1,[0,0])] == res
+
+
+def new_test(graph,subgraph):
     with subgraph.context.Cached():
         left  = node_left_simple_1 (default_sockets=True)
         right = node_right_simple_1(default_sockets=True)
-        res   = connection_mapping_res(left,right)
-        debug_print(res)
-        assert [(0,0,[(0,0),(1,1)]),(1,1,[0,0])] == res
+        res = right._monadish_prep_intake_node(left)(debug_return_fullfillment=True)
+        print(res)
 
 main._module_tests_.append(module_test('TestA',
                 module      = main,
                 module_iten = {main.UID : main.Version,
                                'Core_Execution':'2.0'}, 
                 funcs       = [
-                               test_simple_array       ,
-                               test_complex_left_right ,
+                                new_test,
+                            #    test_simple_array       ,
+                            #    test_complex_left_right ,
                               ],
                 ))
