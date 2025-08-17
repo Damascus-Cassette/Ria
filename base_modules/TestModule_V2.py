@@ -1,6 +1,7 @@
 from ..models.struct_module import module, module_test
 from ..models.base_node     import socket_group
 from .Execution_Types       import item,_mixin
+from .utils.print_debug     import debug_print_wrapper as debug_wraper, debug_print as dprint
 
 class main(module):
     UID          = 'TestModule'
@@ -49,18 +50,17 @@ class new_exec_node(item.exec_node):
                     socket_group.construct('set_b', Sockets=[new_socket])]
     out_sockets  = [socket_group.construct('set_a', Sockets=[new_socket])]
 
+    @debug_wraper()
     def execute(self):
-        print(f'CALLED EXECUTE FUCKER : {self}')
         self.test_module_executed = True        
         # print('self.in_sockets[0]',self.in_sockets[0].Value_Shape.get(self.in_sockets[0]))
         #erros raised during implicit execution don't work????????
 
         i1 = self.in_sockets[0].value
         i2 = self.in_sockets[1].value
-        print (i1,i2)
+        # print (i1,i2)
         val = i1 + i2
         self.out_sockets[0].value = val
-        print(f'EXECUTED {self.key} Result = {val}') 
         return val
 
 main._loader_items_.extend([
@@ -77,7 +77,7 @@ def basic_exec_test(graph,subgraph):
         nodea = new_exec_node(default_sockets=True)
         nodeb = new_exec_node(default_sockets=True)
 
-        print({k:v for k,v in nodea.in_sockets.items()})
+        # print({k:v for k,v in nodea.in_sockets.items()})
         nodea.in_sockets[0].value = 'a'
         nodea.in_sockets[1].value = 'b'
 

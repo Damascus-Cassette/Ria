@@ -6,6 +6,7 @@ from ..statics              import _unset
 from ..models.struct_module import module
 from .Execution_Types       import socket_shapes as st
 from .Execution_Types       import unlocked_func_container
+from .utils.print_debug     import debug_print_wrapper as debug_wraper, debug_print as dprint
 
 from typing           import Any, Self, get_type_hints, ForwardRef, TypeAlias, Callable
 from types            import UnionType, FunctionType, MethodType
@@ -89,7 +90,6 @@ class main(module):
                 if isinstance(val,(FunctionType, MethodType)):
                     val = val()
                 if val is not _unset:
-                    print('Get_Out_Value:', val)
                     return val
             raise Exception(f'ERROR {self} value could not resolve via Out_Value_Resolution_Chain!!')
  
@@ -99,7 +99,6 @@ class main(module):
                 if isinstance(val,(FunctionType, MethodType)):
                     val = val()
                 if val is not _unset:
-                    print('Get_In_Value:', val)
                     return val
             raise Exception(f'ERROR  {self} value could not resolve via In_Value_Resolution_Chain!!')
 
@@ -123,7 +122,6 @@ class main(module):
         def in_graph_value_getter(self):
             ''' Graph value getter on input, uses Shape_Value.get for resolving shape of unput. May return None'''
             val = self.Value_Shape.get(self)
-            print(self,'Graph Getter Value:', val)
             return val 
         
         # @property
@@ -148,9 +146,15 @@ class main(module):
 
             return val
 
+        # def __deepcopy__(self,memo):
+        #     # TODO: toggle deepcopy of data stored on socket.
+        #     ...
 
     class node_mixin(_mixin.node):
         Call_Func_Name  : str = 'execute'
+        # def __deepcopy__(self,memo):
+        #     # TODO: toggle deepcopy of data stored on node.
+        #     ...
 
         #TODO: Attributes for caching
         # Deterministic   : bool

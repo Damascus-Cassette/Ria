@@ -94,3 +94,13 @@ class context():
             return f'(Context["{key}"])'
         else:
             a.__repr__().split('@')[-1].strip('<>')
+
+    def __deepcopy__(self,memo:dict):
+        ''' Ensure that deepcopy doesn't investigate parent chain. 
+        Structurally all parent references *should* go through context '''
+        if id(self.parent) not in memo.keys():
+            raise Exception('Context cannot be deepcopied directly!')
+        new_parent = memo[id(self.parent)]
+        result = context(new_parent)
+        memo[id(self)] = result
+        return result
