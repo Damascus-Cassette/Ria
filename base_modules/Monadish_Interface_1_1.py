@@ -366,7 +366,7 @@ main._loader_mixins_ = [
 def new_test(graph,subgraph):
     with subgraph.context.Cached():
         # with debug_level(4):
-        with debug_targets({'Monadish_Interface_1_1': 4 }):
+        with debug_targets({'Monadish_Interface_1_1': 4 }): #TODO: Move to test structure instead of indv test
             left  = node_left_simple_1 (default_sockets=True)
             right = node_right_simple_1(default_sockets=True)
             # assert left.out_sockets.groups[0].__class__ is not left.out_sockets.groups[1].__class__
