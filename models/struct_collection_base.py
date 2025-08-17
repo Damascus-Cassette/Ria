@@ -9,7 +9,7 @@ from .struct_context     import context
     #Want to keep each struct module as seperate as possible.
 
 from collections import OrderedDict
-from typing      import Self,Callable,Type
+from typing      import Self,Callable,Type,Any
 from types       import FunctionType
 
 
@@ -269,3 +269,23 @@ class typed_subcollection_base[T](typed_collection_base):
         
         for i,k,v in other.iter():
             self.__setmerge__(k,v)
+
+class context_prepped_subcollection_base(subcollection_base):
+    parent : Any
+    _data  : property
+
+    def __init__(self,parent,filter):
+        self.parent = parent
+        if filter:
+            self._filter = filter
+    
+
+class context_prepped_typed_subcollection_base(typed_subcollection_base):
+    parent : Any
+    _data  : property
+
+    def __init__(self, parent:Any, filter:FunctionType=None):
+        self.parent   = parent
+        if filter:
+            self._filter = filter
+    

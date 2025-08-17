@@ -1,9 +1,8 @@
-from ..base_node import pointer_socket
 from pytest import fixture
 
+from ..base_node import socket,node
 @fixture
 def node_struct()->tuple:
-    from ..base_node import pointer_socket,socket,socket_group,node
 
     class _socket(socket):
         Value_Type    = str
@@ -35,7 +34,7 @@ def node_def(node_struct):
     return _node
 
 def test_context_socketpointer():
-    assert(pointer_socket().context.root_graph is None)
+    assert(node().context.root_graph is None)
 
 from ..base_node import socket
 def test_context_socket_socketPointer():

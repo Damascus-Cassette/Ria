@@ -5,7 +5,14 @@ Graph Execution logic in a module constructed onto this set
 
 from .struct_file_io         import BaseModel, defered_archtype,flat_bin,flat_col,flat_ref 
 from .struct_context         import context
-from .struct_collection_base import item_base,collection_base,typed_collection_base, subcollection_base, typed_subcollection_base
+from .struct_collection_base import (item_base,
+                                     collection_base,
+                                     typed_collection_base,
+                                    #  subcollection_base,
+                                    #  typed_subcollection_base,
+                                     context_prepped_subcollection_base,
+                                     context_prepped_typed_subcollection_base,
+                                     )
 from .struct_construction    import ConstrBase, Bases, Constructed
 from .struct_hook_base       import Hookable
 
@@ -93,6 +100,12 @@ class link_collection[SocketType = link](BaseModel,collection_base,ConstrBase,Ho
     
     Base = link
 
+class link_subcollection(context_prepped_subcollection_base):
+    #TODO: How does this work with FildIO?
+    @property
+    def _data(self):
+        return self.parent.context.subgraph.links
+    
 
 class socket(BaseModel,item_base,ConstrBase,Hookable):
     ''' 
@@ -102,7 +115,7 @@ class socket(BaseModel,item_base,ConstrBase,Hookable):
     '''
     _io_bin_name_       = 'socket'
     _io_whitelist_      = ['id', 'label', 'group_id', 'value', 'disc_cached', 'disc_location', 'links']
-    # _io_blacklist_      = ['in_links']
+    _io_blacklist_      = ['incoming_links' ,'outgoing_links' ,'links']
 
     _constr_bases_key_  = 'socket'
     _constr_call_post_  = ['__io_setup__']
@@ -125,7 +138,7 @@ class socket(BaseModel,item_base,ConstrBase,Hookable):
     group_set_id : str
         #IDs for socket_group container & subset
 
-    links  : subcollection_base[link]
+    links  : context_prepped_subcollection_base #[link]
     # out_links  : subcollection_base[link]
     # in_links   : subcollection_base[link]
 
@@ -140,11 +153,11 @@ class socket(BaseModel,item_base,ConstrBase,Hookable):
     def __init__(self):
         self.context = self.context(self)
 
-        self.incoming_links  = subcollection_base(self.context.subgraph.links, lambda i,k,link :  link.in_socket  == self)
+        self.incoming_links  = link_subcollection(self, lambda i,k,link :  link.in_socket  == self)
         #This socket stores/'owns' these links in the file format for portability
-        self.outgoing_links  = subcollection_base(self.context.subgraph.links, lambda i,k,link :  link.out_socket == self)
+        self.outgoing_links  = link_subcollection(self, lambda i,k,link :  link.out_socket == self)
         
-        self.links = subcollection_base(self.context.subgraph.links, lambda i,k,link : link.out_socket == self or link.in_socket == self)
+        self.links = link_subcollection(self, lambda i,k,link : link.out_socket == self or link.in_socket == self)
         #Refers to all links that mention self
 
     @property
@@ -270,8 +283,8 @@ class socket_group[SocketType=socket](item_base,ConstrBase,Hookable):
         return self.sockets[key]
 
     def __setitem__(self,key,socket:SocketType):
-        # socket.group_id = self.Group_ID   #BUG: Was causing sockets to see themselves in the wrong group. 
 
+        # socket.group_id = self.Group_ID   #BUG: Was causing sockets to see themselves in the wrong group. 
         socket.group_id = self.key
 
         if socket not in self.parent_col.values():
@@ -403,8 +416,8 @@ class node_collection(BaseModel, typed_collection_base, ConstrBase,Hookable):
     _io_dict_like_ = True
     _io_blacklist_ = ['data']
 
-    _constr_bases_key_ = 'node_collection'
-    _constr_call_post_ = ['__io_setup__']
+    _constr_bases_key_  = 'node_collection'
+    _constr_call_post_  = ['__io_setup__']
     _constr_join_dicts_ = ['_hooks']
     _constr_join_lists_ = ['_io_blacklist_','_io_whitelist_','_constr_call_post_']
 
