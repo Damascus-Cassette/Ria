@@ -17,6 +17,10 @@ class item_base():
     key   : str
     label : str
 
+    @property
+    def _context_item_keyrep_(self):
+        return self.key
+
 class collection_base[T=item_base]():
     ''' OrdereDict wrapper that allows typing via bases prop or func '''
 

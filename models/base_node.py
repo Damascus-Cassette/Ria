@@ -5,16 +5,14 @@ Graph Execution logic in a module constructed onto this set
 
 from .struct_file_io         import BaseModel, defered_archtype,flat_bin,flat_col,flat_ref 
 from .struct_context         import context
+from .struct_construction    import ConstrBase, Bases, Constructed
+from .struct_hook_base       import Hookable
 from .struct_collection_base import (item_base,
                                      collection_base,
                                      typed_collection_base,
-                                    #  subcollection_base,
-                                    #  typed_subcollection_base,
                                      context_prepped_subcollection_base,
                                      context_prepped_typed_subcollection_base,
                                      )
-from .struct_construction    import ConstrBase, Bases, Constructed
-from .struct_hook_base       import Hookable
 
 from types                   import FunctionType
 from typing                  import Any,Self,Callable
@@ -142,7 +140,7 @@ class socket(BaseModel,item_base,ConstrBase,Hookable):
     # out_links  : subcollection_base[link]
     # in_links   : subcollection_base[link]
 
-    context = context.construct(include=['meta_graph','root_graph','subgraph','node','socket_coll','socket_group'],as_name='socket')
+    context = context.construct(include=['meta_graph','root_graph','subgraph','node','socket_coll','socket_group_coll','socket_group'],as_name='socket')
     def _context_walk_(self):
         with self.context.register():        
             for sl in self.links:
@@ -217,7 +215,7 @@ class socket_group[SocketType=socket](item_base,ConstrBase,Hookable):
         # return type(f'S_GROUP_{_temp_sg_constr_index}_{group_id}',(cls,),kwargs)
         
 
-    context = context.construct(include=['meta_graph','root_graph','subgraph','node','socket_coll',],as_name='socket_group')
+    context = context.construct(include=['meta_graph','root_graph','subgraph','node','socket_coll','socket_group_coll'],as_name='socket_group')
     def _context_walk_(self):
         with self.context.register():        
             for s in self.sockets.values():
@@ -293,9 +291,8 @@ class socket_group[SocketType=socket](item_base,ConstrBase,Hookable):
 class socket_group_collection(collection_base,ConstrBase,Hookable):
     ''' Shoudl be non-writable. Reconstructed on load. Accessor like an ordered dict '''
     Base = socket_group
+    context = context.construct(include=['meta_graph','root_graph','subgraph','node','socket_coll'],as_name='socket_group_coll')
 
-
-    #BUG HERE. Not ensuring unique keys.
 
 class socket_collection(BaseModel,typed_collection_base,ConstrBase,Hookable):
     ''' Accessor of sockets and socket_groups '''

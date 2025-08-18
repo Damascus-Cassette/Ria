@@ -1,6 +1,7 @@
 from contextvars import ContextVar
 from contextlib  import contextmanager
 from typing      import Any
+from types       import FunctionType
 
 from ..statics   import _unset
 
@@ -95,12 +96,48 @@ class context():
         else:
             a.__repr__().split('@')[-1].strip('<>')
 
+    def Repr(self,chain=None):
+        if chain is None: chain = []
+        assert self not in chain
+        chain.append(self)
+
+        if (func:=getattr(self._parent,'_context_repr_',None)) is not None:
+            return func(chain=chain)
+        
+        elif (pparent := getattr(self,self._Include[-1], None)) is not None:
+            reversed_attr = {v:k for k,v in vars(pparent).items() if v is self._parent}
+                #TODO: FUGLY FIX
+            if self._parent in reversed_attr.keys(): 
+                return pparent.context.Repr(chain=chain) + '.' + reversed_attr[self._parent]
+            elif (val:=getattr(self._parent,'_context_item_keyrep_',None)) is not None:
+                return pparent.context.Repr(chain=chain) + '.' + val
+                
+        return getattr(self._parent,'_context_attr_fallback_',str(self._parent))
+    
+    def Formatted_Repr(self):
+        return f'<Obj {self._parent.__class__} @ {self.Repr()} >'
+    
+
     def __deepcopy__(self,memo:dict):
         ''' Ensure that deepcopy doesn't investigate parent chain. 
         Structurally all parent references *should* go through context '''
-        if id(self.parent) not in memo.keys():
+        if id(self._parent) not in memo.keys():
             raise Exception('Context cannot be deepcopied directly!')
-        new_parent = memo[id(self.parent)]
+        new_parent = memo[id(self._parent)]
         result = context(new_parent)
         memo[id(self)] = result
         return result
+    
+# class context_container_mixin():
+#     context        : context
+#     _context_walk_ : FunctionType
+
+#     def __init_subclass__(cls):
+#         assert hasattr(cls,'_context_walk_')
+
+#     def __repr__(self,kick=False):
+#         if (c:=getattr(self,'context',None)) is not None:
+#             return c.Formatted_Repr()
+#         else:
+#             return super().__repr__
+# Deemed to not be worth the hasle of mixing in, 

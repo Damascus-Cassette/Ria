@@ -49,6 +49,22 @@ def debug_print(*args, threshold=-1, **kwargs):
     if threshold >= print_debug_level:
         _debug_print(*args,**kwargs)
 
+def _rep(item):
+    if (c:=getattr(item,'context',None)) is not None:
+        return c.Formatted_Repr
+    return str(item)
+
+def _arg_reps(self,args):
+    res = []
+    for x in args:
+        res.append(_rep(x))
+    return res
+def _kwarg_reps(self,kwargs):
+    res = {}
+    for k,v in kwargs:
+        res[k] = _rep(v)
+    return res
+
 import inspect
 def debug_print_wrapper(threshold    = 1    ,
                         /,*,
@@ -71,8 +87,8 @@ def debug_print_wrapper(threshold    = 1    ,
                 if print_pre and (threshold <= dbl):
                     _debug_print(f'RUNNING FUNC {func.__name__} || GROUP: {group_id}')
                     if print_args:  
-                        _debug_print(f'{t_modes.DIM[0]}|-> ARGS:   {args}{t_modes.DIM[1]}') 
-                        _debug_print(f'{t_modes.DIM[0]}|-> KWARGS: {kwargs}{t_modes.DIM[1]}') 
+                        _debug_print(f'{t_modes.DIM[0]}|-> ARGS:   {_arg_reps(args)}{t_modes.DIM[1]}') 
+                        _debug_print(f'{t_modes.DIM[0]}|-> KWARGS: {_kwarg_reps(kwargs)}{t_modes.DIM[1]}') 
                 
             
                 with nested_level_add1():
@@ -82,7 +98,7 @@ def debug_print_wrapper(threshold    = 1    ,
                 if print_post and (threshold <= dbl):
                     _debug_print(f'{t_modes.DIM[0]}|-> FIN FUNC {func.__name__}{t_modes.DIM[1]}')
                     if print_result:  
-                        _debug_print(f'{t_modes.DIM[0]}|-> RESULT: {val}{t_modes.DIM[1]}') 
+                        _debug_print(f'{t_modes.DIM[0]}|-> RESULT: {_rep(val)}{t_modes.DIM[1]}') 
 
                 return val
             
