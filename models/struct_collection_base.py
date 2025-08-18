@@ -11,7 +11,7 @@ from .struct_context     import context
 from collections import OrderedDict
 from typing      import Self,Callable,Type,Any
 from types       import FunctionType
-
+from copy import deepcopy,copy
 
 class item_base():
     key   : str
@@ -51,7 +51,9 @@ class collection_base[T=item_base]():
             return key
         elif not self._coll_generate_unique_keys_:
             raise Exception('KEY NOT UNIQUE WHILE CLASS DEMANDS UNIQUE')
-        
+        return self.make_unique_key(key)
+    
+    def make_unique_key(self,key)->str:
         key_base = key
         i = 0
         while key in self._data.keys():
@@ -159,6 +161,56 @@ class collection_base[T=item_base]():
         for i,k,v in other:
             self.__setmerge__(k,v)
 
+    def item_verify_local(self,item)->bool:
+        return item in self.values()
+    
+    def free(self,item:T, safe=True)->T:                            
+        ''' Free Item, ie 'pop' from this collection. 
+        safe: that an error will be thrown if not in collection's local data  '''
+        if self.item_verify_local(item): self.data.popitem(item)
+        elif safe: raise Exception('Non-Local Object!')
+        return item
+    def free_multi(self,items:slice|tuple[T], safe=True)->tuple[T]:        
+        ''' Free Item, ie 'pop' all in tuple this collection multi. 
+        safe: an error will be thrown if not in collection's data '''
+        if isinstance(items,slice): items = self[items]
+        res = []
+        for x in items:
+            res.append(self.free(x,safe=safe))
+        return tuple(res)
+
+    def copy(self,item, safe=True, keep=True)->T:                              
+        ''' deepcopy item and return the copy. 
+        keep: 'append' the copy to this collection. (Ensures key name is unique if kept)
+        safe: an error will be thrown if not in collection's data '''
+        if safe: assert self.item_verify_local(item)
+        new = deepcopy(item)
+        if keep: self[self.make_unique_key(new.key)] = new
+        return new
+    def copy_multi(self,items:slice|tuple[T],safe=True,keep=True)->tuple[T]:        
+        ''' deepcopy items and return the copy. 
+        keep: 'extend' the copies to this collection (Ensures key name is unique if kept)
+        safe: an error will be thrown if not in collection's data '''
+        if isinstance(items,slice): items = self[items]
+        res = []
+        for item in items:
+            res.append(self.copy(item,safe=safe,keep=keep))
+        return tuple(res)
+
+    def copy_in(self, col2:Self, item, local_copy=False):
+        ''' Copy item from secondary collection. Must be compatable with self.base(s)
+        local_copy: use this collection's copy method '''
+        assert self.matches_base(item)
+        if local_copy: return self.copy(item,safe=False,keep=True)
+        else:          return col2.copy(item,safe=True ,keep=False)
+    def copy_in_multi(self,col2,items:slice|tuple[T], local_copy=False):
+        ''' Copy items from secondary collection, 
+        local_copy: use this collection's copy method '''
+        if isinstance(items,slice): items = self[items]
+        for item in items:
+            self.copy_in(col2,item,local_copy=local_copy)
+
+
 class subcollection_base[T](collection_base):
     # @property
     # def _io_write_(self): return self._data.__class__ != collection_base
@@ -211,7 +263,6 @@ class typed_collection_base[T](collection_base):
         else:
             return item.__class__ in Bases.values()
         
-    
     def new(self, type:str|Type, key, label=None, *args,**kwargs):
         Bases = getattr(self,'Bases',{})
         assert self.matches_base(type)
@@ -269,6 +320,7 @@ class typed_subcollection_base[T](typed_collection_base):
         
         for i,k,v in other.iter():
             self.__setmerge__(k,v)
+
 
 class context_prepped_subcollection_base(subcollection_base):
     parent : Any
