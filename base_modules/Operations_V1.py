@@ -40,9 +40,17 @@ class main():
                 subgraphs = set([x.context.subgraph for x in nodes if x.context.subgraph is not None])
                 for sg in subgraphs:
                     links.extend([l for l in sg.links if ((l.from_node in nodes) and (l.to_node in nodes)) ])
-                self.links.copy_in(links, local_copy=True, memo=memo)
+                new_links = self.links.copy_in(links, local_copy=True, memo=memo)
+                with self.context.Cached():
+                    for x in new_links:
+                        x._context_walk_()
+            
+            with self.context.Cached():
+                for x in new_nodes:
+                    x._context_walk_()
 
             return new_nodes
+        
     # class node_mixin(_mixin.node):
     #     ...
     # class socket_mixin(_mixin.socket):
