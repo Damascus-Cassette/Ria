@@ -38,7 +38,7 @@ class unlocked_func_container[RT=Any,FUNC=FunctionType]():
         assert not cls.Disc_Cachable #NEVER on unlocked_func_container
         assert getattr(cls, 'UID'     , None) is not None
         assert getattr(cls, 'Version' , None) is not None
-        if not getattr(cls,'Deterministic'):
+        if not getattr(cls, 'Deterministic'):
             assert getattr(cls, 'Result_Disc_Cachable', None) #Must be disc-cachable if non-determ
 
     def __init__[R=Any,F=FunctionType](self, src_node, func:F, return_type:R=Any, f_id=''): #->unlocked_func_container[F,R]

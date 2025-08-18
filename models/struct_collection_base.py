@@ -3,15 +3,15 @@ Subtypes should be able to Merge left when Mergable_Base = True
 '''
 
 
-from .struct_merge_tools import merge_wrapper
-from .struct_context     import context
-# from .struct_file_io import BaseModel
-    #Want to keep each struct module as seperate as possible.
+# from .struct_merge_tools import merge_wrapper
+from .struct_context import context,_context, context_flags
 
-from collections import OrderedDict
-from typing      import Self,Callable,Type,Any
-from types       import FunctionType
-from copy import deepcopy,copy
+from collections         import OrderedDict
+from typing              import Self,Type,Any
+from types               import FunctionType
+from copy                import deepcopy,copy
+
+
 
 class item_base():
     key   : str
@@ -20,6 +20,11 @@ class item_base():
     @property
     def _context_item_keyrep_(self):
         return f"['{self.key}']"
+    def _collection_item_auto_add_(self,add_to:str,flag:str|bool):
+        ''' Auto append to context[add_to] if context_flags[flag] '''
+        if (p_col:=_context[add_to].get()):
+            if self not in p_col.values() and ((flag is True) or context_flags[flag].get()):
+                p_col[getattr(self,'Label',getattr(self,'UID',self.__class__.__name__))] = self
 
 class collection_base[T=item_base]():
     ''' OrdereDict wrapper that allows typing via bases prop or func '''
@@ -47,7 +52,7 @@ class collection_base[T=item_base]():
                     func()
     def _context_new_item_(self,item):
         if func:=getattr(item,'_context_walk_',None):
-            with self.context.In_Last_Context():
+            with self.context.Cached():
                 func()
 
     def ensure_unique_key(self,key):
@@ -157,7 +162,7 @@ class collection_base[T=item_base]():
     def item_verify_compatable(self,item):
         return isinstance(item,self.Base)
 
-    @merge_wrapper
+    # @merge_wrapper
     def __or__(self, other:Self|OrderedDict):
         ''' Merge via set_item, merge left. Maintain filter & Order'''
         assert other.__class__ is self.__class__
@@ -246,6 +251,7 @@ class collection_base[T=item_base]():
         if return_memo: return res,memo
         return res 
 
+
 class subcollection_base[T](collection_base):
     # @property
     # def _io_write_(self): return self._data.__class__ != collection_base
@@ -274,7 +280,7 @@ class subcollection_base[T](collection_base):
             assert self._filter(inst)
         return inst
 
-    @merge_wrapper
+    # @merge_wrapper
     def __or__(self,other:Self):
         ''' Union, merge filters & cover gaps in parent's collection, merging filters may unwanted additional coverage '''
         ''' Merge left '''
@@ -307,7 +313,7 @@ class typed_collection_base[T](collection_base):
         if isinstance(type,str): 
             type : Type = Bases[type]
 
-        with self.context.In_Last_Context():
+        with self.context.Cached():
             inst = type(*args,**kwargs)
         
         inst.label = label

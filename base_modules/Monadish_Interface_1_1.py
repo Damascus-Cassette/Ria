@@ -8,16 +8,10 @@ from .Execution_Types       import _mixin, item
 from typing                 import Any, Self, TypeAlias,AnyStr,Type
 from types                  import FunctionType
 from inspect                import isclass
+from contextlib             import contextmanager
 
 from .utils.print_debug import (debug_print_wrapper as dp_wrap, debug_level,debug_targets, _debug_print as dprint)
 
-class utils:
-    def iter_unseen(*iterables):
-        seen = []
-        for iterable in iterables:
-            for x in iterable:
-                if not (x in seen):
-                    yield x
 
 
 class main(module):
@@ -27,20 +21,110 @@ class main(module):
 
 
 
-############ CLASSES ############
+############ MIXINS ############ 
+#region 
+
+class graph_mixin(_mixin.graph):
+    
+
+    @contextmanager
+    def Monadish_Env(self, auto_add_nodes = True, auto_add_links=True, auto_delete = True, auto_merge_target = None):
+        subgraph = self.subgraphs.new(key='Monadish_Env')
+        with subgraph.As_Env(auto_add_nodes=auto_add_nodes,auto_add_links=auto_add_links):
+            yield subgraph
+        if auto_merge_target:
+            auto_merge_target.copy_in_nodes(*subgraph.nodes, keep_links = True, filter = subgraph._Monadish_Merge_Filter)
+        if auto_delete:
+            self.subgraphs.free(subgraph)
+
+class subgraph_mixin(_mixin.subgraph):
+    def _Monadish_Merge_Filter(self, othergraph, node, link):
+        return True #TODO: check context to see if item should be merged into another.
 
 
-# class socket_group_mixin(_mixin.socket_group): 
-    # Currently socket_group_shape is better as an external inspection instead of internal, since
-    # Classes cannot determine what they are tied to (only instances can via context)
-    # ...
+class socket_collection_mixin(_mixin.socket_collection):
+    def _monadish_unused_socket_groups(self,claimed_groups:list[socket_group]=None):
+        ''' Yield unused potential from structural definition & add number of times cls apears in claimed arg'''
 
-# main._loader_mixins_ = [socket_group_mixin]
+        if claimed_groups is None: claimed_groups = []
 
+        for potential_group in self.Groups:
+            max_inst = potential_group.SocketGroup_Quantity_Max
+            inst_current_or_claimed =  len([x for x in self.groups if (isinstance(x, potential_group))])
+            inst_current_or_claimed =+ len([x for x in self.groups if (x in claimed_groups)])
+            if max_inst < inst_current_or_claimed:
+                yield potential_group
+
+
+class node_mixin(_mixin.node):
+    def _monadish_prep_intake(self,left_group)->bool|FunctionType:
+        ''' Check if left_group can connect to self, left could be tuple[socket],tuple[sg],tuple[node],sg,node, '''
+        #TODO Make and Check pool first for patches
+
+    @dp_wrap(print_result=True)
+    def _monadish_prep_intake_node(self, left_node)->bool|FunctionType:
+        ''' Intake a series of socket groups to match to this node '''
+
+        left_used_indices    = []
+        claimed_potential_s  = []
+        resulting_functions  = []
+        claimed_groups       = [] 
+            #Temporary claimed groups, if group is filled or in claimed it cannot be connected to
+            #Groups can only be added to this is any(x.limit-1 for x in self.sockets)?
+
+        # left_groups = []
+
+        left_info  = list((li,l,socket_group_shape(l,src_node=left_node)) for (li, l) in enumerate(left_node.out_sockets.groups)) 
+        right_info = list((ri,r,socket_group_shape(r,src_node=self     )) for (ri, r) in enumerate(self.in_sockets.groups))
+
+        for li, left_group, left_shape in left_info:
+            if li in left_used_indices: continue
+                    
+            for ri, right_group, right_shape in right_info:
+                if right_shape.in_is_filled: continue
+                res = right_shape.prep_intake(left_shape,claimed_potential_s)
+                if res is False: continue
+                left_used_indices.append(li)
+                resulting_functions.append(res)
+                break
+
+            if li in left_used_indices: continue
+
+            for potential_sg in self.in_sockets._monadish_unused_socket_groups(claimed_groups):
+                p_r_shape = socket_group_shape(potential_sg)
+                res = p_r_shape.prep_intake(left_shape)
+                if res is False: continue
+                left_used_indices.append(li)
+                resulting_functions.append(res)
+                claimed_groups.append(potential_sg)
+                break
+        
+        if len(left_used_indices) != len(left_info):
+            return False
+        
+        def monadish_connect(debug_return_fullfillment:bool=False):
+            res  = []
+            for fullfillment_function in resulting_functions: 
+                res.append(fullfillment_function(debug_return_fullfillment=debug_return_fullfillment))
+            return res
+        
+        return monadish_connect
+
+
+main._loader_mixins_ = [
+    graph_mixin,
+    subgraph_mixin,
+    socket_collection_mixin,
+    node_mixin
+    ]
+
+#endregion
 
 
 
 ############ TEST NODES ############
+#region
+
 
 class a_socket(item.socket):
     Module     = main 
@@ -120,15 +204,12 @@ main._loader_items_ = [a_socket            ,
                        node_left_simple_1  ,
                        node_right_simple_1 ,
                        ]
+#endregion
 
 
 
-############ FUNCTIONS ############
-
-# class _pass ():...
-# class _value():
-#     def __init__(self,value):
-#         ...
+############ UTILITY CLASSES ############
+#region
 
 class shape_socket():
     ''' Temporary 'Shape' of an actual or potential socket. '''
@@ -277,80 +358,12 @@ class socket_group_shape():
 
         return generated_intake_func
 
-class socket_collection_mixin(_mixin.socket_collection):
-    def _monadish_unused_socket_groups(self,claimed_groups:list[socket_group]=None):
-        ''' Yield unused potential from structural definition & add number of times cls apears in claimed arg'''
-
-        if claimed_groups is None: claimed_groups = []
-
-        for potential_group in self.Groups:
-            max_inst = potential_group.SocketGroup_Quantity_Max
-            inst_current_or_claimed =  len([x for x in self.groups if (isinstance(x, potential_group))])
-            inst_current_or_claimed =+ len([x for x in self.groups if (x in claimed_groups)])
-            if max_inst < inst_current_or_claimed:
-                yield potential_group
-
-class node_mixin(_mixin.node):
-    def _monadish_prep_intake(self,left_group)->bool|FunctionType:
-        ''' Check if left_group can connect to self, left could be tuple[socket],tuple[sg],tuple[node],sg,node, '''
-        #TODO Make and Check pool first for patches
-
-    @dp_wrap(print_result=True)
-    def _monadish_prep_intake_node(self, left_node)->bool|FunctionType:
-        ''' Intake a series of socket groups to match to this node '''
-
-        left_used_indices    = []
-        claimed_potential_s  = []
-        resulting_functions  = []
-        claimed_groups       = [] 
-            #Temporary claimed groups, if group is filled or in claimed it cannot be connected to
-            #Groups can only be added to this is any(x.limit-1 for x in self.sockets)?
-
-        # left_groups = []
-
-        left_info  = list((li,l,socket_group_shape(l,src_node=left_node)) for (li, l) in enumerate(left_node.out_sockets.groups)) 
-        right_info = list((ri,r,socket_group_shape(r,src_node=self     )) for (ri, r) in enumerate(self.in_sockets.groups))
-
-        for li, left_group, left_shape in left_info:
-            if li in left_used_indices: continue
-                    
-            for ri, right_group, right_shape in right_info:
-                if right_shape.in_is_filled: continue
-                res = right_shape.prep_intake(left_shape,claimed_potential_s)
-                if res is False: continue
-                left_used_indices.append(li)
-                resulting_functions.append(res)
-                break
-
-            if li in left_used_indices: continue
-
-            for potential_sg in self.in_sockets._monadish_unused_socket_groups(claimed_groups):
-                p_r_shape = socket_group_shape(potential_sg)
-                res = p_r_shape.prep_intake(left_shape)
-                if res is False: continue
-                left_used_indices.append(li)
-                resulting_functions.append(res)
-                claimed_groups.append(potential_sg)
-                break
-        
-        if len(left_used_indices) != len(left_info):
-            return False
-        
-        def monadish_connect(debug_return_fullfillment:bool=False):
-            res  = []
-            for fullfillment_function in resulting_functions: 
-                res.append(fullfillment_function(debug_return_fullfillment=debug_return_fullfillment))
-            return res
-        
-        return monadish_connect
+#endregion
 
 
-main._loader_mixins_ = [
-    socket_collection_mixin,
-    node_mixin
-    ]
 
 ############ TESTS ############
+#region
 
 # mapping_tests = [
 #     # (left,right,expected),
@@ -381,13 +394,25 @@ def new_test(graph,subgraph):
 
             raise Exception('')
 
+def env_merging_test(graph,subgraph):
+    with graph.Monadish_Env(auto_merge_target = subgraph): #as _sg is handled with auto-add in context flags
+        node_a1 = node_a1_a1(default_sockets=True)
+        node_a2 = node_a1_a1(default_sockets=True)
+        node_a1 >> node_a2
+    # subgraph.copy_walk(node_a2, dir=('in','side'), filter = lambda s,n,l: subgraph.find_context[n]) #done through auto_merge_target
+    # exec graph would do best if I override the copy_walk or add a merge_in 
+
+#    assert subgraph
+
 main._module_tests_.append(module_test('TestA',
                 module      = main,
                 module_iten = {main.UID : main.Version,
                                'Core_Execution':'2.0'}, 
                 funcs       = [
+                                env_merging_test,
                                 new_test,
                             #    test_simple_array       ,
                             #    test_complex_left_right ,
                               ],
                 ))
+#endregion

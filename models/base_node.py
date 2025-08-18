@@ -16,15 +16,18 @@ from .struct_collection_base import (item_base,
 
 from types                   import FunctionType
 from typing                  import Any,Self,Callable
-from collections             import defaultdict
+from collections             import defaultdict,OrderedDict
 from inspect                 import isclass
 
-class node_archtype(defered_archtype):...
+from contextlib              import contextmanager
+
+
+class node_archtype(defered_archtype):... 
 class socket_archtype(defered_archtype):...
 # class subgraph_archtype(defered_archtype):...
 # class graph_archtype(defered_archtype):...
+    #Archtypes are used by file_io to have typed items
 
-from collections import OrderedDict
 
 class link(item_base,BaseModel,ConstrBase,Hookable):
     ''' Pointer to a socket via node.{dir}_socket.[socket_id] '''
@@ -74,8 +77,9 @@ class link(item_base,BaseModel,ConstrBase,Hookable):
         self.in_socket_dir  = socket.context.socket_coll.Direction
         self.in_socket_id   = socket.id
 
-    context = context.construct(include=['meta_graph','root_graph','subgraph','node','socket_coll','socket_group','socket'])
-    def _context_walk_(self):...
+    context = context.construct(include=['meta_graph','root_graph','subgraph','link_coll','node','socket_coll','socket_group','socket'])
+    def _context_walk_(self):
+        self._collection_item_auto_add_('link_coll','auto_add_sockets')
 
 class link_collection[SocketType = link](BaseModel,collection_base,ConstrBase,Hookable):
     ''' subgraph.links, filtered in the socket's view via a constructed function 
@@ -90,7 +94,7 @@ class link_collection[SocketType = link](BaseModel,collection_base,ConstrBase,Ho
     _constr_join_dicts_ = ['_hooks']
     _constr_join_lists_ = ['_io_blacklist_','_io_whitelist_','_constr_call_post_']
 
-    context = context.construct(include=['meta_graph','root_graph','subgraph'], as_name='link_col')
+    context = context.construct(include=['meta_graph','root_graph','subgraph'], as_name='link_coll')
     def _context_walk_(self):
         with self.context.register():
             for sg in self.groups.values():
@@ -112,8 +116,8 @@ class socket(item_base,BaseModel,ConstrBase,Hookable):
     Responcible for writing & retrieving specific data types 
     '''
     _io_bin_name_       = 'socket'
-    _io_whitelist_      = ['id', 'label', 'group_id', 'value', 'disc_cached', 'disc_location', 'links']
-    _io_blacklist_      = ['incoming_links' ,'outgoing_links' ,'links']
+    _io_whitelist_      = ['incoming_links','id', 'label', 'group_id', 'value', 'disc_cached', 'disc_location', 'links']
+    _io_blacklist_      = ['outgoing_links' ,'links']
 
     _constr_bases_key_  = 'socket'
     _constr_call_post_  = ['__io_setup__']
@@ -150,20 +154,16 @@ class socket(item_base,BaseModel,ConstrBase,Hookable):
 
     def __init__(self):
         self.context = self.context(self)
-
+        self.links           = link_subcollection(self, lambda i,k,link : link.out_socket == self or link.in_socket == self)
+        # self.outgoing_links  = link_subcollection(self, lambda i,k,link :  link.out_socket == self)
         self.incoming_links  = link_subcollection(self, lambda i,k,link :  link.in_socket  == self)
-        #This socket stores/'owns' these links in the file format for portability
-        self.outgoing_links  = link_subcollection(self, lambda i,k,link :  link.out_socket == self)
+            #This socket stores/'owns' abvove links in the file format for portability
         
-        self.links = link_subcollection(self, lambda i,k,link : link.out_socket == self or link.in_socket == self)
-        #Refers to all links that mention self
+
 
     @property
     def dir(self):
         return self.context.socket_coll.Direction
-
-# global _temp_sg_constr_index
-# _temp_sg_constr_index = 0
 
 class socket_group[SocketType=socket](item_base,ConstrBase,Hookable):
     ''' 
@@ -293,7 +293,6 @@ class socket_group_collection(collection_base,ConstrBase,Hookable):
     Base = socket_group
     context = context.construct(include=['meta_graph','root_graph','subgraph','node','socket_coll'],as_name='socket_group_coll')
 
-
 class socket_collection(BaseModel,typed_collection_base,ConstrBase,Hookable):
     ''' Accessor of sockets and socket_groups '''
     _io_bin_name_       = 'socket'
@@ -387,6 +386,7 @@ class node(item_base,BaseModel,ConstrBase,Hookable):
 
     context = context.construct(include=['meta_graph','root_graph','subgraph','node_coll'],as_name='node')
     def _context_walk_(self):
+        self._collection_item_auto_add_('node_coll','auto_add_nodes')
         with self.context.register():
             self.in_sockets._context_walk_()
             self.out_sockets._context_walk_()
@@ -402,6 +402,7 @@ class node(item_base,BaseModel,ConstrBase,Hookable):
         self.side_sockets = self.side_sockets()
         if default_sockets:
             self.default_sockets()
+        self._context_walk_()
 
     def default_sockets(self):
         self.in_sockets.default_sockets()
@@ -452,6 +453,7 @@ class subgraph(item_base, BaseModel, ConstrBase,Hookable):
 
     context = context.construct(include=['meta_graph','root_graph','subgraph_col'],as_name = 'subgraph')
     def _context_walk_(self):
+        self._collection_item_auto_add_('subgraph_col','auto_add_subgraphs')
         with self.context.register():
             self.nodes._context_walk_()
 
@@ -461,6 +463,12 @@ class subgraph(item_base, BaseModel, ConstrBase,Hookable):
             self.links   = link_collection()
             self.nodes   = node_collection()
 
+    @contextmanager
+    def As_Env(self,auto_add_nodes=True,auto_add_links=True):
+        with self.context.As_Env(auto_add_nodes=auto_add_nodes,
+                                 auto_add_links=auto_add_links):
+            yield self
+        
 
 class subgraph_collection[SubgraphType=subgraph](BaseModel, collection_base, ConstrBase,Hookable):
     _io_bin_name_ = 'subgraph'
@@ -514,6 +522,7 @@ class graph(item_base, BaseModel, ConstrBase, Hookable):
 
     context = context.construct(include = ['meta_graph','graph_coll'],as_name = 'root_graph')
     def _context_walk_(self):
+        self._collection_item_auto_add_('graph_coll',True)
         with self.context.register():
             self.subgraphs._context_walk_()
 
@@ -521,7 +530,6 @@ class graph(item_base, BaseModel, ConstrBase, Hookable):
         self.context    = self.context(self)
         self.module_col = local_module_collection(module_iten=module_iten)
         self.subgraphs  = subgraph_collection()
-
 
 class graph_collection(BaseModel, collection_base, ConstrBase,Hookable):
     _io_bin_name_ = 'graph'

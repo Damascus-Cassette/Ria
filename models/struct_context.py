@@ -7,10 +7,23 @@ from ..statics   import _unset
 
 class _defaultdict(dict):
     def __missing__(self, key):
-        res = self[key] = ContextVar(key, default=None)
+        res = self[key] = ContextVar(key, default=False)
         return res
 
-_context = _defaultdict()
+    @contextmanager
+    def in_context(self,kwargs):
+        ''' Utility function to add a dict as context '''
+        _t = {}
+        for k,v in kwargs.items():
+            _t[k] = self[k].set(v)
+        yield
+        for k,t in _t.items():
+            self[k].reset(t)
+
+
+
+_context      = _defaultdict()
+context_flags = _defaultdict()
 
 class context():
     ''' Constructed class meant to store data to/from a global context through a walk 
@@ -55,21 +68,13 @@ class context():
         for k,v in _context.items():
             if not ((_v :=v.get()) is None):
                 self._Global_Context_Copy[k] = _v
-    
-    @contextmanager
-    def In_Last_Context(self):
-        _c_temp = {}
-        for k,v in self._Global_Context_Copy.items():
-            _c_temp[k]=_context[k].set(v)
-        with self.register():
-            yield
-        for k,v in _c_temp.items():
-            _context[k].reset(_c_temp[k])
-    
+
     @contextmanager
     def Cached(self):
-        with self.In_Last_Context():
-            yield
+        _c_temp = {}
+        with _context.in_context(self._Global_Context_Copy):
+            with self.register():
+                yield    
 
     @contextmanager
     def register(self):
@@ -85,16 +90,6 @@ class context():
         finally:
             if t:
                 _context[self._As_Name].reset(t)
-
-    # def __repr__(self):
-    #     res = ' '.join([f' | {x} : {getattr(self,x,_unset)} ' for x in self._Include])
-    #     res = f'<Context object of chain: {res}>'
-    def KeyRep(self,key:str):
-        ''' Rep with fallback for structures still initializing '''
-        if not (a := getattr(self,key,None)):
-            return f'(Context["{key}"])'
-        else:
-            a.__repr__().split('@')[-1].strip('<>')
 
     def Repr(self,chain=None,key_limiter:str=None):
         if chain is None: chain = []
@@ -136,6 +131,29 @@ class context():
         result = context(new_parent)
         memo[id(self)] = result
         return result
+    
+    @contextmanager
+    def As_Env(self,**kwargs):
+        ''' Utility retrieves self-cached env and allows setting of flags 
+        Recomended to add wrapper function onto housing class for specifying and limiting flags
+        '''
+        with self.Cached():
+            with context_flags.in_context(kwargs):
+                yield
+    
+    def Auto_Add(self,add_to:str,flag:str|bool):
+        ''' Auto append to context[add_to] if context_flags[flag] '''
+        #TODO: Find a better location for this function.
+        #Perhaps make into generic post-context hooks
+        #Or in the context init. 
+        if ((flag is True) or context_flags[flag].get()) and (p_col:=_context[add_to].get()):
+            p_col.append(self)
+
+    def Auto_Add_Multi(self,data:tuple[tuple[str,str]]):
+        for add_to,flag in data:
+            self.Auto_Add(add_to,flag)
+
+
     
 # class context_container_mixin():
 #     context        : context
