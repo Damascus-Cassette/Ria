@@ -6,7 +6,7 @@ from .Execution_Types       import _mixin, item
 # from .Execution_Types       import socket_shapes as st
 
 from typing                 import Any, Self, TypeAlias,AnyStr,Type
-from types                  import FunctionType
+from types                  import FunctionType, LambdaType
 from inspect                import isclass
 
 class main():
@@ -28,19 +28,19 @@ class main():
     class subgraph_mixin(_mixin.subgraph):
         def copy_in_node():
             ...
-        def copy_in_nodes(self, nodes, keep_links=True)->tuple[item.node]:
+        def copy_in_nodes(self, nodes, keep_links=True,return_memo=True,memo=None)->tuple[item.node]:
             '''copy in nodes from any subgraph, uses self.nodes.copy_in_multi with local_copy as true 
             Allows 'blind' nodes w/out context having been walked
             Initilizes context structure after copying in.
             '''
 
-            new_nodes, memo = self.nodes.copy_in_multi(nodes,local_copy=True,return_memo=True)
+            new_nodes, memo = self.nodes.copy_in_multi(nodes,local_copy=True,return_memo=True,memo=memo)
             if keep_links:
                 links = []
                 subgraphs = set([x.context.subgraph for x in nodes if x.context.subgraph is not None])
                 for sg in subgraphs:
                     links.extend([l for l in sg.links if ((l.from_node in nodes) and (l.to_node in nodes)) ])
-                new_links = self.links.copy_in(links, local_copy=True, memo=memo)
+                new_links,memo = self.links.copy_in(links, local_copy=True,return_memo=True, memo=memo)
                 with self.context.Cached():
                     for x in new_links:
                         x._context_walk_()
@@ -49,10 +49,20 @@ class main():
                 for x in new_nodes:
                     x._context_walk_()
 
+            if return_memo: return  new_nodes,memo
             return new_nodes
-        
-    # class node_mixin(_mixin.node):
-    #     ...
+
+        def copy_walk(self,dir:str|tuple=('in','side','out'),return_memo=False,memo=None):
+            #Walk all related nodes in the direction to prep for copy.
+            ...
+
+    class node_mixin(_mixin.node):
+        def walk(self,dir:str|tuple=('in','side','out'),chain=None, filter:LambdaType=None, return_links=False)->tuple[item.node]|tuple[tuple[item.node],tuple[item.link]]:
+            ''' Recursive directional walk, returns a list of nodes, optionaly also returns links'''
+            if chain is None: chain = []
+            
+            
+
     # class socket_mixin(_mixin.socket):
     #     ...
     # class link_mixin(_mixin.link):
