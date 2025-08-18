@@ -141,17 +141,6 @@ class context():
             with context_flags.in_context(kwargs):
                 yield
     
-    def Auto_Add(self,add_to:str,flag:str|bool):
-        ''' Auto append to context[add_to] if context_flags[flag] '''
-        #TODO: Find a better location for this function.
-        #Perhaps make into generic post-context hooks
-        #Or in the context init. 
-        if ((flag is True) or context_flags[flag].get()) and (p_col:=_context[add_to].get()):
-            p_col.append(self)
-
-    def Auto_Add_Multi(self,data:tuple[tuple[str,str]]):
-        for add_to,flag in data:
-            self.Auto_Add(add_to,flag)
 
 
     

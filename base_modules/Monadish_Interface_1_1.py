@@ -382,13 +382,8 @@ def new_test(graph,subgraph):
         with debug_targets({'Monadish_Interface_1_1': 4 }): #TODO: Move to test structure instead of indv test
             left  = node_left_simple_1 (default_sockets=True)
             right = node_right_simple_1(default_sockets=True)
-            # assert left.out_sockets.groups[0].__class__ is not left.out_sockets.groups[1].__class__
-            # print(*(x.__class__ for x in (left.out_sockets.groups)))
-            print(*left.out_sockets.groups)
-            print(*right.in_sockets.groups)
 
             res = right._monadish_prep_intake_node(left)
-            # assert isinstance(res,FunctionType)
             res = res(debug_return_fullfillment=True)
             dprint(res)
 

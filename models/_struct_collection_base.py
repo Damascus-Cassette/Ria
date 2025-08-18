@@ -26,7 +26,7 @@ class collection_base[T=item_base]():
                     func()
     def _context_new_item_(self,item):
         if func:=getattr(item,'_context_walk_',None):
-            with self.context.In_Last_Context():
+            with self.context.Cached():
                 func()            
 
     @property
@@ -115,7 +115,7 @@ class collection_typed_base[T](collection_base):
 
         assert key not in self._data.keys()
 
-        with self.context.In_Last_Context():
+        with self.context.Cached():
             inst = Bases[type](*args,**kwargs)
         inst.label = label
         inst.key   = key
