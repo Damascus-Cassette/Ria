@@ -179,37 +179,68 @@ class collection_base[T=item_base]():
             res.append(self.free(x,safe=safe))
         return tuple(res)
 
-    def copy(self,item, safe=True, keep=True)->T:                              
+    def copy(self,item, safe=True, keep=True,return_memo=False,memo=None)->T:                              
         ''' deepcopy item and return the copy. 
-        keep: 'append' the copy to this collection. (Ensures key name is unique if kept)
-        safe: an error will be thrown if not in collection's data '''
+        keep : 'append' the copy to this collection. (Ensures key name is unique if kept)
+        safe : an error will be thrown if not in collection's data 
+        return_memo : the memo used in deepcopy will be returned
+        memo        : optional pass in a memo to use in the deepcopy
+        '''
+        
         if safe: assert self.item_verify_local(item)
-        new = deepcopy(item)
+        if memo is None : memo = {}
+        memo = copy(memo)
+        new = deepcopy(item,memo=memo)
         if keep: self[self.make_unique_key(new.key)] = new
+        if return_memo: new,memo
         return new
-    def copy_multi(self,items:slice|tuple[T],safe=True,keep=True)->tuple[T]:        
+    def copy_multi(self,items:slice|tuple[T],safe=True,keep=True,return_memo=False,memo=None)->tuple[T]:        
         ''' deepcopy items and return the copy. 
-        keep: 'extend' the copies to this collection (Ensures key name is unique if kept)
-        safe: an error will be thrown if not in collection's data '''
+        memo is shared accross all deepcopy calls
+        keep        : 'extend' the copies to this collection (Ensures key name is unique if kept)
+        safe        : an error will be thrown if not in collection's data,
+        return_memo : the memo used in deepcopy will be returned
+        memo        : optional pass in a memo to use in the deepcopy
+        '''
+        if memo is None : memo = {}
+        memo = copy(memo)
         if isinstance(items,slice): items = self[items]
         res = []
         for item in items:
-            res.append(self.copy(item,safe=safe,keep=keep))
+            new,memo = self.copy(item,safe=safe,keep=keep,return_memo=True,memo=memo)
+            res.append(new)
+        if return_memo:
+            return tuple(res), memo
         return tuple(res)
 
-    def copy_in(self, col2:Self, item, local_copy=False):
+    def copy_in(self, item,col2:Self=None, local_copy=False,return_memo=False,memo=None):
         ''' Copy item from secondary collection. Must be compatable with self.base(s)
-        local_copy: use this collection's copy method '''
+        local_copy  : use this collection's copy method 
+        return_memo : the memo used in deepcopy will be returned
+        memo        : optional pass in a memo to use in the deepcopy
+        '''
         assert self.item_verify_compatable(item)
-        if local_copy: return self.copy(item,safe=False,keep=True)
-        else:          return col2.copy(item,safe=True ,keep=False)
-    def copy_in_multi(self,col2,items:slice|tuple[T], local_copy=False):
-        ''' Copy items from secondary collection, 
-        local_copy: use this collection's copy method '''
-        if isinstance(items,slice): items = self[items]
-        for item in items:
-            self.copy_in(col2,item,local_copy=local_copy)
+        if memo is None : memo = {}
+        memo = copy(memo)
+        if local_copy: return self.copy(item,safe=False,keep=True ,return_memo=return_memo, memo=memo)
+        else:          return col2.copy(item,safe=True ,keep=False,return_memo=return_memo, memo=memo)
 
+    def copy_in_multi(self,items:slice|tuple[T], col2:Self=None, local_copy=False, return_memo=False,memo=None):
+        ''' Copy items from secondary collection, 
+        memo is shared accross all deepcopy calls
+        local_copy  : use this collection's copy method, if false must provide col2 
+        return_memo : the memo used in deepcopy will be returned
+        memo        : optional pass in a memo to use in the deepcopy
+        '''
+        if isinstance(items,slice): items = self[items]
+        if memo is None : memo = {}
+        memo = copy(memo)
+        res  = []
+        for item in items:
+            item,memo = self.copy_in(item,col2,local_copy=local_copy,return_memo=True,memo=memo)
+            res.append(item)
+        if return_memo: return res,memo
+        return res 
 
 class subcollection_base[T](collection_base):
     # @property
