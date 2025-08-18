@@ -54,6 +54,7 @@ class link(item_base,BaseModel,ConstrBase,Hookable):
 
     def __init__(self, out_socket=None, in_socket=None):
         self.context = self.context(self)
+        self._collection_item_auto_add_('link_coll','auto_add_sockets')
         self.out_socket = out_socket
         self.in_socket   = in_socket
     
@@ -78,8 +79,7 @@ class link(item_base,BaseModel,ConstrBase,Hookable):
         self.in_socket_id   = socket.id
 
     context = context.construct(include=['meta_graph','root_graph','subgraph','link_coll','node','socket_coll','socket_group','socket'])
-    def _context_walk_(self):
-        self._collection_item_auto_add_('link_coll','auto_add_sockets')
+    def _context_walk_(self):...
 
 class link_collection[SocketType = link](BaseModel,collection_base,ConstrBase,Hookable):
     ''' subgraph.links, filtered in the socket's view via a constructed function 
@@ -385,8 +385,7 @@ class node(item_base,BaseModel,ConstrBase,Hookable):
         cls.side_sockets = socket_collection.construct_if_not('side_sockets', Direction='side', Groups=getattr(cls,'side_sockets',[]))
 
     context = context.construct(include=['meta_graph','root_graph','subgraph','node_coll'],as_name='node')
-    def _context_walk_(self):
-        self._collection_item_auto_add_('node_coll','auto_add_nodes')
+    def _context_walk_(self):        
         with self.context.register():
             self.in_sockets._context_walk_()
             self.out_sockets._context_walk_()
@@ -394,6 +393,7 @@ class node(item_base,BaseModel,ConstrBase,Hookable):
 
     def __init__(self,/,*,default_sockets:bool = False):
         self.context = self.context(self)
+        self._collection_item_auto_add_('node_coll','auto_add_nodes')
         self.In_Sockets   = self.in_sockets   #Consider mandating this structure def as capital
         self.Out_Sockets  = self.out_sockets  
         self.Side_Sockets = self.side_sockets 
@@ -453,12 +453,12 @@ class subgraph(item_base, BaseModel, ConstrBase,Hookable):
 
     context = context.construct(include=['meta_graph','root_graph','subgraph_col'],as_name = 'subgraph')
     def _context_walk_(self):
-        self._collection_item_auto_add_('subgraph_col','auto_add_subgraphs')
         with self.context.register():
             self.nodes._context_walk_()
 
     def __init__(self,):
         self.context = self.context(self)
+        self._collection_item_auto_add_('subgraph_col','auto_add_subgraphs')
         with self.context.register():
             self.links   = link_collection()
             self.nodes   = node_collection()
@@ -522,12 +522,12 @@ class graph(item_base, BaseModel, ConstrBase, Hookable):
 
     context = context.construct(include = ['meta_graph','graph_coll'],as_name = 'root_graph')
     def _context_walk_(self):
-        self._collection_item_auto_add_('graph_coll',True)
         with self.context.register():
             self.subgraphs._context_walk_()
 
     def __init__(self,module_iten:dict=None):
         self.context    = self.context(self)
+        self._collection_item_auto_add_('graph_coll',True)
         self.module_col = local_module_collection(module_iten=module_iten)
         self.subgraphs  = subgraph_collection()
 
