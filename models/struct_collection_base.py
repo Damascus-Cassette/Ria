@@ -89,7 +89,7 @@ class collection_base[T=item_base]():
 
     def __setitem__(self,key,item):
         ''' Replace key if mergable or generate new key and move'''
-        assert self.matches_base(item)
+        assert self.item_verify_compatable(item)
         
         if key in self._data.keys():
             if self._coll_mergeable_base_ and self._coll_merge_on_setitem_:
@@ -109,7 +109,7 @@ class collection_base[T=item_base]():
 
     def __setmerge__(self,key,item):
         ''' add/merge local w/a or discard incoming '''
-        assert self.matches_base(item)
+        assert self.item_verify_compatable(item)
         
         if key in self._data.keys():
             if self._coll_mergeable_base_:
@@ -150,7 +150,7 @@ class collection_base[T=item_base]():
         for v in self.data.values():
             yield v
 
-    def matches_base(self,item):
+    def item_verify_compatable(self,item):
         return isinstance(item,self.Base)
 
     @merge_wrapper
@@ -200,7 +200,7 @@ class collection_base[T=item_base]():
     def copy_in(self, col2:Self, item, local_copy=False):
         ''' Copy item from secondary collection. Must be compatable with self.base(s)
         local_copy: use this collection's copy method '''
-        assert self.matches_base(item)
+        assert self.item_verify_compatable(item)
         if local_copy: return self.copy(item,safe=False,keep=True)
         else:          return col2.copy(item,safe=True ,keep=False)
     def copy_in_multi(self,col2,items:slice|tuple[T], local_copy=False):
@@ -255,7 +255,7 @@ class typed_collection_base[T](collection_base):
     
     Bases : dict[str,Type]
 
-    def matches_base(self, item:str|Type):
+    def item_verify_compatable(self, item:str|Type):
         Bases = getattr(self,'Bases',{})
 
         if isinstance(item,str):
@@ -265,7 +265,7 @@ class typed_collection_base[T](collection_base):
         
     def new(self, type:str|Type, key, label=None, *args,**kwargs):
         Bases = getattr(self,'Bases',{})
-        assert self.matches_base(type)
+        assert self.item_verify_compatable(type)
         
         if label is None: label = key
 
