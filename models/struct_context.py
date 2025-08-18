@@ -96,21 +96,30 @@ class context():
         else:
             a.__repr__().split('@')[-1].strip('<>')
 
-    def Repr(self,chain=None):
+    def Repr(self,chain=None,key_limiter:str=None):
         if chain is None: chain = []
         assert self not in chain
         chain.append(self)
 
         if (func:=getattr(self._parent,'_context_repr_',None)) is not None:
             return func(chain=chain)
+
+        if len(self._Include) == 0:
+            return getattr(self._parent,'_context_item_rootrep_','(CONTEXT_CHAIN_ERROR)')
         
-        elif (pparent := getattr(self,self._Include[-1], None)) is not None:
+        if self._Include[-1] is key_limiter:
+            return f'({key_limiter})'
+
+        if (pparent := getattr(self,self._Include[-1], None)) is not None:
+            if (val:=getattr(self._parent,'_context_item_keyrep_',None)) is not None:
+                return pparent.context.Repr(chain=chain,key_limiter=key_limiter) + val
+            
             reversed_attr = {v:k for k,v in vars(pparent).items() if v is self._parent}
                 #TODO: FUGLY FIX
             if self._parent in reversed_attr.keys(): 
-                return pparent.context.Repr(chain=chain) + '.' + reversed_attr[self._parent]
-            elif (val:=getattr(self._parent,'_context_item_keyrep_',None)) is not None:
-                return pparent.context.Repr(chain=chain) + '.' + val
+                return pparent.context.Repr(chain=chain,key_limiter=key_limiter) + '.' + reversed_attr[self._parent]
+            
+            print('IN CONTEXT REPR:',getattr(self._parent,'_context_item_keyrep_',None))
                 
         return getattr(self._parent,'_context_attr_fallback_',str(self._parent))
     

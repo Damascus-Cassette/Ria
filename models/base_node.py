@@ -26,7 +26,7 @@ class socket_archtype(defered_archtype):...
 
 from collections import OrderedDict
 
-class link(BaseModel,item_base,ConstrBase,Hookable):
+class link(item_base,BaseModel,ConstrBase,Hookable):
     ''' Pointer to a socket via node.{dir}_socket.[socket_id] '''
     _io_bin_name_       = 'link'
     _io_blacklist_      = ['name']
@@ -105,7 +105,7 @@ class link_subcollection(context_prepped_subcollection_base):
         return self.parent.context.subgraph.links
     
 
-class socket(BaseModel,item_base,ConstrBase,Hookable):
+class socket(item_base,BaseModel,ConstrBase,Hookable):
     ''' 
     Module constructed socket type, 
     Interactions/rules are defined on socket_group
@@ -365,7 +365,7 @@ class socket_collection(BaseModel,typed_collection_base,ConstrBase,Hookable):
         return self.context.root_graph.module_col.items_by_attr('_io_bin_name_','socket')
 
 
-class node(BaseModel,ConstrBase,Hookable):
+class node(item_base,BaseModel,ConstrBase,Hookable):
     ''' Base Node type, inherited into actionable forms '''
     _io_bin_name_       = 'g_node'
 
@@ -385,7 +385,7 @@ class node(BaseModel,ConstrBase,Hookable):
         cls.out_sockets  = socket_collection.construct_if_not('out_sockets',  Direction='out',  Groups=getattr(cls,'out_sockets',[]))
         cls.side_sockets = socket_collection.construct_if_not('side_sockets', Direction='side', Groups=getattr(cls,'side_sockets',[]))
 
-    context = context.construct(include=['meta_graph','root_graph','subgraph'],as_name='node')
+    context = context.construct(include=['meta_graph','root_graph','subgraph','node_coll'],as_name='node')
     def _context_walk_(self):
         with self.context.register():
             self.in_sockets._context_walk_()
@@ -424,7 +424,7 @@ class node_collection(BaseModel, typed_collection_base, ConstrBase,Hookable):
 
     data : list[node_archtype]
 
-    context = context.construct(include=['meta_graph','root_graph','subgraph'])
+    context = context.construct(include=['meta_graph','root_graph','subgraph'],as_name='node_coll')
     def _context_walk_(self):
         with self.context.register():
             for v in self.data:
@@ -435,7 +435,7 @@ class node_collection(BaseModel, typed_collection_base, ConstrBase,Hookable):
         self._data   = OrderedDict()
 
 
-class subgraph(BaseModel, item_base, ConstrBase,Hookable):
+class subgraph(item_base, BaseModel, ConstrBase,Hookable):
     ''' Container for nodes, links'''
     _io_bin_name_  = 'subgraph'
     _io_blacklist_ = ['links']
@@ -450,7 +450,7 @@ class subgraph(BaseModel, item_base, ConstrBase,Hookable):
         #Retroactivly Populated via subcollection[link] on sockets
         # In memory only
 
-    context = context.construct(include=['meta_graph','root_graph'],as_name = 'subgraph')
+    context = context.construct(include=['meta_graph','root_graph','subgraph_col'],as_name = 'subgraph')
     def _context_walk_(self):
         with self.context.register():
             self.nodes._context_walk_()
@@ -481,7 +481,7 @@ class subgraph_collection[SubgraphType=subgraph](BaseModel, collection_base, Con
         self._data   = OrderedDict()
 
 
-    context = context.construct(include=['meta_graph','root_graph','subgraph'])
+    context = context.construct(include=['meta_graph','root_graph'], as_name='subgraph_col')
     def _context_walk_(self):
         with self.context.register():
             for v in self.data:
@@ -490,7 +490,7 @@ class subgraph_collection[SubgraphType=subgraph](BaseModel, collection_base, Con
 from .struct_module_collections import (local_module_collection, 
                                         Global_Module_Pool)         #Singleton inst of global_module_collection
 
-class graph(BaseModel, ConstrBase,Hookable):
+class graph(item_base, BaseModel, ConstrBase, Hookable):
     _io_bin_name_  = 'graph'
     _io_blacklist_ = ['active','g_module_col']
 
@@ -512,7 +512,7 @@ class graph(BaseModel, ConstrBase,Hookable):
     subgraphs : flat_col[subgraph_collection]
     
 
-    context = context.construct(include = ['meta_graph'],as_name = 'root_graph')
+    context = context.construct(include = ['meta_graph','graph_coll'],as_name = 'root_graph')
     def _context_walk_(self):
         with self.context.register():
             self.subgraphs._context_walk_()
@@ -537,7 +537,7 @@ class graph_collection(BaseModel, collection_base, ConstrBase,Hookable):
 
     data : list[subgraph]
 
-    context = context.construct(include=['meta_graph'])
+    context = context.construct(include=['meta_graph'],as_name='graph_coll')
     def _context_walk_(self):
         with self.context.register():
             for v in self.data:
@@ -566,15 +566,18 @@ class meta_graph(BaseModel, ConstrBase,Hookable):
         with self.context.register():
             self.graph._context_walk_()
 
+    _context_item_rootrep_ = '(MetaGraph)'
+
     def __init__(self):
         self.graphs = graph_collection() 
         self.context = self.context(self)
 
     def _run_tests(self):
         self.Global_Module_Pool.load()
-        for mod in self.Global_Module_Pool:
-            print(f'TESTING: {mod.UID} : {mod.Version}')
-            mod._run_tests(self)
+        with self.context.register():
+            for mod in self.Global_Module_Pool:
+                print(f'TESTING: {mod.UID} : {mod.Version}')
+                mod._run_tests(self)
 
     def _Set_As_Active_Construction(self,graph_inst:graph):
         ''' Construct in place all types using modules list '''

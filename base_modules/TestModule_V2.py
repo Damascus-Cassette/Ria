@@ -24,15 +24,15 @@ class new_socket(item.socket):
     Value_Default = 'c'
 
         
-    def __repr__(self):
-        # Consider adding similar procedural on datastruct for generic access
-        # Would need fallbacks for a not fully initlized object like I found below
-        # return f'<<< Socket object: {self.UID} @ (graph).["{self.context.node.key}"].{self.dir}_sockets["{self.key}"] >>>'
-        try:
-            direction = self.dir
-        except:
-            direction = '?'
-        return f'<<< Socket object: {self.UID} @ {self.context.KeyRep('node')}.{direction}_sockets["{getattr(self,'key','?')}"] >>>'
+    # def __repr__(self):
+    #     # Consider adding similar procedural on datastruct for generic access
+    #     # Would need fallbacks for a not fully initlized object like I found below
+    #     # return f'<<< Socket object: {self.UID} @ (graph).["{self.context.node.key}"].{self.dir}_sockets["{self.key}"] >>>'
+    #     try:
+    #         direction = self.dir
+    #     except:
+    #         direction = '?'
+    #     return f'<<< Socket object: {self.UID} @ {self.context.KeyRep('node')}.{direction}_sockets["{getattr(self,'key','?')}"] >>>'
     
 class new_exec_node(item.exec_node):
     Module  = main 
@@ -43,8 +43,6 @@ class new_exec_node(item.exec_node):
 
     test_module_executed = False
 
-    def __repr__(self):
-        return f'<<< Node object: {self.UID} @ (graph).["{self.key}"] >>>'
     
     in_sockets   = [socket_group.construct('set_a', Sockets=[new_socket]),
                     socket_group.construct('set_b', Sockets=[new_socket])]
