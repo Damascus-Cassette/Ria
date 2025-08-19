@@ -4,7 +4,8 @@ Subtypes should be able to Merge left when Mergable_Base = True
 
 
 # from .struct_merge_tools import merge_wrapper
-from .struct_context import context,_context, context_flags
+from .struct_context   import context,_context, context_flags
+from .struct_hook_base import hooked
 
 from collections         import OrderedDict
 from typing              import Self,Type,Any
@@ -83,6 +84,7 @@ class collection_base[T=item_base]():
         self.context = self.context(self)
         self._data   = OrderedDict()
 
+    @hooked('new')
     def new(self,key,label=None,*args,**kwargs):
         key = self.ensure_unique_key(key)
         if label is None: label = key
@@ -271,7 +273,7 @@ class subcollection_base[T](collection_base):
         values = sorted([(i,k,v) for i,(k,v) in enumerate(self._data.items()) if self._filter(i,k,v)],key = self._order)
         res    = OrderedDict({k:v for i,k,v in values})
         return res
-    
+    @hooked('new')
     def new(self, *args, suppress_filter_check = False,**kwargs,)->T:
         '''In a subcollection an item'''
         inst = super().new(*args,**kwargs)
@@ -303,7 +305,7 @@ class typed_collection_base[T](collection_base):
             return item in Bases.keys()
         else:
             return item.__class__ in Bases.values()
-        
+    @hooked('new')
     def new(self, type:str|Type, key, label=None, *args,**kwargs):
         Bases = getattr(self,'Bases',{})
         assert self.item_verify_compatable(type)
@@ -343,7 +345,7 @@ class typed_subcollection_base[T](typed_collection_base):
         values = sorted([(i,k,v) for i,(k,v) in enumerate(self._data.items()) if self._filter(i,k,v)],key = self._order)
         res    = OrderedDict({k:v for i,k,v in values})
         return res
-    
+    @hooked('new')
     def new(self, *args, suppress_filter_check = False,**kwargs,):
         '''In a subcollection an item'''
         inst = super().new(*args,**kwargs)

@@ -2,8 +2,9 @@ from packaging.version import Version as VersionType
 from inspect import isclass
 from typing import Any,Callable, ForwardRef
 # from collections import defaultdict
+from .struct_hook_base import Hookable
 
-class _mixin_base:
+class _mixin_base(Hookable):
     ''' Mixes into all specified's base class 
         For hooking and base behavior changes '''
 
@@ -14,7 +15,7 @@ class _mixin_base:
     Deps         : list[tuple[str,str,str,str]] 
     Module       : Any
 
-class _item_base:
+class _item_base(Hookable):
     ''' Is a new node class, for execution and hooks 
         Note: inherits all node_mixins from all enabled modules'''
     _loader_item_ = True

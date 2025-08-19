@@ -83,7 +83,7 @@ class hook_dict(dict):
     
     def __or__(s,o) -> Self:
         '''Union to new instance with filtering by req_unique_name (dont add to filter list when false)'''
-
+        assert issubclass(o.__class__,dict)
         new = hook_dict()
         filter_list = hook_dict()
 
@@ -108,6 +108,10 @@ class hook_dict(dict):
                     filter_list[k].append(x.name)
 
         return new
+    def __ror__(self,o):
+        assert issubclass(o.__class__,dict)
+        return self.__or__(o)
+        
     
     def run_hooks(self,key,container=None,*args,**kwargs):
         if not isclass(container):
@@ -132,13 +136,24 @@ class hook_dict(dict):
         for x in self[key]:
             if x.method_type == 'cls':
                 x(*args,**kwargs)
-        
+
+from functools import wraps    
+def hooked(key:str):
+    def outer_wrapper(func):
+        @wraps(func)
+        def wrapper(*args,**kwargs):
+            args[0].run_hooks(key,args,kwargs)
+            ret = func(*args,**kwargs)
+            return ret
+        return wrapper
+    return outer_wrapper
+    
 
 class Hookable():
     _hooks : hook_dict
 
-    def run_hooks(self,key:str,*args,**kwargs):
-        self._hooks.run_hooks(self,key,*args,**kwargs)
+    def run_hooks(self,key:str,args,kwargs):
+        self._hooks.run_hooks(key,*args,**kwargs)
 
     def __init_subclass__(cls):
         hooks = hook_dict()
@@ -147,11 +162,14 @@ class Hookable():
             if isinstance(v,_hook):
                 hooks[v.key].append(v)
 
-        if not isinstance(getattr(cls,'_hooks',None),(hook_dict,dict)):
-            cls._hooks = hooks
-        else:
+        if isinstance(getattr(cls,'_hooks',None),(hook_dict,dict)):
             cls._hooks = getattr(cls,'_hooks')|hooks
+        else:
+            cls._hooks = hooks
 
+class Hookable_Base(Hookable):...
+#FUGLY AS FUCK 
+#Hotfix for inheritance mro Error
 
 if __name__ == '__main__':
     from pprint import pprint

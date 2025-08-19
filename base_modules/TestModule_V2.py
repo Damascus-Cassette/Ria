@@ -1,7 +1,9 @@
-from ..models.struct_module import module, module_test
-from ..models.base_node     import socket_group
-from .Execution_Types       import item,_mixin
-from .utils.print_debug     import debug_print_wrapper as debug_wraper, debug_print as dprint
+from ..models.struct_module    import module, module_test
+from ..models.struct_hook_base import hook
+from ..models.base_node        import socket_group
+from .Execution_Types          import item,_mixin
+from .utils.print_debug        import debug_print_wrapper as debug_wraper, debug_print as dprint
+
 
 class main(module):
     UID          = 'TestModule'
@@ -10,6 +12,13 @@ class main(module):
     ChangeLog    = ''' '''
     Version      = '2.0'
     
+    
+    class node_collection_mixin(_mixin.node_collection):
+        @hook
+        def new(self):
+            print('DAS SCREEMING CHICKEN')
+        
+
     Deps = [
         ('required','Core_Execution','=(2.0)','Failure_Message')
         ]
@@ -118,9 +127,18 @@ def adv_exec_test(graph,subgraph):
 
     assert v == 'abc'
 
+def hook_test(graph,subgraph):
+    print(subgraph.nodes._hooks)
+    print(subgraph.nodes.new)
+    raise Exception('')
+
 main._module_tests_.append(module_test('TestA',
                 module      = main,
-                funcs       = [basic_exec_test,adv_exec_test],
+                funcs       = [
+                    basic_exec_test ,
+                    adv_exec_test   ,
+                    # hook_test       ,
+                    ],
                 module_iten = {main.UID : main.Version,
                                'Core_Execution':'2.0'}, 
                 ))

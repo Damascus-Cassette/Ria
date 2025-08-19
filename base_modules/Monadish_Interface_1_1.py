@@ -390,10 +390,13 @@ def new_test(graph,subgraph):
             raise Exception('')
 
 def env_merging_test(graph,subgraph):
-    with graph.Monadish_Env(auto_merge_target = subgraph): #as _sg is handled with auto-add in context flags
+    with graph.Monadish_Env() as _sg: #auto_merge_target = subgraph
         node_a1 = node_a1_a1(default_sockets=True)
         node_a2 = node_a1_a1(default_sockets=True)
         node_a1 >> node_a2
+        with _sg.Monadish_Temp():
+            #Anything changed in here could be auto_merged?
+            ...
     # subgraph.copy_walk(node_a2, dir=('in','side'), filter = lambda s,n,l: subgraph.find_context[n]) #done through auto_merge_target
     # exec graph would do best if I override the copy_walk or add a merge_in 
 

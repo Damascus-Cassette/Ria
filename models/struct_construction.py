@@ -86,7 +86,7 @@ class ConstrBase():
                     new_lists[k].extend(getattr(x,k,[]))
 
             for k in getattr(cls,'_constr_join_dicts_',[]):
-                new_dicts[k]=[]
+                new_dicts[k]={}
                 for x in other_bases:
                     if val := getattr(x,k,{}):
                         new_dicts[k] = new_dicts[k] | val

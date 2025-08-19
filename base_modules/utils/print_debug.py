@@ -46,7 +46,7 @@ def _debug_print(*args,**kwargs):
     print(' | '*print_debug_nestedlevel.get(),*args,**kwargs)
 
 def debug_print(*args, threshold=-1, **kwargs):
-    if threshold >= print_debug_level:
+    if threshold >= print_debug_level.get():
         _debug_print(*args,**kwargs)
 
 def _rep(item):

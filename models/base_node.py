@@ -6,7 +6,7 @@ Graph Execution logic in a module constructed onto this set
 from .struct_file_io         import BaseModel, defered_archtype,flat_bin,flat_col,flat_ref 
 from .struct_context         import context
 from .struct_construction    import ConstrBase, Bases, Constructed
-from .struct_hook_base       import Hookable
+from .struct_hook_base       import Hookable_Base as Hookable
 from .struct_collection_base import (item_base,
                                      collection_base,
                                      typed_collection_base,
@@ -29,7 +29,7 @@ class socket_archtype(defered_archtype):...
     #Archtypes are used by file_io to have typed items
 
 
-class link(item_base,BaseModel,ConstrBase,Hookable):
+class link(item_base,BaseModel,ConstrBase, Hookable):
     ''' Pointer to a socket via node.{dir}_socket.[socket_id] '''
     _io_bin_name_       = 'link'
     _io_blacklist_      = ['name']
@@ -81,7 +81,7 @@ class link(item_base,BaseModel,ConstrBase,Hookable):
     context = context.construct(include=['meta_graph','root_graph','subgraph','link_coll','node','socket_coll','socket_group','socket'])
     def _context_walk_(self):...
 
-class link_collection[SocketType = link](BaseModel,collection_base,ConstrBase,Hookable):
+class link_collection[SocketType = link](BaseModel,collection_base,ConstrBase, Hookable):
     ''' subgraph.links, filtered in the socket's view via a constructed function 
     May consider making typed if there is any good argument to do so.
     '''
@@ -109,7 +109,7 @@ class link_subcollection(context_prepped_subcollection_base):
         return self.parent.context.subgraph.links
     
 
-class socket(item_base,BaseModel,ConstrBase,Hookable):
+class socket(item_base,BaseModel,ConstrBase, Hookable):
     ''' 
     Module constructed socket type, 
     Interactions/rules are defined on socket_group
@@ -165,7 +165,7 @@ class socket(item_base,BaseModel,ConstrBase,Hookable):
     def dir(self):
         return self.context.socket_coll.Direction
 
-class socket_group[SocketType=socket](item_base,ConstrBase,Hookable):
+class socket_group[SocketType=socket](item_base,ConstrBase, Hookable):
     ''' 
     Constructed Class for methods to allow sockets 0+ to interact
     Defines UI interaction & validation of a socket type
@@ -288,12 +288,12 @@ class socket_group[SocketType=socket](item_base,ConstrBase,Hookable):
         if socket not in self.parent_col.values():
             self.parent_col[key] = socket
 
-class socket_group_collection(collection_base,ConstrBase,Hookable):
+class socket_group_collection(collection_base,ConstrBase, Hookable):
     ''' Shoudl be non-writable. Reconstructed on load. Accessor like an ordered dict '''
     Base = socket_group
     context = context.construct(include=['meta_graph','root_graph','subgraph','node','socket_coll'],as_name='socket_group_coll')
 
-class socket_collection(BaseModel,typed_collection_base,ConstrBase,Hookable):
+class socket_collection(BaseModel,typed_collection_base,ConstrBase, Hookable):
     ''' Accessor of sockets and socket_groups '''
     _io_bin_name_       = 'socket'
     _io_dict_like_      = True
@@ -364,7 +364,7 @@ class socket_collection(BaseModel,typed_collection_base,ConstrBase,Hookable):
         return self.context.root_graph.module_col.items_by_attr('_io_bin_name_','socket')
 
 
-class node(item_base,BaseModel,ConstrBase,Hookable):
+class node(item_base,BaseModel,ConstrBase, Hookable):
     ''' Base Node type, inherited into actionable forms '''
     _io_bin_name_       = 'g_node'
 
@@ -409,7 +409,7 @@ class node(item_base,BaseModel,ConstrBase,Hookable):
         self.out_sockets.default_sockets()
         self.side_sockets.default_sockets()
 
-class node_collection(BaseModel, typed_collection_base, ConstrBase,Hookable):
+class node_collection(BaseModel, typed_collection_base, ConstrBase, Hookable):
     _io_bin_name_  = 'node'
     _io_dict_like_ = True
     _io_blacklist_ = ['data']
@@ -436,13 +436,13 @@ class node_collection(BaseModel, typed_collection_base, ConstrBase,Hookable):
         self._data   = OrderedDict()
 
 
-class subgraph(item_base, BaseModel, ConstrBase,Hookable):
+class subgraph(item_base, BaseModel, ConstrBase,  Hookable):
     ''' Container for nodes, links'''
     _io_bin_name_  = 'subgraph'
     _io_blacklist_ = ['links']
 
-    _constr_bases_key_ = 'subgraph'
-    _constr_call_post_ = ['__io_setup__']
+    _constr_bases_key_  = 'subgraph'
+    _constr_call_post_  = ['__io_setup__']
     _constr_join_dicts_ = ['_hooks']
     _constr_join_lists_ = ['_io_blacklist_','_io_whitelist_','_constr_call_post_']
 
@@ -470,13 +470,13 @@ class subgraph(item_base, BaseModel, ConstrBase,Hookable):
             yield self
         
 
-class subgraph_collection[SubgraphType=subgraph](BaseModel, collection_base, ConstrBase,Hookable):
+class subgraph_collection[SubgraphType=subgraph](BaseModel, collection_base, ConstrBase,  Hookable):
     _io_bin_name_ = 'subgraph'
     _io_dict_like_ = True
     _io_blacklist_ = ['data']
 
-    _constr_bases_key_ = 'subgraph_collection'
-    _constr_call_post_ = ['__io_setup__']
+    _constr_bases_key_  = 'subgraph_collection'
+    _constr_call_post_  = ['__io_setup__']
     _constr_join_dicts_ = ['_hooks']
     _constr_join_lists_ = ['_io_blacklist_','_io_whitelist_','_constr_call_post_']
     
@@ -498,7 +498,7 @@ class subgraph_collection[SubgraphType=subgraph](BaseModel, collection_base, Con
 from .struct_module_collections import (local_module_collection, 
                                         Global_Module_Pool)         #Singleton inst of global_module_collection
 
-class graph(item_base, BaseModel, ConstrBase, Hookable):
+class graph(item_base, BaseModel, ConstrBase,  Hookable):
     _io_bin_name_  = 'graph'
     _io_blacklist_ = ['active','g_module_col']
 
@@ -531,7 +531,7 @@ class graph(item_base, BaseModel, ConstrBase, Hookable):
         self.module_col = local_module_collection(module_iten=module_iten)
         self.subgraphs  = subgraph_collection()
 
-class graph_collection(BaseModel, collection_base, ConstrBase,Hookable):
+class graph_collection(BaseModel, collection_base, ConstrBase, Hookable):
     _io_bin_name_ = 'graph'
     _io_dict_like_ = True
     _io_blacklist_ = ['data']
@@ -556,7 +556,7 @@ class graph_collection(BaseModel, collection_base, ConstrBase,Hookable):
         self.context = self.context(self)
 
 
-class meta_graph(BaseModel, ConstrBase,Hookable):
+class meta_graph(BaseModel, ConstrBase, Hookable):
     ''' Should have a single instance, holds graphs, sets active. If more than one instance the latest active's modules are used. '''
     ''' Current design limitation of structure for flexibility to instnace manually in user modules. '''
     _constr_call_post_ = ['__io_setup__']
