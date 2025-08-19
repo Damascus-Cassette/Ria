@@ -77,9 +77,13 @@ class subgraph_mixin(_mixin.subgraph):
             
 
     @contextmanager
-    def Monadish_Temp(self, key:str, force_merge=False):
+    def Monadish_Temp(self, key:str, force_merge=False, auto_delete=True):
         ''' Create a new temporary env, merge from of contextual if key doesnt already exist. '''
+        ''' TODO Consider better way of handling nested_contexts instead of merging (consider 'current' chain, check in each backwards?) '''
+        
         self._monadish_ensure_special_context_()
+        o_key = self._monadish_context_key_.get()
+
 
         if key in self._monadish_special_context_.keys() and not force_merge:
             t = self._monadish_context_key_.set(key)
@@ -87,11 +91,12 @@ class subgraph_mixin(_mixin.subgraph):
             self._monadish_context_key_.reset(key)
             
         else:
-            o_key = self._monadish_context_key_.get()
             t = self._monadish_context_key_.set(key)
             self._monadish_special_context_[key] = self._monadish_special_context_[o_key] | self._monadish_special_context_[key] 
             yield
             self._monadish_context_key_.reset(key)
+        if auto_delete and not o_key:
+            del self._monadish_special_context_[key]
 
         
 class socket_collection_mixin(_mixin.socket_collection):
