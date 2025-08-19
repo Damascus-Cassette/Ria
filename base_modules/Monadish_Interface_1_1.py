@@ -9,6 +9,7 @@ from typing                 import Any, Self, TypeAlias,AnyStr,Type
 from types                  import FunctionType
 from inspect                import isclass
 from contextlib             import contextmanager
+from contextvars            import ContextVar
 
 from .utils.print_debug import (debug_print_wrapper as dp_wrap, debug_level,debug_targets, _debug_print as dprint)
 
@@ -25,8 +26,6 @@ class main(module):
 #region 
 
 class graph_mixin(_mixin.graph):
-    
-
     @contextmanager
     def Monadish_Env(self, auto_add_nodes = True, auto_add_links=True, auto_delete = True, auto_merge_target = None):
         subgraph = self.subgraphs.new(key='Monadish_Env')
@@ -37,11 +36,64 @@ class graph_mixin(_mixin.graph):
         if auto_delete:
             self.subgraphs.free(subgraph)
 
+
+def _default_dict_true(dict):
+    def __missing__(self,key):
+        return True
+def _default_dict_dict(dict):
+    def __missing__(self,key):
+        var = {}
+        self[key] = var
+        return var
+
+class node_collection_mixin(_mixin.node_collection):
+
+    @hook('new_item','post')
+    def _hook_special_monadish(self,item):
+        ''' Ensure that a node added inside of a context sets the correct flags for actions that modify the graph to do so in a context not submitted to the main graph '''
+        if (ck := getattr((sg:=item.context.subgraph),'_monadish_context_key',None)) is not None:
+            if k:=ck.get():
+                if item not in sg._monadish_special_context_[k].keys():
+                    sg._monadish_special_context_[item] = True
+                    sg._monadish_base_context_[item]    = False
+                
+
 class subgraph_mixin(_mixin.subgraph):
+    _monadish_context_key_     : ContextVar 
+    _monadish_base_context_    : _default_dict_true
+    _monadish_special_context_ : _default_dict_dict 
+        #None of these can be shared across instances, as copy out could copy into a special context
+
     def _Monadish_Merge_Filter(self, othergraph, node, link):
-        return True #TODO: check context to see if item should be merged into another.
+        return True #TODO: check context to see if item s hould be merged into another.
 
+    def _monadish_ensure_special_context_(self):
+        if not hasattr(self,'_monadish_base_context_'):
+            self._monadish_base_context_ = _default_dict_true()
+        if not hasattr(self,'_monadish_special_context_'):
+            self._monadish_special_context_ = _default_dict_dict()
+        if not hasattr(self,'_monadish_context_key_'):
+            self._monadish_context_key_ = ContextVar(f'{self.name}_context_key', default=None)
+            
 
+    @contextmanager
+    def Monadish_Temp(self, key:str, force_merge=False):
+        ''' Create a new temporary env, merge from of contextual if key doesnt already exist. '''
+        self._monadish_ensure_special_context_()
+
+        if key in self._monadish_special_context_.keys() and not force_merge:
+            t = self._monadish_context_key_.set(key)
+            yield
+            self._monadish_context_key_.reset(key)
+            
+        else:
+            o_key = self._monadish_context_key_.get()
+            t = self._monadish_context_key_.set(key)
+            self._monadish_special_context_[key] = self._monadish_special_context_[o_key] | self._monadish_special_context_[key] 
+            yield
+            self._monadish_context_key_.reset(key)
+
+        
 class socket_collection_mixin(_mixin.socket_collection):
     def _monadish_unused_socket_groups(self,claimed_groups:list[socket_group]=None):
         ''' Yield unused potential from structural definition & add number of times cls apears in claimed arg'''
@@ -60,6 +112,12 @@ class node_mixin(_mixin.node):
     def _monadish_prep_intake(self,left_group)->bool|FunctionType:
         ''' Check if left_group can connect to self, left could be tuple[socket],tuple[sg],tuple[node],sg,node, '''
         #TODO Make and Check pool first for patches
+
+    def fork():
+        ''' Copy the node to a new version in the same graph if context is dif
+        Original node becomes disabled in context
+        '''
+        #TODO
 
     @dp_wrap(print_result=True)
     def _monadish_prep_intake_node(self, left_node)->bool|FunctionType:
@@ -394,8 +452,11 @@ def env_merging_test(graph,subgraph):
         node_a1 = node_a1_a1(default_sockets=True)
         node_a2 = node_a1_a1(default_sockets=True)
         node_a1 >> node_a2
+        #delated nodes here should record all commands, store as a series of functions
         with _sg.Monadish_Temp():
-            #Anything changed in here could be auto_merged?
+            #That mutates the nodes in here should be temporary, as long as they are through monadic methods.
+            #If values are being changed, use the node.fork() command to create a local copy.
+            #Delayed nodes here, when set with dnode.set(new_node) run all stored commands.
             ...
     # subgraph.copy_walk(node_a2, dir=('in','side'), filter = lambda s,n,l: subgraph.find_context[n]) #done through auto_merge_target
     # exec graph would do best if I override the copy_walk or add a merge_in 
