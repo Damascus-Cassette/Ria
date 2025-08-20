@@ -276,7 +276,11 @@ class hook_group():
 
             _context = []
             for x in context:
-                gen = x.return_context_generator_object(container,*args,**kwargs)
+                if x.see_args:
+                    gen = x.return_context_generator_object(container,*args,**kwargs)
+                else:
+                    gen = x.return_context_generator_object(container)
+
                 if x.passthrough:
                     args,kwargs = gen.__enter__()
                 else: 
@@ -353,9 +357,11 @@ if __name__ == '__main__':
         def add_c_to_res(self,result):
             return result + add_me.get()
         
-        @hook(event = 'event_1', mode  = 'context')            
-        @hook(event = 'event_2', mode  = 'context')     #EVENT IS BEING PROJECTED TO OTHER HOOKS?
-        def run_with_c_as_3(self):
+        @hook(event = 'event_1', mode  = 'context', see_args=False)            
+        @hook(event = 'event_2', mode  = 'context', see_args=False)     #EVENT IS BEING PROJECTED TO OTHER HOOKS?
+        def run_with_c_as_3(self,other=None):
+            if other: 
+                raise Exception(other) #WEIRD!
             t = add_me.set(3)
             yield                           #Can yield values of args,kwargs if passthrough=True
             add_me.reset(t)
