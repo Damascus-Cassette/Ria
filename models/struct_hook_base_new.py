@@ -67,10 +67,11 @@ class _hook(_shared_class):
             self.hook_siblings   = []
             self.event_siblings  = []
             self.hooked_siblings = []
-        self.hook_siblings.append(self)
+        self.hook_siblings.insert(0,self)
         #Modes must be uniform, inherit if none and raise if different in chain.
         self.func        = func
         self.event       = event
+        print('SELF EVENT:', self.event)
         self.key         = key  if  key          else (func.__module__ + func.__name__)
         self.anon        = anon if (key or anon) else (True)
         self.mode        = mode
@@ -86,36 +87,64 @@ class _hook(_shared_class):
             for x in self.hook_siblings:
                 x.mode = _modes[0]
 
-    def __call__(self, *args, **kwargs):
-        #May require __get__ with functools.partial to get container iirc
-        # return self.func(*args,**kwargs)
-        container : Hookable = args[0]
-        return container._hooks.run_as_hook(self,args,kwargs)
-            #This passthrough allows execution of sibling hooks and posting of events.
+    def __call__(self, container, *args, **kwargs):
+        return container._hooks.run_as_hook(self,container,args,kwargs)
+
 
     @classmethod
-    def wrapper(cls,**kwargs):
+    def wrapper(cls,
+                /,
+                event       :str               ,
+                *,
+                key         :str    = None     ,
+                anon        :bool   = None     ,
+                mode        :str    = None     ,
+                see_args    :bool   = None     ,
+                passthrough :bool   = None     ,
+                )->Self:
+        ''' Produce a hook object
+        :param event:       event label, called on any self hooked funcs where event's are the same 
+        :param key:         When decalared, a non-anon function that is replaced by the next hook uses this key
+        :param anon:        A function that is floating and cannot be overridden
+        :param mode:        in ['pre','post','cache','wrap','context'], determines when & how the hook function is called. Must be the same for a hook stack
+        :param see_args:    if the function is passed in the arguments
+        :param passthrough: if the function's output replaces the input (Mode dependant and requires see_args)
+        :returns: Configured Hook Instance, Nestable
+        :rtype:   _hook
+        '''
+
         def wrapper(func):
-            return wraps(func)(cls(func,**kwargs))
+            print('CREATING HOOK OF,',func, event)
+            return (cls(func,
+            # return wraps(func)(cls(func,      #Wraps was causing a collission when run multiple times on the same func!
+                event       = event       ,
+                key         = key         ,
+                anon        = anon        ,
+                mode        = mode        ,
+                see_args    = see_args    ,
+                passthrough = passthrough ))
         return wrapper
 
-    def run(self,*args,**kwargs):
+    def run(self,container,*args,**kwargs):
         assert self.mode is not None
         assert self.mode != 'context'
 
         if self.see_args and (self.passthrough or self.mode == 'wrap'):
-            res =  self.func(*args,**kwargs)
+            res =  self.func(container,*args,**kwargs)
             assert res is not None
             return res
         elif self.see_args:
-            self.func(*args,**kwargs)
+            self.func(container,*args,**kwargs)
             return args,kwargs
         else: 
             self.func()
         
-    def return_context_generator_object(self,*args,**kwargs):
-        return _enter_exit_hidden(self.func(*args,**kwargs))
+    def return_context_generator_object(self,container,*args,**kwargs):
+        return _enter_exit_hidden(self.func(container,*args,**kwargs))
     
+    def __repr__(self):
+        return f'< Hook Obj: ({self.event} -> {self.__module__}.{self.func.__qualname__}) at {id(self)} >'
+
 class _hooked(_shared_class):
     def __init__(self,
                  func:FunctionType|Self ,
@@ -130,14 +159,11 @@ class _hooked(_shared_class):
             self.hook_siblings   = []
             self.event_siblings  = []
             self.hooked_siblings = []
-        self.hooked_siblings.append(self)
+        self.hooked_siblings.insert(0,self)
         self.func  = func
         self.event = event
 
     def __call__(self,container,*args,**kwargs):
-        #May require __get__ with functools.partial to get container iirc
-        #header is called, not a middle stack item.
-        # container : Hookable = args[0]
         return container._hooks.run_with_hooks(self,container,self.func,args,kwargs)
     
     def __get__(self,instance,owner):
@@ -146,9 +172,19 @@ class _hooked(_shared_class):
         return partial(self.__call__,instance)
 
     @classmethod
-    def wrapper(cls,**kwargs):
+    def wrapper(cls       ,
+                event:str ,
+                )->Self:
+        ''' Returns a _hooked object that executes the wrapped function with relevent object-local hooks
+        :param event: Event key, runs all relevent hooks 
+        :returns: wrapper for hook, nestable
+        :rtype: _hooked
+        '''
         def wrapper(func):
-            return wraps(func)(cls(func,**kwargs))
+ 
+            # return wraps(func)(cls(func,event)) #Wraps was causing a collission when run multiple times on the same func!
+            return cls(func = func,
+                    event = event)
         return wrapper
 
 hook   = _hook  .wrapper
@@ -201,24 +237,23 @@ class hook_group():
 
     def intake(self,obj:_hook|_hooked):
         ''' Views any _hook,_hooked,_event object and determines if already inside and if anon vs not anon. Adds if does have '''
-        for hook   in obj.hook_siblings:   self.intake_hook(hook)
-        for hooked in obj.hooked_siblings: self.intake_hooked(hooked)
+        for hook_inst   in obj.hook_siblings:   self.intake_hook(hook_inst)
+        for hooked_inst in obj.hooked_siblings: self.intake_hooked(hooked_inst)
     
-    def intake_hook(self,hook):
-        if not hook.anon: 
-            ls = self.anon_hooks[hook.event]
-            if hook not in ls: 
-                print('APPENDED HOOK TO ANON')
-                ls.append(hook)
+    def intake_hook(self,hook_inst):
+        if hook_inst.anon: 
+            ls = self.anon_hooks[hook_inst.event]
+            if hook_inst not in ls: 
+                ls.append(hook_inst)
+            print('INTAKING ANON',hook_inst)
             return
-        print('APPENDED HOOK TO NAMED')
-        self.named_hooks[hook.event][hook.key] = hook
+        print('INTAKING',hook_inst)
+        self.named_hooks[hook_inst.event][hook_inst.key] = hook_inst
         
-    def intake_hooked(self,hooked):
-        ls = self.hooked[hooked.event]
-        if hooked not in ls: 
+    def intake_hooked(self,hooked_inst):
+        ls = self.hooked[hooked_inst.event]
+        if hooked_inst not in ls: 
             ls.append(hook)
-            print('ADDED TO HOOKED')
     
     def run_with_hooks(self, hooked_inst:_hooked, container, func, args, kwargs):
         ''' Run a hooked function, runs with the hooks ascociated (also runs events on obj) '''
@@ -241,10 +276,10 @@ class hook_group():
 
             _context = []
             for x in context:
-                gen = x.return_context_generator_object(*args,**kwargs)
+                gen = x.return_context_generator_object(container,*args,**kwargs)
                 if x.passthrough:
                     args,kwargs = gen.__enter__()
-                else:
+                else: 
                     gen.__enter__()
                 _context.append(gen)
 
@@ -257,6 +292,7 @@ class hook_group():
                 assert isinstance(func,FunctionType)
             
             res = func(container,*args,**kwargs)
+            # res = func(container,*args,**kwargs)
 
             for x in post:
                 res = x.run(container, res)
@@ -269,7 +305,7 @@ class hook_group():
 
         return res
 
-    def run_as_hook(self, hook_inst:_hook, args, kwargs):
+    def run_as_hook(self, hook_inst:_hook, *args, **kwargs):
         ''' Hooks are run without triggering hooked atm, Limits the possiblity of recursion '''
         # ''' Runs a function via it's hook (also runs events on obj & calls hooked w/a + throw error with recursive event triggering) '''
         #TODO: Maybe run downstream hooked and post events?
@@ -296,7 +332,6 @@ class Hookable():
 
         # for k,v in cls.__dict__.items():
         for k,v in vars(cls).items():
-            print(k,v)
             if isinstance(v,(_hook,_hooked,_event)):
                 hg.intake(v)
 
@@ -316,34 +351,40 @@ if __name__ == '__main__':
               see_args    = True,           #See args & kwargs or not, default = False
               passthrough = True,)          #If the values will be passed through, which allows for inline changes pre and post.
         def add_c_to_res(self,result):
-            print('CALLED ME')
             return result + add_me.get()
         
-        @hook(event = 'event_1',
-            #   key   = 'event_hook_2',     #If anon, this *cannot* be overriden by inheritance 
-              mode  = 'context')            #Runs as a context_manager. 
+        @hook(event = 'event_1', mode  = 'context')            
+        @hook(event = 'event_2', mode  = 'context')     #EVENT IS BEING PROJECTED TO OTHER HOOKS?
         def run_with_c_as_3(self):
             t = add_me.set(3)
             yield                           #Can yield values of args,kwargs if passthrough=True
             add_me.reset(t)
-    
+
+        @hook(event       = 'event_1' ,
+              mode        = 'pre'     ,
+              see_args    = True,
+              passthrough = False,)
+        def run_pre(self,arg):
+            assert arg == 1
+
+        @hooked(event = 'event_2')
+        def func2(self):
+            assert add_me.get() == 3 
+
     class base(mixin,Hookable):
         
         # @event(event ='postmarker', )
         @hooked(event = 'event_1')
-        def func(self,value:int=None):
+        def func(self,value:int=None,):
+            print(self, value)
             return value
-        
+
     from pprint import pprint
- 
-    pprint(base._hooks.anon_hooks)
-    pprint(base._hooks.named_hooks)
-    pprint(base._hooks.hooked)
+    pprint(('Anon  Hooks:', base._hooks.anon_hooks ))
+    pprint(('Named Hooks:', base._hooks.named_hooks))
+    pprint(('Hooked:', base._hooks.hooked))
 
     b = base()
-    print (base.func.__class__) 
-    # print (b.func.__class__) 
     assert isinstance(base.func,_hooked) 
-    result = b.func(1)
-    print(result)
-    assert 4 == result
+    assert 4 == b.func(1)
+    b.func2()
