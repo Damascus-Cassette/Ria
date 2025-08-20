@@ -14,15 +14,14 @@ from copy import copy
 from inspect import isgeneratorfunction
 
 class _enter_exit_hidden():
-    def __init__(self,factory):
-        self.factory = factory
+    def __init__(self,generator):
+        self.generator = generator
     def __enter__(self):
-        self.first_value =  next(self.factory)
-        return self.first_value
+        return next(self.generator)
     def __exit__(self,*args,**kwargs):
         # StopIteration
         try:
-            next(self.factory)
+            next(self.generator)
         except StopIteration :
             pass
         except: 
@@ -309,12 +308,13 @@ if __name__ == '__main__':
 
     add_me = ContextVar('addme',default=1)
     class mixin(Hookable):
+
         @hook(event       = 'event_1',      #Hook event name. (Despite 'event' term this is always local to object)
               key         = 'event_hook_1', #Non-Anonomous key for replacing this function. Required if anon, not anon recorded as module + funcname
               anon        = False,          #If a hook is bound to a namespace or not for replacing it
               mode        = 'post',         #Timing of function (cache, pre, post, wrap, context)
-              see_args    = True,          #See args & kwargs or not, default = False
-              passthrough = True,)         #If the values will be passed through, which allows for inline changes pre and post.
+              see_args    = True,           #See args & kwargs or not, default = False
+              passthrough = True,)          #If the values will be passed through, which allows for inline changes pre and post.
         def add_c_to_res(self,result):
             print('CALLED ME')
             return result + add_me.get()
@@ -329,6 +329,7 @@ if __name__ == '__main__':
     
     class base(mixin,Hookable):
         
+        # @event(event ='postmarker', )
         @hooked(event = 'event_1')
         def func(self,value:int=None):
             return value
