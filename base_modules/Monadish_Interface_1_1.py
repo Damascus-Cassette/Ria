@@ -51,52 +51,57 @@ class node_collection_mixin(_mixin.node_collection):
     @hook('new_item','post')
     def _hook_special_monadish(self,item):
         ''' Ensure that a node added inside of a context sets the correct flags for actions that modify the graph to do so in a context not submitted to the main graph '''
-        if (ck := getattr((sg:=item.context.subgraph),'_monadish_context_key',None)) is not None:
-            if k:=ck.get():
-                if item not in sg._monadish_special_context_[k].keys():
-                    sg._monadish_special_context_[item] = True
-                    sg._monadish_base_context_[item]    = False
+        sg = item.context.subgraph
+        if ck := getattr(sg,'_monadish_context_key_',None):
+            if (k:=ck.get()) != ('main',):
+                sg._monadish_special_context[k[-1]][item] = True
+                sg._monadish_special_context[k[ 0]][item] = False
                 
 
 class subgraph_mixin(_mixin.subgraph):
-    _monadish_context_key_     : ContextVar 
-    _monadish_base_context_    : _default_dict_true
     _monadish_special_context_ : _default_dict_dict 
-        #None of these can be shared across instances, as copy out could copy into a special context
+    _monadish_context_key_     : ContextVar 
 
     def _Monadish_Merge_Filter(self, othergraph, node, link):
-        return True #TODO: check context to see if item s hould be merged into another.
+        return self.Monadish_Context_Item_Enabled[node]
+        # return True #TODO: check context to see if item s hould be merged into another.
 
     def _monadish_ensure_special_context_(self):
-        if not hasattr(self,'_monadish_base_context_'):
-            self._monadish_base_context_ = _default_dict_true()
         if not hasattr(self,'_monadish_special_context_'):
-            self._monadish_special_context_ = _default_dict_dict()
+            self._monadish_special_context_         = _default_dict_dict()
+            self._monadish_special_context_['base'] = _default_dict_true()
         if not hasattr(self,'_monadish_context_key_'):
-            self._monadish_context_key_ = ContextVar(f'{self.name}_context_key', default=None)
+            self._monadish_context_key_ = ContextVar(f'{self.name}_context_key', default=('base',))
             
+
+    def Monadish_Merge_Contexts(self,key1,key2):
+        ''' Merge into key1 '''
+        a = self._monadish_special_context_[key1]
+        b = self._monadish_special_context_[key2]
+        self._monadish_special_context_[key1] = b|a
+
+    def Monadish_Context_Item_Enabled(self,item)->bool:
+        for k in self._monadish_context_key_.get():
+            res = self._monadish_special_context_.get()[k][item]
+            if res is not None: 
+                return res
+        raise Exception('Missing "base" key ')
 
     @contextmanager
-    def Monadish_Temp(self, key:str, force_merge=False, auto_delete=True):
-        ''' Create a new temporary env, merge from of contextual if key doesnt already exist. '''
-        ''' TODO Consider better way of handling nested_contexts instead of merging (consider 'current' chain, check in each backwards?) '''
+    def Monadish_Temp(self, key:str):
+        ''' Contexts exist as a diff against the contexts, thus nested context's just iterate over keys
+        To merge contexts, use Monadish_Merge_Contexts '''
         
         self._monadish_ensure_special_context_()
-        o_key = self._monadish_context_key_.get()
+        ck = self._monadish_context_key_
+        assert key not in ck.get()
+        c = ck.get()=+(key,)
+        t = ck.set(c)
 
+        yield key
 
-        if key in self._monadish_special_context_.keys() and not force_merge:
-            t = self._monadish_context_key_.set(key)
-            yield
-            self._monadish_context_key_.reset(key)
-            
-        else:
-            t = self._monadish_context_key_.set(key)
-            self._monadish_special_context_[key] = self._monadish_special_context_[o_key] | self._monadish_special_context_[key] 
-            yield
-            self._monadish_context_key_.reset(key)
-        if auto_delete and not o_key:
-            del self._monadish_special_context_[key]
+        ck.reset(t)
+
 
         
 class socket_collection_mixin(_mixin.socket_collection):
