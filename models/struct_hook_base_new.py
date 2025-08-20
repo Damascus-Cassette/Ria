@@ -40,9 +40,12 @@ def _validate_op_chain(item,hook_event_key):
     yield
     t = _operation_chain.set(tp)
 
-class _unset():...
 
+
+class _unset():...
 class _shared_class():...
+
+class _event(_shared_class):...
 
 class _hook(_shared_class):
     def __init__(self ,
@@ -97,7 +100,7 @@ class _hook(_shared_class):
             return wraps(func)(cls(func,**kwargs))
         return wrapper
 
-    def run(self,args,kwargs):
+    def run(self,*args,**kwargs):
         assert self.mode is not None
         assert self.mode != 'context'
 
@@ -139,6 +142,8 @@ class _hooked(_shared_class):
         return container._hooks.run_with_hooks(self,container,self.func,args,kwargs)
     
     def __get__(self,instance,owner):
+        if instance is None:
+            return self
         return partial(self.__call__,instance)
 
     @classmethod
@@ -179,7 +184,10 @@ class hook_group():
             #cross-inheritance hooks, only added to.
 
     def merge_in(self,other:Self):
-        self.hooked      = other.hooked | self.hooked
+        new = _def_dict()
+        for k,v in (other.hooked | self.hooked).items():
+            new[k]=v
+        self.hooked = new
         # self.named_hooks = other.named_hooks | self.named_hooks 
     
         for k,v in other.named_hooks.items():
@@ -194,21 +202,24 @@ class hook_group():
 
     def intake(self,obj:_hook|_hooked):
         ''' Views any _hook,_hooked,_event object and determines if already inside and if anon vs not anon. Adds if does have '''
-        for hook   in obj.hook_siblings:   self.intake_hook
-        for hooked in obj.hooked_siblings: self.intake_hooked
+        for hook   in obj.hook_siblings:   self.intake_hook(hook)
+        for hooked in obj.hooked_siblings: self.intake_hooked(hooked)
     
     def intake_hook(self,hook):
         if not hook.anon: 
             ls = self.anon_hooks[hook.event]
             if hook not in ls: 
+                print('APPENDED HOOK TO ANON')
                 ls.append(hook)
             return
+        print('APPENDED HOOK TO NAMED')
         self.named_hooks[hook.event][hook.key] = hook
         
     def intake_hooked(self,hooked):
         ls = self.hooked[hooked.event]
-        if hook not in ls: 
+        if hooked not in ls: 
             ls.append(hook)
+            print('ADDED TO HOOKED')
     
     def run_with_hooks(self, hooked_inst:_hooked, container, func, args, kwargs):
         ''' Run a hooked function, runs with the hooks ascociated (also runs events on obj) '''
@@ -225,18 +236,21 @@ class hook_group():
 
             for x in cache:
                 #TODO: how should cache retrieval interact with events?
-                res = x.run(container, args,kwargs)
+                res = x.run(container, *args, **kwargs)
                 if res is not _unset:
                     return res
 
             _context = []
             for x in context:
                 gen = x.return_context_generator_object(*args,**kwargs)
-                args,kwargs = gen.__enter__()
+                if x.passthrough:
+                    args,kwargs = gen.__enter__()
+                else:
+                    gen.__enter__()
                 _context.append(gen)
 
             for x in pre:
-                args,kwargs = x.run(container, args,kwargs)
+                args,kwargs = x.run(container, *args,**kwargs)
             
             func = hooked_inst.func
             for x in wrap:
@@ -263,10 +277,6 @@ class hook_group():
 
         return hook_inst.func(*args,**kwargs)
 
-    # def __get__(self, instance, owner):
-    #     if instance is None: 
-    #         return self
-    #     return partial(self,instance)
     
     def split_hooks_to_modes(self,hooks)->tuple[list[_hook]]:
         items = _def_dict()
@@ -282,13 +292,14 @@ class Hookable():
 
         hg = hook_group()
         if (a:=getattr(cls, '_hooks',None)) is not None:
-            hg.merge(a)
+            hg.merge_in(a)
         cls._hooks = hg
 
-        for k,v in cls.__dict__.items():
-            if issubclass(v.__class__,_shared_class):
+        # for k,v in cls.__dict__.items():
+        for k,v in vars(cls).items():
+            print(k,v)
+            if isinstance(v,(_hook,_hooked,_event)):
                 hg.intake(v)
-
 
 # def event_post():...
 # def event_subscribe():...
@@ -297,7 +308,7 @@ from contextvars import ContextVar
 if __name__ == '__main__':
 
     add_me = ContextVar('addme',default=1)
-    class mixin():
+    class mixin(Hookable):
         @hook(event       = 'event_1',      #Hook event name. (Despite 'event' term this is always local to object)
               key         = 'event_hook_1', #Non-Anonomous key for replacing this function. Required if anon, not anon recorded as module + funcname
               anon        = False,          #If a hook is bound to a namespace or not for replacing it
@@ -316,7 +327,7 @@ if __name__ == '__main__':
             yield                           #Can yield values of args,kwargs if passthrough=True
             add_me.reset(t)
     
-    class base(mixin, Hookable):
+    class base(mixin,Hookable):
         
         @hooked(event = 'event_1')
         def func(self,value:int=None):
@@ -328,6 +339,10 @@ if __name__ == '__main__':
     pprint(base._hooks.named_hooks)
     pprint(base._hooks.hooked)
 
-    result =  base().func(1)
+    b = base()
+    print (base.func.__class__) 
+    # print (b.func.__class__) 
+    assert isinstance(base.func,_hooked) 
+    result = b.func(1)
     print(result)
     assert 4 == result
