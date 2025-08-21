@@ -214,6 +214,19 @@ class _hooked(_shared_class):
 hook_trigger = _hooked.wrapper
 #endregion
 
+######## EVENT TRIGGERS ########
+#region
+class _event_sub(_shared_class):    ...
+class _event_trigger(_shared_class):...
+def event_sub(*args,**kwargs):
+    def func(func): 
+        return func
+    return func
+def event_trigger(*args,**kwargs):
+    def func(func): 
+        return func
+    return func
+
 
 ######## HOOKS COLLECTION ########
 #region
@@ -351,7 +364,7 @@ class Hookable():
 
         # for k,v in cls.__dict__.items():
         for k,v in vars(cls).items():
-            if isinstance(v,(_hook,_hooked,_event)):
+            if isinstance(v,(_hook,_hooked,_event_sub,_event_trigger)):
                 hg.intake(v)
 
 #endregion
