@@ -53,9 +53,9 @@ class _hook(_shared_class):
                 event       :str               ,
                 *,
                 key         :str    = None     ,
-                anon        :bool   = None     ,
                 mode        :str    = None     ,
-                see_args    :bool   = False    ,
+                anon        :bool   = None     ,
+                see_args    :bool   = True     ,
                 passthrough :bool   = False    ,
                 ):
         if issubclass(func.__class__,_shared_class):
@@ -73,8 +73,8 @@ class _hook(_shared_class):
         self.event       = event
         print('SELF EVENT:', self.event)
         self.key         = key  if  key          else (func.__module__ + func.__name__)
-        self.anon        = anon if (key or anon) else (True)
-        self.mode        = mode
+        self.anon        = anon if (key or (anon is not None)) else (True)
+        self.mode        = mode 
         self.see_args    = see_args
         self.passthrough = passthrough
         if passthrough and not see_args: 
@@ -187,8 +187,8 @@ class _hooked(_shared_class):
                     event = event)
         return wrapper
 
-hook   = _hook  .wrapper
-hooked = _hooked.wrapper
+hook         = _hook  .wrapper
+hook_trigger = _hooked.wrapper
 
 class _def_dict(dict):
     def __missing__(self,key):
@@ -372,14 +372,14 @@ if __name__ == '__main__':
         def run_pre(self,arg):
             assert arg == 1
 
-        @hooked(event = 'event_2')
+        @hook_trigger(event = 'event_2')
         def func2(self):
             assert add_me.get() == 3 
 
     class base(mixin,Hookable):
         
         # @event(event ='postmarker', )
-        @hooked(event = 'event_1')
+        @hook_trigger(event = 'event_1')
         def func(self,value:int=None,):
             print(self, value)
             return value
@@ -388,11 +388,12 @@ if __name__ == '__main__':
         @hook(event = 'cache_test', mode='cache', see_args=True, passthrough=True)
         def _func3(self, value:str):
             if value == 'a':
+
                 return 'AA'
             else: 
                 return _unset
 
-        @hooked(event = 'cache_test')
+        @hook_trigger(event = 'cache_test')
         def func3(self,value:str):
             assert value != 'a'
             return value.capitalize()
