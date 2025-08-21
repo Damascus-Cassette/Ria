@@ -214,6 +214,7 @@ class _hooked(_shared_class):
 hook_trigger = _hooked.wrapper
 #endregion
 
+
 ######## EVENT TRIGGERS ########
 #region
 class _event_sub(_shared_class):    ...
@@ -226,6 +227,8 @@ def event_trigger(*args,**kwargs):
     def func(func): 
         return func
     return func
+
+#endregion
 
 
 ######## HOOKS COLLECTION ########
