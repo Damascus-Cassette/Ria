@@ -37,7 +37,7 @@ def _validate_op_chain(item,hook_event_key):
     tp += ((item,hook_event_key),)
     t = _operation_chain.set(tp)
     yield
-    t = _operation_chain.set(tp)
+    _operation_chain.reset(t)
 
 
 
@@ -311,8 +311,7 @@ class hook_group():
 
     def run_as_hook(self, hook_inst:_hook, *args, **kwargs):
         ''' Hooks are run without triggering hooked atm, Limits the possiblity of recursion '''
-        # ''' Runs a function via it's hook (also runs events on obj & calls hooked w/a + throw error with recursive event triggering) '''
-        #TODO: Maybe run downstream hooked and post events?
+        #TODO: Maybe run sibling_hooked and sibling_events?
 
         return hook_inst.func(*args,**kwargs)
 
@@ -357,8 +356,8 @@ if __name__ == '__main__':
         def add_c_to_res(self,result):
             return result + add_me.get()
         
-        @hook(event = 'event_1', mode  = 'context', see_args=False)            
-        @hook(event = 'event_2', mode  = 'context', see_args=False)     #EVENT IS BEING PROJECTED TO OTHER HOOKS?
+        @hook(event = 'event_1', mode  = 'context')            
+        @hook(event = 'event_2', mode  = 'context')     #EVENT IS BEING PROJECTED TO OTHER HOOKS?
         def run_with_c_as_3(self,other=None):
             if other: 
                 raise Exception(other) #WEIRD!
@@ -384,6 +383,21 @@ if __name__ == '__main__':
         def func(self,value:int=None,):
             print(self, value)
             return value
+        
+
+        @hook(event = 'cache_test', mode='cache', see_args=True, passthrough=True)
+        def _func3(self, value:str):
+            if value == 'a':
+                # print('CAKKED CACHE') 
+                return 'AA'
+            else: 
+                return _unset
+
+        @hooked(event = 'cache_test')
+        def func3(self,value:str):
+            assert value != 'a'
+            return value.capitalize()
+             
 
     from pprint import pprint
     pprint(('Anon  Hooks:', base._hooks.anon_hooks ))
@@ -394,3 +408,6 @@ if __name__ == '__main__':
     assert isinstance(base.func,_hooked) 
     assert 4 == b.func(1)
     b.func2()
+
+    assert 'AA' == b.func3('a')
+    assert 'B' == b.func3('b')
