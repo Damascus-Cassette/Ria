@@ -388,7 +388,6 @@ if __name__ == '__main__':
         @hook(event = 'cache_test', mode='cache', see_args=True, passthrough=True)
         def _func3(self, value:str):
             if value == 'a':
-                # print('CAKKED CACHE') 
                 return 'AA'
             else: 
                 return _unset
