@@ -276,8 +276,10 @@ class hook_group():
 
     def intake(self,obj:_hook|_hooked):
         ''' Views any _hook,_hooked,_event object and determines if already inside and if anon vs not anon. Adds if does have '''
+        assert (obj in obj.hook_siblings) or (obj in obj.hooked_siblings) or (obj in obj.event_siblings)
         for hook_inst   in obj.hook_siblings:   self.intake_hook(hook_inst)
         for hooked_inst in obj.hooked_siblings: self.intake_hooked(hooked_inst)
+        # for event_inst  in obj.event_siblings:  self.intake_event(event_inst)
     
     def intake_hook(self,hook_inst):
         assert hook_inst.mode in self.Allowed_Modes
@@ -384,7 +386,7 @@ class Hookable():
             #     print('MERGING IN _HOOK ONTO', c.__name__)
             hg.merge_in(x)
             if getattr(cls,'_hook_debug_temp_loud_',False):
-                print(x)
+                print(f'MERGING HOOKS IN {cls.__qualname__} <==',x)
 
         # if (a:=getattr(cls, '_hooks',None)) is not None:
         #     hg.merge_in(a)
@@ -392,10 +394,11 @@ class Hookable():
 
         for k in dir(cls):
             v = getattr(cls,k)
-            # if getattr(cls,'_hook_debug_temp_loud_',False):
-            #     print(v)
+            if getattr(cls,'_hook_debug_temp_loud_',False):
+                print(k,' : ',v)
             if isinstance(v,(_hook,_hooked,_event_sub,_event_trigger)):
                 hg.intake(v)
+                print('INTOOK', k)
 
 #endregion
 

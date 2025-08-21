@@ -134,15 +134,17 @@ def hook_test(graph,subgraph):
     # print(subgraph.nodes.new)
     from pprint import pprint
 
-    
+    print('-'*20)
+    subgraph.nodes.__hooks_initialize__()
+
     print('Anon Hooks:')
-    pprint( subgraph.nodes._hooks.anon_hooks)
+    pprint(subgraph.nodes._hooks.anon_hooks)
 
     print('Named Hooks:')
     pprint(subgraph.nodes._hooks.named_hooks)
 
     print('Hooked:')
-    pprint(   subgraph.nodes._hooks.named_hooks)
+    pprint(subgraph.nodes._hooks.named_hooks)
 
     raise Exception('')
 
