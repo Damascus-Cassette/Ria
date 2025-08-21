@@ -88,7 +88,7 @@ class _hook(_shared_class):
         #Modes must be uniform, inherit if none and raise if different in chain.
         self.func        = func
         self.event       = event
-        print('SELF EVENT:', self.event)
+        # print('SELF EVENT:', self.event)
         self.key         = key  if  key          else (func.__module__ + func.__name__)
         self.anon        = anon if (key or (anon is not None)) else (True)
         self.mode        = mode 
@@ -131,7 +131,7 @@ class _hook(_shared_class):
         '''
 
         def wrapper(func):
-            print('CREATING HOOK OF,',func, event)
+            # print('CREATING HOOK OF,',func, event)
             return (cls(func,
             # return wraps(func)(cls(func,      #Wraps was causing a collission when run multiple times on the same func!
                 event       = event       ,
@@ -188,6 +188,14 @@ class _hooked(_shared_class):
         self.event = event
 
     def __call__(self,container,*args,**kwargs):
+        if not hasattr(container,'_hooks'):
+            # raise Exception(container.__class__.mro())
+            # raise Exception(container.__class__.__bases__)
+            raise Exception(hasattr(container,'__hooks_initialize__'))
+            
+            print(vars(container))
+            raise Exception('')
+            ...
         return container._hooks.run_with_hooks(self,container,self.func,args,kwargs)
     
     def __get__(self,instance,owner):
@@ -277,9 +285,9 @@ class hook_group():
             ls = self.anon_hooks[hook_inst.event]
             if hook_inst not in ls: 
                 ls.append(hook_inst)
-            print('INTAKING ANON',hook_inst)
+            # print('INTAKING ANON',hook_inst)
             return
-        print('INTAKING',hook_inst)
+        # print('INTAKING',hook_inst)
         self.named_hooks[hook_inst.event][hook_inst.key] = hook_inst
         
     def intake_hooked(self,hooked_inst):
@@ -357,12 +365,24 @@ class hook_group():
 class Hookable():
     ''' Mixin class for enabling hooks on all classes, must also be on class mixing into new cls '''
     _hooks : hook_group
+
     def __init_subclass__(cls):
         ''' Create new hooks, integrate local with inherited or create from nothing if not here'''
+        cls.__hooks_initialize__()
+        super().__init_subclass__()
 
+    @classmethod
+    def __hooks_initialize__(cls):
         hg = hook_group()
-        if (a:=getattr(cls, '_hooks',None)) is not None:
-            hg.merge_in(a)
+        parent_hooks = ((getattr(x,'_hooks'),cls) for x in cls.__bases__ if hasattr(x,'_hooks'))
+        
+        for x,c in parent_hooks:
+            # if not 'socket' in c.__name__ and not 'S_GROUP' in c.__name__:
+            #     print('MERGING IN _HOOK ONTO', c.__name__)
+            hg.merge_in(x)
+
+        # if (a:=getattr(cls, '_hooks',None)) is not None:
+        #     hg.merge_in(a)
         cls._hooks = hg
 
         # for k,v in cls.__dict__.items():
@@ -381,7 +401,11 @@ if __name__ == '__main__':
     from contextvars import ContextVar
 
     add_me = ContextVar('addme',default=1)
-    class mixin(Hookable):
+    class _test():
+        def __init_subclass__(cls):
+            ...
+            # return super().__init_subclass__()
+    class mixin(Hookable,_test):
 
         @hook(event       = 'event_1',      #Hook event name. (Despite 'event' term this is always local to object)
               key         = 'event_hook_1', #Non-Anonomous key for replacing this function. Required if anon, not anon recorded as module + funcname
@@ -413,7 +437,6 @@ if __name__ == '__main__':
         # @event_publisher(event ='postmarker', )
         @hook_trigger(event = 'event_1')
         def func(self,value:int=None,):
-            print(self, value)
             return value
         
         # run_with_c_as_3 = hook(event = 'event_2', mode  = 'context')(mixin.run_with_c_as_3)
@@ -431,9 +454,9 @@ if __name__ == '__main__':
              
 
     from pprint import pprint
-    pprint(('Anon  Hooks:', base._hooks.anon_hooks ))
-    pprint(('Named Hooks:', base._hooks.named_hooks))
-    pprint(('Hooked:', base._hooks.hooked))
+    # pprint(('Anon  Hooks:', base._hooks.anon_hooks ))
+    # pprint(('Named Hooks:', base._hooks.named_hooks))
+    # pprint(('Hooked:', base._hooks.hooked))
 
     b = base()
     assert isinstance(base.func,_hooked) 

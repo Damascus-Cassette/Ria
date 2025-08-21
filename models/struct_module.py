@@ -28,13 +28,14 @@ class _item_base(Hookable):
         #use this node if x modules IDs and version are enabled
 
     def __init_subclass__(cls):
-        assert getattr(cls, 'UID'    , None) is not None
-        assert getattr(cls, 'Version', None) is not None
-        assert getattr(cls, 'Label'  , None) is not None
-        assert getattr(cls, 'Desc'  ,  None) is not None
+        if getattr(cls,'_module_verify_',False):
+            assert getattr(cls, 'UID'    , None) is not None
+            assert getattr(cls, 'Version', None) is not None
+            assert getattr(cls, 'Label'  , None) is not None
+            assert getattr(cls, 'Desc'  ,  None) is not None
 
+            cls._Version  = VersionType(cls.Version)
 
-        cls._Version  = VersionType(cls.Version)
         # cls.Version_R = cls._Version.release
         # cls.Version   = cls._Version.release
 
@@ -106,6 +107,7 @@ class module():
 
         for x in getattr(cls,'_module_tests_',[]):
             x.intake_module(cls)
+        super.__init_subclass__()
 
     @classmethod
     def __module_set_components__(cls,type,attr)->None:

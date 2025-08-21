@@ -1,8 +1,9 @@
 ''' Atomic focused rewrite to monadish, with testing of each indivdual action '''
 
-from ..models.struct_module import module, module_test
-from ..models.base_node     import socket_group
-from .Execution_Types       import _mixin, item
+from ..models.struct_module    import module, module_test
+from ..models.base_node        import socket_group
+from .Execution_Types          import _mixin, item
+from ..models.struct_hook_base import hook
 # from .Execution_Types       import socket_shapes as st
 
 from typing                 import Any, Self, TypeAlias,AnyStr,Type
@@ -48,7 +49,8 @@ def _default_dict_dict(dict):
 
 class node_collection_mixin(_mixin.node_collection):
 
-    @hook('new_item','post')
+
+    @hook(event='new_item', mode='post')
     def _hook_special_monadish(self,item):
         ''' Ensure that a node added inside of a context sets the correct flags for actions that modify the graph to do so in a context not submitted to the main graph '''
         sg = item.context.subgraph
@@ -95,7 +97,8 @@ class subgraph_mixin(_mixin.subgraph):
         self._monadish_ensure_special_context_()
         ck = self._monadish_context_key_
         assert key not in ck.get()
-        c = ck.get()=+(key,)
+        current_context_value = ck.get()
+        c = current_context_value=+(key,)
         t = ck.set(c)
 
         yield key

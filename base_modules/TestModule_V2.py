@@ -14,9 +14,13 @@ class main(module):
     
     
     class node_collection_mixin(_mixin.node_collection):
-        @hook
-        def new(self):
-            print('DAS SCREEMING CHICKEN')
+        # def __init_subclass__(cls):
+        #     super().__init_subclass__()
+        #     print(cls._hooks.anon_hooks)
+        #     raise Exception('')
+        @hook(event='new_item', mode='post')
+        def _new(self,item):
+            raise Exception('DAS SCREEMING CHICKEN')
         
 
     Deps = [

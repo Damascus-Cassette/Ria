@@ -5,7 +5,7 @@ Subtypes should be able to Merge left when Mergable_Base = True
 
 # from .struct_merge_tools import merge_wrapper
 from .struct_context   import context,_context, context_flags
-from .struct_hook_base import hooked
+from .struct_hook_base import hook_trigger, Hookable
 
 from collections         import OrderedDict
 from typing              import Self,Type,Any
@@ -84,7 +84,7 @@ class collection_base[T=item_base]():
         self.context = self.context(self)
         self._data   = OrderedDict()
 
-    @hooked('new')
+    @hook_trigger(event = 'new_item')
     def new(self,key,label=None,*args,**kwargs):
         key = self.ensure_unique_key(key)
         if label is None: label = key
@@ -98,6 +98,7 @@ class collection_base[T=item_base]():
         self._context_new_item_(inst)
         return inst
 
+    @hook_trigger(event = 'intake_item')
     def __setitem__(self,key,item):
         ''' Replace key if mergable or generate new key and move'''
         assert self.item_verify_compatable(item)
@@ -117,6 +118,8 @@ class collection_base[T=item_base]():
 
         self._data[key] = item
         self._context_new_item_(item)
+
+        return item
 
     def __setmerge__(self,key,item):
         ''' add/merge local w/a or discard incoming '''
@@ -190,6 +193,7 @@ class collection_base[T=item_base]():
             res.append(self.free(x,safe=safe))
         return tuple(res)
 
+    @hook_trigger(event = 'new_item')
     def copy(self,item, safe=True, keep=True,return_memo=False,memo=None)->T:                              
         ''' deepcopy item and return the copy. 
         keep : 'append' the copy to this collection. (Ensures key name is unique if kept)
@@ -224,6 +228,7 @@ class collection_base[T=item_base]():
             return tuple(res), memo
         return tuple(res)
 
+    @hook_trigger(event = 'new_item')
     def copy_in(self, item,col2:Self=None, local_copy=False,return_memo=False,memo=None):
         ''' Copy item from secondary collection. Must be compatable with self.base(s)
         local_copy  : use this collection's copy method 
@@ -273,7 +278,7 @@ class subcollection_base[T](collection_base):
         values = sorted([(i,k,v) for i,(k,v) in enumerate(self._data.items()) if self._filter(i,k,v)],key = self._order)
         res    = OrderedDict({k:v for i,k,v in values})
         return res
-    @hooked('new')
+    @hook_trigger(event = 'new_item')
     def new(self, *args, suppress_filter_check = False,**kwargs,)->T:
         '''In a subcollection an item'''
         inst = super().new(*args,**kwargs)
@@ -305,7 +310,8 @@ class typed_collection_base[T](collection_base):
             return item in Bases.keys()
         else:
             return item.__class__ in Bases.values()
-    @hooked('new')
+        
+    @hook_trigger(event = 'new_item')
     def new(self, type:str|Type, key, label=None, *args,**kwargs):
         Bases = getattr(self,'Bases',{})
         assert self.item_verify_compatable(type)
@@ -345,7 +351,7 @@ class typed_subcollection_base[T](typed_collection_base):
         values = sorted([(i,k,v) for i,(k,v) in enumerate(self._data.items()) if self._filter(i,k,v)],key = self._order)
         res    = OrderedDict({k:v for i,k,v in values})
         return res
-    @hooked('new')
+    @hook_trigger(event = 'new_item')
     def new(self, *args, suppress_filter_check = False,**kwargs,):
         '''In a subcollection an item'''
         inst = super().new(*args,**kwargs)

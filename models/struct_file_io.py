@@ -18,6 +18,7 @@ class defered_archtype:
 
     def __init_subclass__(cls):
         cls.types = []
+        super().__init_subclass__()
 
 def collapse_type_chain(ty:list)->list:
     res = []
@@ -403,6 +404,7 @@ class BaseModel:
     
     def __init_subclass__(cls):
         cls.__io_setup__()
+        super().__init_subclass__()
         
     @classmethod
     def __io_setup__(cls):
