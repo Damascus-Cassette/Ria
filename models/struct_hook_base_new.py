@@ -9,9 +9,27 @@ from types       import FunctionType
 from functools   import wraps
 from contextvars import ContextVar
 from contextlib  import contextmanager
-from copy import copy
+from copy        import copy
+from functools   import partial
 
-from inspect import isgeneratorfunction
+# from inspect import isgeneratorfunction
+
+######## UTILITIES ########
+#region
+class _unset():...
+class _shared_class():...
+
+class _def_dict(dict):
+    def __missing__(self,key):
+        ls = []
+        self[key] = ls
+        return ls
+
+class _def_dict_dict(dict):
+    def __missing__(self,key):
+        ls = {}
+        self[key] = ls
+        return ls
 
 class _enter_exit_hidden():
     def __init__(self,generator):
@@ -39,12 +57,11 @@ def _validate_op_chain(item,hook_event_key):
     yield
     _operation_chain.reset(t)
 
+#endregion
 
 
-class _unset():...
-class _shared_class():...
-
-class _event(_shared_class):...
+######## HOOKS INDV ########
+#region
 
 class _hook(_shared_class):
     def __init__(self ,
@@ -82,7 +99,7 @@ class _hook(_shared_class):
         
         _modes = list(set([x.mode for x in self.hook_siblings if x.mode is not None]))
         if len(_modes)>1:
-            raise Exception('HOOK SYSTEM: hook chain modes are not uniformly!')
+            raise Exception('HOOK SYSTEM: hook chain modes must be uniform!')
         elif len(_modes)==1:
             for x in self.hook_siblings:
                 x.mode = _modes[0]
@@ -99,7 +116,7 @@ class _hook(_shared_class):
                 key         :str    = None     ,
                 anon        :bool   = None     ,
                 mode        :str    = None     ,
-                see_args    :bool   = None     ,
+                see_args    :bool   = True     ,
                 passthrough :bool   = None     ,
                 )->Self:
         ''' Produce a hook object
@@ -145,6 +162,13 @@ class _hook(_shared_class):
     def __repr__(self):
         return f'< Hook Obj: ({self.event} -> {self.__module__}.{self.func.__qualname__}) at {id(self)} >'
 
+hook         = _hook  .wrapper
+#endregion
+
+
+######## HOOKS TRIGGERS ########
+#region
+
 class _hooked(_shared_class):
     def __init__(self,
                  func:FunctionType|Self ,
@@ -187,27 +211,21 @@ class _hooked(_shared_class):
                     event = event)
         return wrapper
 
-hook         = _hook  .wrapper
 hook_trigger = _hooked.wrapper
+#endregion
 
-class _def_dict(dict):
-    def __missing__(self,key):
-        ls = []
-        self[key] = ls
-        return ls
-class _def_dict_dict(dict):
-    def __missing__(self,key):
-        ls = {}
-        self[key] = ls
-        return ls
 
-from functools import partial
+######## HOOKS COLLECTION ########
+#region
+
 class hook_group():
     ''' Namespace and Anon merging on inheritance via a construction function, plus execution of hooks '''
     
     anon_hooks   : _def_dict[list[hook]]
     named_funcs  : dict[str, _shared_class]
     hooked       : _def_dict[list]
+
+    Allowed_Modes = ('pre','post','cache','wrap','context')
 
     def __init__(self):
         self.hooked       = _def_dict()
@@ -223,7 +241,6 @@ class hook_group():
         for k,v in (other.hooked | self.hooked).items():
             new[k]=v
         self.hooked = new
-        # self.named_hooks = other.named_hooks | self.named_hooks 
     
         for k,v in other.named_hooks.items():
             self.named_hooks[k] = v | self.named_hooks[k] 
@@ -231,9 +248,7 @@ class hook_group():
         for k,v in other.anon_hooks.items():
             #Unknown: run parent hooks or subclass hooks first?
             self.anon_hooks[k].extend( [x for x in v if not x in self.anon_hooks[k]] ) 
-            # ls = [x for x in v if not x in self.anon_hooks[k]]
-            # ls.extend(self.anon_hooks[k])
-            # self.anon_hooks[k] = ls
+
 
     def intake(self,obj:_hook|_hooked):
         ''' Views any _hook,_hooked,_event object and determines if already inside and if anon vs not anon. Adds if does have '''
@@ -241,6 +256,7 @@ class hook_group():
         for hooked_inst in obj.hooked_siblings: self.intake_hooked(hooked_inst)
     
     def intake_hook(self,hook_inst):
+        assert hook_inst.mode in self.Allowed_Modes
         if hook_inst.anon: 
             ls = self.anon_hooks[hook_inst.event]
             if hook_inst not in ls: 
@@ -322,7 +338,6 @@ class hook_group():
             items[x.mode].append(x)
         return items['cache'],items['pre'], items['post'], items['wrap'], items['context']
         
-
 class Hookable():
     _hooks : hook_group
     def __init_subclass__(cls):
@@ -338,37 +353,36 @@ class Hookable():
             if isinstance(v,(_hook,_hooked,_event)):
                 hg.intake(v)
 
-# def event_post():...
-# def event_subscribe():...
+#endregion
 
-from contextvars import ContextVar
+
+######## LOCAL TESTING ########
+#region
+
+
 if __name__ == '__main__':
+    from contextvars import ContextVar
 
     add_me = ContextVar('addme',default=1)
     class mixin(Hookable):
 
         @hook(event       = 'event_1',      #Hook event name. (Despite 'event' term this is always local to object)
               key         = 'event_hook_1', #Non-Anonomous key for replacing this function. Required if anon, not anon recorded as module + funcname
-              anon        = False,          #If a hook is bound to a namespace or not for replacing it
+              anon        = False,          #If a hook is bound to a namespace or not for replacing it, auto True if key presented.
               mode        = 'post',         #Timing of function (cache, pre, post, wrap, context)
-              see_args    = True,           #See args & kwargs or not, default = False
+            #   see_args    = True,           #See args & kwargs or not, default = True
               passthrough = True,)          #If the values will be passed through, which allows for inline changes pre and post.
         def add_c_to_res(self,result):
             return result + add_me.get()
         
-        @hook(event = 'event_1', mode  = 'context')            
-        @hook(event = 'event_2', mode  = 'context')     #EVENT IS BEING PROJECTED TO OTHER HOOKS?
-        def run_with_c_as_3(self,other=None):
-            if other: 
-                raise Exception(other) #WEIRD!
+        @hook(event='event_1', mode='context', see_args=False)            
+        @hook(event='event_2', mode='context', see_args=False)
+        def run_with_c_as_3(self):
             t = add_me.set(3)
-            yield                           #Can yield values of args,kwargs if passthrough=True
+            yield              #Can yield values of args,kwargs if passthrough=True
             add_me.reset(t)
 
-        @hook(event       = 'event_1' ,
-              mode        = 'pre'     ,
-              see_args    = True,
-              passthrough = False,)
+        @hook(event = 'event_1' , mode = 'pre')
         def run_pre(self,arg):
             assert arg == 1
 
@@ -378,20 +392,20 @@ if __name__ == '__main__':
 
     class base(mixin,Hookable):
         
-        # @event(event ='postmarker', )
+        # @event_subscriber(event ='postmarker', )
+        # @event_publisher(event ='postmarker', )
         @hook_trigger(event = 'event_1')
         def func(self,value:int=None,):
             print(self, value)
             return value
         
+        # run_with_c_as_3 = hook(event = 'event_2', mode  = 'context')(mixin.run_with_c_as_3)
+            #This method can add hooks to inherited functions, though it's kinda jank
 
-        @hook(event = 'cache_test', mode='cache', see_args=True, passthrough=True)
+        @hook(event = 'cache_test', mode = 'cache', passthrough = True)
         def _func3(self, value:str):
-            if value == 'a':
-
-                return 'AA'
-            else: 
-                return _unset
+            if value == 'a': return 'AA'
+            else:            return _unset
 
         @hook_trigger(event = 'cache_test')
         def func3(self,value:str):
@@ -411,3 +425,5 @@ if __name__ == '__main__':
 
     assert 'AA' == b.func3('a')
     assert 'B' == b.func3('b')
+
+#endregion
