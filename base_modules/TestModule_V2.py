@@ -14,10 +14,6 @@ class main(module):
     
     
     class node_collection_mixin(_mixin.node_collection):
-        # def __init_subclass__(cls):
-        #     super().__init_subclass__()
-        #     print(cls._hooks.anon_hooks)
-        #     raise Exception('')
         @hook(event='new_item', mode='post')
         def _new(self,item):
             raise Exception('DAS SCREEMING CHICKEN')
@@ -28,7 +24,6 @@ class main(module):
         ]
 
 class new_socket(item.socket):
-    _constr_bases_key_ = None
     # @classmethod
     # def Construct(cls,recur):raise Exception(getattr(cls,'_constr_bases_key_',None))
     Module     = main 
@@ -135,16 +130,30 @@ def adv_exec_test(graph,subgraph):
     assert v == 'abc'
 
 def hook_test(graph,subgraph):
-    print(subgraph.nodes._hooks)
-    print(subgraph.nodes.new)
+    # print(subgraph.nodes._hooks)
+    # print(subgraph.nodes.new)
+    from pprint import pprint
+
+    
+    print('Anon Hooks:')
+    pprint( subgraph.nodes._hooks.anon_hooks)
+
+    print('Named Hooks:')
+    pprint(subgraph.nodes._hooks.named_hooks)
+
+    print('Hooked:')
+    pprint(   subgraph.nodes._hooks.named_hooks)
+
     raise Exception('')
+
+
 
 main._module_tests_.append(module_test('TestA',
                 module      = main,
                 funcs       = [
                     basic_exec_test ,
                     adv_exec_test   ,
-                    # hook_test       ,
+                    hook_test       ,
                     ],
                 module_iten = {main.UID : main.Version,
                                'Core_Execution':'2.0'}, 

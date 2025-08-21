@@ -373,20 +373,27 @@ class Hookable():
 
     @classmethod
     def __hooks_initialize__(cls):
-        hg = hook_group()
-        parent_hooks = ((getattr(x,'_hooks'),cls) for x in cls.__bases__ if hasattr(x,'_hooks'))
+        if '_hook' in cls.__dict__.keys():
+            hg = cls._hook
+        else: 
+            hg = hook_group()
         
+        parent_hooks = ((getattr(x,'_hooks'),cls) for x in cls.__bases__ if hasattr(x,'_hooks'))
         for x,c in parent_hooks:
             # if not 'socket' in c.__name__ and not 'S_GROUP' in c.__name__:
             #     print('MERGING IN _HOOK ONTO', c.__name__)
             hg.merge_in(x)
+            if getattr(cls,'_hook_debug_temp_loud_',False):
+                print(x)
 
         # if (a:=getattr(cls, '_hooks',None)) is not None:
         #     hg.merge_in(a)
         cls._hooks = hg
 
-        # for k,v in cls.__dict__.items():
-        for k,v in vars(cls).items():
+        for k in dir(cls):
+            v = getattr(cls,k)
+            # if getattr(cls,'_hook_debug_temp_loud_',False):
+            #     print(v)
             if isinstance(v,(_hook,_hooked,_event_sub,_event_trigger)):
                 hg.intake(v)
 

@@ -409,6 +409,8 @@ class node_collection(BaseModel, typed_collection_base, ConstrBase, Hookable):
     _io_dict_like_ = True
     _io_blacklist_ = ['data']
 
+    _hook_debug_temp_loud_ = True
+
     _constr_bases_key_  = 'node_collection'
     _constr_call_post_  = ['__io_setup__','__hooks_initialize__']
     _constr_join_lists_ = ['_io_blacklist_','_io_whitelist_','_constr_call_post_']
