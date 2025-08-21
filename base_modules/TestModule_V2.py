@@ -28,6 +28,9 @@ class main(module):
         ]
 
 class new_socket(item.socket):
+    _constr_bases_key_ = None
+    # @classmethod
+    # def Construct(cls,recur):raise Exception(getattr(cls,'_constr_bases_key_',None))
     Module     = main 
     UID        = 'StringSocket'
     Version    = '1.0'

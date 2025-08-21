@@ -56,7 +56,7 @@ class ConstrBase():
             elif cls in Constructed.get().keys():
                 return Constructed.get()[cls]
             
-            if k:=getattr(cls,'_constr_bases_key_',None):
+            if (k:=getattr(cls,'_constr_bases_key_',None)) is not None:
                 
                 other_bases = Bases.get()[k]
 
@@ -92,14 +92,24 @@ class ConstrBase():
                         new_dicts[k] = new_dicts[k] | val
 
             if getattr(cls,'_constr_in_place_',False):
-                new_tuple = cls.__bases__ + tuple(other_bases)
+                new_tuple = tuple(other_bases) + cls.__bases__ 
                 new_tuple = tuple([x for x in new_tuple if x is not object])
                      #Object in the middle of the inheritance causes MRO error
 
-                cls.__bases__ = new_tuple
-                for k,v in new_lists.items():
-                    setattr(cls,k,v)
-                new_type = cls
+                try:
+                    cls.__bases__ = new_tuple
+                    for k,v in new_lists.items():
+                        setattr(cls,k,v)
+                    new_type = cls
+                except:
+                    print(cls)
+                    print('Original:', cls.__bases__)
+                    print('Mixins:  ', other_bases)
+                    print('Resolve to attempt:', new_tuple)
+                    print(new_tuple[0].__bases__[0])
+                    # for x in new_tuple:
+                    #     print(x.__qualname__,'BASES:',x.__bases__)
+                    raise
             
             else:
                 new_type = type('Constr_'+cls.__name__,

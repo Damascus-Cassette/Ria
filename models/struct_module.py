@@ -19,6 +19,7 @@ class _item_base(Hookable):
     ''' Is a new node class, for execution and hooks 
         Note: inherits all node_mixins from all enabled modules'''
     _loader_item_ = True
+    _constr_bases_key_ = None #Esures I dont construct onto the item unless specified.
     
     ID           : str
     Version      : str
