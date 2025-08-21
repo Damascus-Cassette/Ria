@@ -92,7 +92,10 @@ class ConstrBase():
                         new_dicts[k] = new_dicts[k] | val
 
             if getattr(cls,'_constr_in_place_',False):
-                new_tuple = tuple(other_bases) + cls.__bases__ 
+                if getattr(cls,'_constr_reversed_',False):
+                    new_tuple = cls.__bases__ + tuple(other_bases) 
+                else:
+                    new_tuple = tuple(other_bases) + cls.__bases__ 
                 new_tuple = tuple([x for x in new_tuple if x is not object])
                      #Object in the middle of the inheritance causes MRO error
 

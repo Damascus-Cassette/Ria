@@ -20,7 +20,7 @@ class _item_base(Hookable):
         Note: inherits all node_mixins from all enabled modules'''
     _loader_item_ = True
     _constr_bases_key_ = None #Esures I dont construct onto the item unless specified.
-    
+    _constr_reversed_  = True
     ID           : str
     Version      : str
     Label        : str
@@ -32,11 +32,11 @@ class _item_base(Hookable):
         if getattr(cls,'_module_verify_',False):
             assert getattr(cls, 'UID'    , None) is not None
             assert getattr(cls, 'Version', None) is not None
-            assert getattr(cls, 'Label'  , None) is not None
-            assert getattr(cls, 'Desc'  ,  None) is not None
+            cls.label = getattr(cls, 'Label' , cls.UID)
+            cls.label = getattr(cls, 'Desc'  , cls.__doc__)
 
             cls._Version  = VersionType(cls.Version)
-
+        super().__init_subclass__()
         # cls.Version_R = cls._Version.release
         # cls.Version   = cls._Version.release
 
