@@ -339,6 +339,7 @@ class hook_group():
         return items['cache'],items['pre'], items['post'], items['wrap'], items['context']
         
 class Hookable():
+    ''' Mixin class for enabling hooks on all classes, must also be on class mixing into new cls '''
     _hooks : hook_group
     def __init_subclass__(cls):
         ''' Create new hooks, integrate local with inherited or create from nothing if not here'''
