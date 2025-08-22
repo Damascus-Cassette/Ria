@@ -137,31 +137,6 @@ def adv_exec_test(graph,subgraph):
 
     assert v == 'abc'
 
-def hook_test(graph,subgraph):
-    # print(subgraph.nodes._hooks)
-    # print(subgraph.nodes.new)
-    from pprint import pprint
-
-    print('-'*20)
-    print('-'*20)
-    print('-'*20)
-    # hg = subgraph.nodes.__hooks_initialize__()
-    print('-'*20)
-    pprint(subgraph.nodes._hooks)
-    pprint(hg)
-
-    pprint(subgraph.nodes._hooks.parent_cls)
-    print('Anon Hooks:')
-    pprint(subgraph.nodes._hooks.anon_hooks)
-
-    print('Named Hooks:')
-    pprint(subgraph.nodes._hooks.named_hooks)
-
-    print('Hooked:')
-    pprint(subgraph.nodes._hooks.hooked)
-
-    raise Exception('')
-
 def assert_hook_working(graph,subgraph):
     test_var.set(False) 
     subgraph.nodes.new(new_exec_node.UID, key = 'test')
@@ -171,9 +146,8 @@ main._module_tests_.append(module_test('TestA',
                 module      = main,
                 funcs       = [
                     assert_hook_working,
-                    basic_exec_test ,
-                    adv_exec_test   ,
-                    # hook_test       ,
+                    basic_exec_test    ,
+                    adv_exec_test      ,
                     ],
                 module_iten = {main.UID : main.Version,
                                'Core_Execution':'2.0'}, 
