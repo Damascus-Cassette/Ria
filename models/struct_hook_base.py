@@ -12,6 +12,8 @@ from contextlib  import contextmanager
 from copy        import copy
 from functools   import partial
 
+# from ..base_modules.utils.print_debug import _debug_print as print
+
 # from inspect import isgeneratorfunction
 
 ######## UTILITIES ########
@@ -162,6 +164,18 @@ class _hook(_shared_class):
     def __repr__(self):
         return f'< Hook Obj: ({self.event} -> {self.__module__}.{self.func.__qualname__}) at {id(self)} >'
 
+    def __eq__(self,other:Self)->bool:
+        if not isinstance(other,hook_group): return NotImplemented
+        return all ([
+            self.func        == other.func        ,
+            self.event       == other.event       ,
+            self.key         == other.key         ,
+            self.anon        == other.anon        ,
+            self.mode        == other.mode        ,
+            self.see_args    == other.see_args    ,
+            self.passthrough == other.passthrough ,
+            ])
+
 hook         = _hook  .wrapper
 #endregion
 
@@ -189,14 +203,13 @@ class _hooked(_shared_class):
 
     def __call__(self,container,*args,**kwargs):
         if not hasattr(container,'_hooks'):
-            # raise Exception(container.__class__.mro())
-            # raise Exception(container.__class__.__bases__)
-            raise Exception(hasattr(container,'__hooks_initialize__'))
-            
-            print(vars(container))
-            raise Exception('')
-            ...
-        return container._hooks.run_with_hooks(self,container,self.func,args,kwargs)
+            raise Exception('Hooked function must be called on a class that inherits from Hookable!')
+            #Make togglable later
+        # assert self in container._hooks.hooked[self.event]
+        
+        # print( container._hooks.anon_hooks[self.event])
+        # print( container._hooks.named_hooks[self.event])
+        return container._hooks.run_with_hooks(self, container, self.func, args,kwargs)
     
     def __get__(self,instance,owner):
         if instance is None:
@@ -218,6 +231,16 @@ class _hooked(_shared_class):
             return cls(func = func,
                     event = event)
         return wrapper
+    
+    def __repr__(self):
+        return f'< Hooked Obj: {self.event} -> {self.func} >'
+    
+    def __eq__(self,other:Self)->bool:
+        if not isinstance(other,hook_group): return NotImplemented
+        return all ([
+            self.func == other.func  ,
+            self.event == other.event,
+            ])
 
 hook_trigger = _hooked.wrapper
 #endregion
@@ -251,7 +274,8 @@ class hook_group():
 
     Allowed_Modes = ('pre','post','cache','wrap','context')
 
-    def __init__(self):
+    def __init__(self,parent_cls):
+        self.parent_cls = parent_cls
         self.hooked       = _def_dict()
             #Current object state determines all hooked
         self.named_hooks  = _def_dict_dict()
@@ -261,24 +285,38 @@ class hook_group():
             #cross-inheritance hooks, only added to.
 
     def merge_in(self,other:Self):
+        # print( ' '*4,f'Other.anon_hooks  : {other.anon_hooks}' )
+        # print( ' '*4,f'Other.named_hooks : {other.named_hooks}' )
+        # print( ' '*4,f'Other.hooked      : {other.hooked}' )
+
+        # print( ' '*4,f'self.anon_hooks  : {self.anon_hooks}' )
+        # print( ' '*4,f'self.named_hooks : {self.named_hooks}' )
+        # print( ' '*4,f'self.hooked      : {self.hooked}' )
+
         new = _def_dict()
         for k,v in (other.hooked | self.hooked).items():
             new[k]=v
         self.hooked = new
     
         for k,v in other.named_hooks.items():
-            self.named_hooks[k] = v | self.named_hooks[k] 
+            _val = v | self.named_hooks[k] 
+            self.named_hooks[k] = _val
 
         for k,v in other.anon_hooks.items():
             #Unknown: run parent hooks or subclass hooks first?
-            self.anon_hooks[k].extend( [x for x in v if not x in self.anon_hooks[k]] ) 
-
+            _val = [x for x in v if not x in self.anon_hooks[k]]
+            self.anon_hooks[k].extend( _val ) 
+        
+        # print( ' '*4,f'result.anon_hooks  : {self.anon_hooks}' )
+        # print( ' '*4,f'result.named_hooks : {self.named_hooks}' )
+        # print( ' '*4,f'result.hooked      : {self.hooked}' )
 
     def intake(self,obj:_hook|_hooked):
         ''' Views any _hook,_hooked,_event object and determines if already inside and if anon vs not anon. Adds if does have '''
         assert (obj in obj.hook_siblings) or (obj in obj.hooked_siblings) or (obj in obj.event_siblings)
         for hook_inst   in obj.hook_siblings:   self.intake_hook(hook_inst)
         for hooked_inst in obj.hooked_siblings: self.intake_hooked(hooked_inst)
+        # print('hooked:',self.hooked)
         # for event_inst  in obj.event_siblings:  self.intake_event(event_inst)
     
     def intake_hook(self,hook_inst):
@@ -286,20 +324,27 @@ class hook_group():
         if hook_inst.anon: 
             ls = self.anon_hooks[hook_inst.event]
             if hook_inst not in ls: 
+                # print(self.parent_cls.__qualname__,' INTAKING ANON HOOK ', hook_inst)
                 ls.append(hook_inst)
-            # print('INTAKING ANON',hook_inst)
             return
-        # print('INTAKING',hook_inst)
         self.named_hooks[hook_inst.event][hook_inst.key] = hook_inst
+        # print(self.parent_cls.__qualname__,' INTAKING NAMED HOOK ', hook_inst)
         
     def intake_hooked(self,hooked_inst):
         ls = self.hooked[hooked_inst.event]
         if hooked_inst not in ls: 
             ls.append(hook)
+            # print(self.parent_cls.__qualname__,' INTAKING HOOKED ', hooked_inst)
+            # print(ls)
     
     def run_with_hooks(self, hooked_inst:_hooked, container, func, args, kwargs):
         ''' Run a hooked function, runs with the hooks ascociated (also runs events on obj) '''
         #Run hooked, run hooks, post events, then exit context
+        # print(f'HOOK SYSTEM: CALLED FUNC {hooked_inst.func} FROM {container}')
+        # print(f'    ',self.anon_hooks)
+        # print(f'    ',self.named_hooks)
+        # print (container._hooks.anon_hooks)
+        # print (container._hooks.named_hooks)
         with _validate_op_chain(container,hooked_inst.event):
             hooks = copy(self.anon_hooks[hooked_inst.event])
             hooks.extend(list(self.named_hooks[hooked_inst.event].values()))
@@ -309,6 +354,13 @@ class hook_group():
 
             cache,pre,post,wrap,context = self.split_hooks_to_modes(hooks)
                 #split hooks
+            
+            # print('  cache:  ', cache)
+            # print('  pre:    ', pre)
+            # print('  post:   ', post)
+            # print('  wrap:   ', wrap)
+            # print('  context:', context)
+            
 
             for x in cache:
                 #TODO: how should cache retrieval interact with events?
@@ -363,7 +415,10 @@ class hook_group():
         for x in hooks:
             items[x.mode].append(x)
         return items['cache'],items['pre'], items['post'], items['wrap'], items['context']
-        
+
+
+                
+    
 class Hookable():
     ''' Mixin class for enabling hooks on all classes, must also be on class mixing into new cls '''
     _hooks : hook_group
@@ -375,30 +430,31 @@ class Hookable():
 
     @classmethod
     def __hooks_initialize__(cls):
-        if '_hook' in cls.__dict__.keys():
-            hg = cls._hook
+        if '_hooks' in cls.__dict__:
+            hg = cls._hooks
         else: 
-            hg = hook_group()
+            hg = hook_group(cls)
+            cls._hooks = hg
+                # IS IT a __get__ related problem???
         
         parent_hooks = ((getattr(x,'_hooks'),cls) for x in cls.__bases__ if hasattr(x,'_hooks'))
         for x,c in parent_hooks:
-            # if not 'socket' in c.__name__ and not 'S_GROUP' in c.__name__:
-            #     print('MERGING IN _HOOK ONTO', c.__name__)
+            # if getattr(cls,'_hook_debug_temp_loud_',False):
+                # print(f'MERGING HOOKS IN {cls.__qualname__} <==',x.parent_cls, '_hooks')
             hg.merge_in(x)
-            if getattr(cls,'_hook_debug_temp_loud_',False):
-                print(f'MERGING HOOKS IN {cls.__qualname__} <==',x)
-
-        # if (a:=getattr(cls, '_hooks',None)) is not None:
-        #     hg.merge_in(a)
-        cls._hooks = hg
 
         for k in dir(cls):
             v = getattr(cls,k)
-            if getattr(cls,'_hook_debug_temp_loud_',False):
-                print(k,' : ',v)
             if isinstance(v,(_hook,_hooked,_event_sub,_event_trigger)):
                 hg.intake(v)
-                print('INTOOK', k)
+
+        # print( ' '*4,f'(initialized) self.anon_hooks  : {hg.anon_hooks}' )
+        # print( ' '*4,f'(initialized) self.named_hooks : {hg.named_hooks}' )
+        # print( ' '*4,f'(initialized) self.hooked      : {hg.hooked}' )
+            #Hooked is generated wrapper methods rather than hooked_instances???
+        
+        return hg
+        # cls._hooks = hg
 
 #endregion
 
@@ -463,7 +519,7 @@ if __name__ == '__main__':
             return value.capitalize()
              
 
-    from pprint import pprint
+    # # from pprint import pprint
     # pprint(('Anon  Hooks:', base._hooks.anon_hooks ))
     # pprint(('Named Hooks:', base._hooks.named_hooks))
     # pprint(('Hooked:', base._hooks.hooked))

@@ -82,11 +82,11 @@ class ConstrBase():
             new_dicts = {}
             for k in getattr(cls,'_constr_join_lists_',[]):
                 new_lists[k]=[]
+                new_lists[k].extend(getattr(cls,k,[]))
                 for x in other_bases:
                     new_lists[k].extend(getattr(x,k,[]))
-
             for k in getattr(cls,'_constr_join_dicts_',[]):
-                new_dicts[k]={}
+                new_dicts[k]=getattr(cls,k,{}) | {}
                 for x in other_bases:
                     if val := getattr(x,k,{}):
                         new_dicts[k] = new_dicts[k] | val
@@ -110,8 +110,6 @@ class ConstrBase():
                     print('Mixins:  ', other_bases)
                     print('Resolve to attempt:', new_tuple)
                     print(new_tuple[0].__bases__[0])
-                    # for x in new_tuple:
-                    #     print(x.__qualname__,'BASES:',x.__bases__)
                     raise
             
             else:
@@ -120,7 +118,8 @@ class ConstrBase():
                                 new_dicts|new_lists|{'_constr_has_run_':True})
                 Constructed.get()[cls] = new_type
 
-            if recur: new_type.Construct_Walk()
+            if recur: 
+                new_type.Construct_Walk()
 
             for k in getattr(new_type,'_constr_call_post_',[]):
                 if func:=getattr(new_type,k,None):

@@ -98,7 +98,7 @@ class collection_base[T=item_base]():
         self._context_new_item_(inst)
         return inst
 
-    @hook_trigger(event = 'intake_item')
+    @hook_trigger(event = '__setitem__')
     def __setitem__(self,key,item):
         ''' Replace key if mergable or generate new key and move'''
         assert self.item_verify_compatable(item)
@@ -193,7 +193,6 @@ class collection_base[T=item_base]():
             res.append(self.free(x,safe=safe))
         return tuple(res)
 
-    @hook_trigger(event = 'new_item')
     def copy(self,item, safe=True, keep=True,return_memo=False,memo=None)->T:                              
         ''' deepcopy item and return the copy. 
         keep : 'append' the copy to this collection. (Ensures key name is unique if kept)
@@ -228,7 +227,6 @@ class collection_base[T=item_base]():
             return tuple(res), memo
         return tuple(res)
 
-    @hook_trigger(event = 'new_item')
     def copy_in(self, item,col2:Self=None, local_copy=False,return_memo=False,memo=None):
         ''' Copy item from secondary collection. Must be compatable with self.base(s)
         local_copy  : use this collection's copy method 

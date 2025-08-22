@@ -4,7 +4,9 @@ from ..models.base_node        import socket_group
 from .Execution_Types          import item,_mixin
 from .utils.print_debug        import debug_print_wrapper as debug_wraper, debug_print as dprint
 
+from contextvars import ContextVar
 
+test_var = ContextVar('test_var',default=False)
 class main(module):
     UID          = 'TestModule'
     Label        = 'TestModule'
@@ -14,9 +16,11 @@ class main(module):
     
     
     class node_collection_mixin(_mixin.node_collection):
-        @hook(event='new_item', mode='post')
+
+        @hook(event='__setitem__', mode='post')
         def _new(self,item):
-            raise Exception('DAS SCREEMING CHICKEN')
+            test_var.set(True)
+            # raise Exception('DAS SCREEMING CHICKEN')
         
 
     Deps = [
@@ -82,7 +86,8 @@ main._loader_items_.extend([
 ###### TESTS ######
 
 def basic_exec_test(graph,subgraph):
-    with subgraph.context.Cached():
+    # with subgraph.context.Cached():
+    with subgraph.As_Env(auto_add_nodes = True, auto_add_links = True):
         nodea = new_exec_node(default_sockets=True)
         nodeb = new_exec_node(default_sockets=True)
 
@@ -99,6 +104,9 @@ def basic_exec_test(graph,subgraph):
                            out_socket = nodea.out_sockets[0], 
                            in_socket  = nodeb.in_sockets[0])
         b = True
+
+    assert nodea.context.subgraph == subgraph
+    
     assert b
     assert link_a in nodea.out_sockets[0].links.values()
     assert link_a in nodeb.in_sockets[0].links.values()
@@ -135,8 +143,14 @@ def hook_test(graph,subgraph):
     from pprint import pprint
 
     print('-'*20)
-    subgraph.nodes.__hooks_initialize__()
+    print('-'*20)
+    print('-'*20)
+    # hg = subgraph.nodes.__hooks_initialize__()
+    print('-'*20)
+    pprint(subgraph.nodes._hooks)
+    pprint(hg)
 
+    pprint(subgraph.nodes._hooks.parent_cls)
     print('Anon Hooks:')
     pprint(subgraph.nodes._hooks.anon_hooks)
 
@@ -144,18 +158,22 @@ def hook_test(graph,subgraph):
     pprint(subgraph.nodes._hooks.named_hooks)
 
     print('Hooked:')
-    pprint(subgraph.nodes._hooks.named_hooks)
+    pprint(subgraph.nodes._hooks.hooked)
 
     raise Exception('')
 
-
+def assert_hook_working(graph,subgraph):
+    test_var.set(False) 
+    subgraph.nodes.new(new_exec_node.UID, key = 'test')
+    assert test_var.get() 
 
 main._module_tests_.append(module_test('TestA',
                 module      = main,
                 funcs       = [
+                    assert_hook_working,
                     basic_exec_test ,
                     adv_exec_test   ,
-                    hook_test       ,
+                    # hook_test       ,
                     ],
                 module_iten = {main.UID : main.Version,
                                'Core_Execution':'2.0'}, 
