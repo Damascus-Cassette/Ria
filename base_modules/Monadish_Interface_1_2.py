@@ -41,7 +41,7 @@ class main(module):
 current_patch_inst : 'Patches' = ContextVar('current_patch_inst', default=None)
 
 @contextmanager
-def context_current_patch(item:None|'Patches'):
+def context_current_patch(item:'Patches'):
     if item is None:
         yield
     else:
@@ -256,9 +256,11 @@ main._loader_items_.extend([
 class _operation():
     siblings:list[Self]
 
-    @staticmethod
-    def wrapper(cls,patches : 'Patches',
+    @classmethod
+    def wrapper(cls,
+                 patches : 'Patches',
                  operation      :Any|str|tuple[str]  = None       ,
+                 but            :str|tuple|None      = None       ,
                  op             :Any|str|tuple[str]  = None       ,
                  mode           :str                 = 'operation', 
                  key            :str|None            = None       , 
@@ -270,12 +272,13 @@ class _operation():
             inst =  cls(func = func,
                        operation      = operation,
                        op             = op,
+                       but            = but,
                        mode           = mode,
                        key            = key,
                        allow_fallback = allow_fallback,
                        filter         = filter,
                        safe           = safe)
-            patches.append_operation(inst)
+            patches.intake_operation(inst)
             return inst
         return wrapper
 
@@ -283,6 +286,7 @@ class _operation():
                  func           :FunctionType|Self                ,
                  operation      :Any|str|tuple[str]  = None       ,
                  op             :Any|str|tuple[str]  = None       ,
+                 but            :str|tuple|None      = None       ,
                  mode           :str                 = 'operation', 
                  key            :str|None            = None       , 
                  allow_fallback :bool                = False      , 
@@ -304,7 +308,10 @@ class _operation():
         if operation is Any            : operation = _ALL_OPS
         elif isinstance(operation,str) : operation = (operation,)
         else                           : assert isinstance(operation,(tuple,list,set))
-        
+        if but:
+            if isinstance(but,str)     : but = (but,)
+            operation = tuple((x for x in operation if x not in but))
+
         self.func           = func
         self.operations     = operation
         self.mode           = mode
@@ -508,8 +515,8 @@ class default_patches:
     @operation(patches, op = ('lshift','ilshift'), mode = 'preprocess')
     def logical_direction(cls, op,sg,l,r, *args, **kwargs):
         ''' PreProcess: Switch logical direction with above ops '''
-        if op is   'lshift'  : op = 'rshift'
-        elif op is 'ilshift' : op = 'irshift'
+        if   op == 'lshift'  : op = 'rshift'
+        elif op == 'ilshift' : op = 'irshift'
         return (op,sg,r,l) + args, kwargs
     
     @operation(patches, Any, but = 'imat', mode = 's_operation', filter= lambda sg,l,r: issubclass(l.__class__,_delay) or issubclass(r.__class__,_delay))
@@ -653,8 +660,8 @@ class _test_patch_simple():
     @operation(patches, op = ('lshift','ilshift'), mode = 'preprocess')
     def logical_direction(cls, op,sg,l,r, *args, **kwargs):
         ''' PreProcess: Switch logical direction with above ops '''
-        if op is   'lshift'  : op = 'rshift'
-        elif op is 'ilshift' : op = 'irshift'
+        if   op == 'lshift'  : op = 'rshift'
+        elif op == 'ilshift' : op = 'irshift'
         return (op,sg,r,l) + args, kwargs
 
     @operation(patches,Any)
@@ -663,16 +670,16 @@ class _test_patch_simple():
 
 
 class _tests:
-    @dp_wrap(threshold = 0)
+    @dp_wrap(0)
     def automerge_test(graph,subgraph):
         ''' Test if auto_merge_target works '''
         with graph.Monadish_Env(auto_merge_target = subgraph) as _sg:
             left  = node_left_simple_1(default_sockets=True)
             assert subgraph is not _sg
-            assert left.subgraph is _sg
-        assert left.subgraph is subgraph
+            assert left.context.subgraph is _sg
+        assert left.context.subgraph is subgraph
 
-    @dp_wrap(threshold = 0)
+    @dp_wrap(0)
     def loading_patches_test(graph,subgraph):
         ''' Test if patches are loaded correctly '''
         with graph.Monadish_Env(op_env = _test_patch_simple.patches):
@@ -683,7 +690,7 @@ class _tests:
             assert left  is (left << right)
             assert right is (left +  right)
 
-    @dp_wrap(threshold = 0)
+    @dp_wrap(0)
     def temp_env_test(graph,subgraph):
         ''' Test walk rules in special env layers '''
         with graph.Monadish_Env(op_env = default_patches.patches) as _sg:
@@ -696,7 +703,7 @@ class _tests:
             
             subgraph.merge_in_walk(right)
 
-    @dp_wrap(threshold = 0)
+    @dp_wrap(0)
     def temp_env_fork_test(graph,subgraph):
         ''' Test forking of mutating operations within a temp env '''
         with graph.Monadish_Env(op_env = default_patches.patches) as _sg:
@@ -709,7 +716,7 @@ class _tests:
             assert new_right != right
 
 
-    @dp_wrap(threshold = 0)
+    @dp_wrap(0)
     def temp_env_with_delay_test(graph,subgraph):
         ''' Test delay in env '''
         with graph.Monadish_Env(op_env = default_patches.patches) as _sg:
