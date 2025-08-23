@@ -21,7 +21,7 @@ from copy        import copy
 
 _ORDER   = [] #For verifying that (project returns downwards on at least one item) and (preprocess doesnt move things upwards) 
 
-_ALL_OPS = ('add', 'sub', 'mul', 'truediv', 'mod', 'floordiv', 'pow', 'matmul', 'and', 'or', 'xor', 'rshift', 'lshift','radd', 'rsub', 'rmul', 'rtruediv', 'rmod', 'rfloordiv', 'rpow', 'rmatmul', 'rand', 'ror', 'rxor', 'rrshift', 'rlshift',)
+_ALL_OPS = ('add', 'sub', 'mul', 'truediv', 'mod', 'floordiv', 'pow', 'matmul', 'and', 'or', 'xor', 'rshift', 'lshift','radd', 'rsub', 'rmul', 'rtruediv', 'rmod', 'rfloordiv', 'rpow', 'rmatmul', 'rand', 'ror', 'rxor', 'rrshift', 'rlshift','iadd', 'isub', 'imul', 'itruediv', 'imod', 'ifloordiv', 'ipow', 'imatmul', 'iand', 'ior', 'ixor', 'irshift', 'ilshift','iradd', 'irsub', 'irmul', 'irtruediv', 'irmod', 'irfloordiv', 'irpow', 'irmatmul', 'irand', 'iror', 'irxor', 'irrshift', 'irlshift',)
     #Not ugly at all...
 
 
@@ -51,7 +51,10 @@ def context_current_patch(item:None|'Patches'):
 
 #endregion
 
+
 ######## DUNDER MIXINS GENERATION ########
+#region 
+
 def resolve_operation_in_context(*args,**kwargs):
     return current_patch_inst.get().resolve_operation(*args,**kwargs)
 
@@ -92,6 +95,8 @@ def _make_dunders_all()->dict:
     return res
 
 _op_elem_mixin = type('_op_elem_mixin',(_op_elem_mixin,),_make_dunders_all())
+
+#endregion
 
 
 ######## MODULE MIXINS ########
