@@ -251,7 +251,7 @@ class Patches():
 current_patch_inst = ContextVar('current_patch_inst', default=None)
 
 class default_patches:
-    ''' Simpler example for time, only a few operations. Nothing deeply recursive. Meant to be only (node --op--> node) which projects to (sg -op> sg) '''
+    ''' Simpler example for time, only a few operations. Nothing deeply recursive. Meant to be only (node --op--> node) which projects to (sg --op--> sg) where left must be fullfilled & right can accomidate with potential sg s '''
 
     patches = Patches()
 
@@ -288,9 +288,10 @@ class default_patches:
 
     @operation(patches, op = Any, mode = 'project', filter = lambda sg,l,r: all([issubclass(l.__class__,item.node),issubclass(r.__class__,item.node)]) and any([r.zip_flag, l.zip_flag]) )
     def project_zip_node(cls, op,sg,l,r, *args, **kwargs)->LambdaType:
-        ''' Project operation in a zip fashion, returns a lambda that undoes zip_flag and does operation '''
-        ''' projection must return LambdaType that resolves action and casts type to correct group '''
-        ...
+        ''' Project operation in a zip fashion, returns a lambda that undoes zip_flag and does operation 
+        projection must return LambdaType that resolves action and casts type to correct group 
+        In this module it will project sg -> sg & potential_sg '''
+        #TODO
 
 class second_level_patches:
     patches = Patches()
