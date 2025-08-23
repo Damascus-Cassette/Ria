@@ -9,7 +9,7 @@ from typing                 import Any, Self, TypeAlias,AnyStr,Type
 from types                  import FunctionType, LambdaType
 from inspect                import isclass
 
-class main():
+class main(module):
     ''' Module for adding copy (and eventually more) functionality that respects structure contextually.
     Will be merged with base_structure perm after initial testing, and hooks will be set after structure settles
     
@@ -34,17 +34,17 @@ class main():
                 links.extend([l for l in sg.links if ((l.from_node in nodes) and (l.to_node in nodes)) ])
             return links
 
-        def copy_in_nodes(self, nodes, links=None, keep_links=True,return_memo=True,memo=None)->tuple[item.node]:
+        def copy_in_nodes(self, nodes,links=None, keep_links=True,return_memo=True,memo=None,filter=None)->tuple[item.node]:
             '''copy in nodes from any subgraph, uses self.nodes.copy_in_multi with local_copy as true 
             Allows 'blind' nodes w/out context having been walked
             Initilizes context structure after copying in.
             '''
 
-            new_nodes, memo = self.nodes.copy_in_multi(nodes,local_copy=True,return_memo=True,memo=memo)
+            new_nodes, memo = self.nodes.copy_in_multi(nodes,local_copy=True,return_memo=True,memo=memo,filter=filter)
             if keep_links:
                 if links is None:
                     links = self.find_links_in_node_pool(nodes)
-                new_links,memo = self.links.copy_in(links, local_copy=True,return_memo=True, memo=memo)
+                new_links,memo = self.links.copy_in_multi(links, local_copy=True,return_memo=True, memo=memo,filter=filter)
 
                 with self.context.Cached():
                     for x in new_links:
@@ -85,7 +85,7 @@ class main():
                  dir_constrained :bool       = False , 
                  filter          :LambdaType = None  , 
                  return_links    :bool       = False ,
-                 )->tuple[item.node]|tuple[tuple[item.node],tuple[item.link]]:
+                 )->tuple[item.node]|tuple[tuple[item.node],tuple[_mixin.links]]:
             ''' Recursive directional walk, returns a list of nodes, optionaly also returns links'''
             if chain is None: chain = []
             if filter is None: filter = lambda *args: True 

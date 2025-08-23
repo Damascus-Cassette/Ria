@@ -239,7 +239,7 @@ class collection_base[T=item_base]():
         if local_copy: return self.copy(item,safe=False,keep=True ,return_memo=return_memo, memo=memo)
         else:          return col2.copy(item,safe=True ,keep=False,return_memo=return_memo, memo=memo)
 
-    def copy_in_multi(self,items:slice|tuple[T], col2:Self=None, local_copy=False, return_memo=False,memo=None):
+    def copy_in_multi(self,items:slice|tuple[T], col2:Self=None, local_copy=False, return_memo=False,memo=None,filter=None):
         ''' Copy items from secondary collection, 
         memo is shared accross all deepcopy calls
         local_copy  : use this collection's copy method, if false must provide col2 
@@ -251,6 +251,7 @@ class collection_base[T=item_base]():
         memo = copy(memo)
         res  = []
         for item in items:
+            if not filter(item): continue
             item,memo = self.copy_in(item,col2,local_copy=local_copy,return_memo=True,memo=memo)
             res.append(item)
         if return_memo: return res,memo

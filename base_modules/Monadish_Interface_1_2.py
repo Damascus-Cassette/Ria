@@ -129,7 +129,7 @@ class graph_mixin(_mixin.graph):
                                  auto_add_links=auto_add_links):
                 yield subgraph
             if auto_merge_target:
-                auto_merge_target.copy_in_nodes(*subgraph.nodes, keep_links = True, filter = subgraph._Monadish_Merge_Filter)
+                auto_merge_target.copy_in_nodes(nodes = subgraph.nodes, keep_links = True, filter = subgraph.Monadish_Context_Item_Enabled)
             if auto_delete:
                 self.subgraphs.free(subgraph)
 
@@ -147,7 +147,7 @@ class node_collection_mixin(_mixin.node_collection):
 
 class subgraph_mixin(_mixin.subgraph):
     _monadish_special_context_ : _default_dict_dict
-    _monadish_context_key_     : ContextVar 
+    _monadish_context_key_     : ContextVar         
 
     def _monadish_ensure_sc_(self):
         ''' Ensure special context variables are placed'''
@@ -164,6 +164,8 @@ class subgraph_mixin(_mixin.subgraph):
         self._monadish_special_context_[key1] = b|a
 
     def Monadish_Context_Item_Enabled(self,item)->bool:
+        if not issubclass(item,item.node): 
+            return True
         for k in self._monadish_context_key_.get():
             res = self._monadish_special_context_.get()[k][item]
             if res is not None: 
@@ -179,7 +181,7 @@ class subgraph_mixin(_mixin.subgraph):
         ck = self._monadish_context_key_
         assert key not in ck.get()
         current_context_value = ck.get()
-        c = current_context_value=+(key,)
+        c = current_context_value + (key,)
         t = ck.set(c)
 
         yield key
@@ -677,7 +679,8 @@ class _tests:
             left  = node_left_simple_1(default_sockets=True)
             assert subgraph is not _sg
             assert left.context.subgraph is _sg
-        assert left.context.subgraph is subgraph
+        # assert left.copied_to[subgraph].context.subgraph is subgraph
+        assert subgraph.nodes[0].UID == left.UID
 
     @dp_wrap(0)
     def loading_patches_test(graph,subgraph):
@@ -737,7 +740,8 @@ class _tests:
 main._module_tests_.append(module_test('TestA',
                 module      = main,
                 module_iten = {main.UID : main.Version,
-                               'Core_Execution':'2.0'}, 
+                               'Core_Execution':'2.0', 
+                               'Operations'    :'1.0'}, 
                 funcs       = [
                                 _tests.automerge_test           ,
                                 # _tests.loading_patches_test     ,
