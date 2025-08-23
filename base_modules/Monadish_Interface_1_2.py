@@ -38,21 +38,178 @@ class main(module):
 ######## ENV VARIABLES ########
 #region 
 
-current_patch_inst = ContextVar('current_patch_inst', default=None)
+current_patch_inst : 'Patches' = ContextVar('current_patch_inst', default=None)
+
+@contextmanager
+def context_current_patch(item:None|'Patches'):
+    if item is None:
+        yield
+    else:
+        t = current_patch_inst.set(item)
+        yield
+        current_patch_inst.reset(t)
 
 #endregion
+
+######## DUNDER MIXINS GENERATION ########
+def resolve_operation_in_context(*args,**kwargs):
+    return current_patch_inst.get().resolve_operation(*args,**kwargs)
+
+class _op_elem_mixin:
+    ''' All subclasses generate an operational handler and return the result '''
+    zip_flag : bool = False  
+    dir_flag : str  = 'pos'
+
+    def __invert__(self): self.zip_flag = True
+    def __pos__(self): self.dir_flag = 'pos'
+    def __neg__(self): self.dir_flag = 'neg'
+
+def _make_dunder(name_root)->dict[FunctionType]:
+    name = name_root
+    def f(self,other):
+        return resolve_operation_in_context(self,other,name_root)        
+
+    def f_inclusionary(self,other):
+        return resolve_operation_in_context(self,other,'i'+name_root)
+    
+    def f_reverse(self,other):
+        return resolve_operation_in_context(other,self,'r'+name_root)
+
+    def f_reverse_inclusionary(self,other):
+        return resolve_operation_in_context(other,self,'ri'+name_root)
+        ...
+    return {
+        f'__{name_root}__'  : f,
+        f'__i{name_root}__' : f_inclusionary,
+        f'__r{name_root}__' : f_reverse,
+        f'__ir{name_root}__': f_reverse_inclusionary,
+        }
+
+def _make_dunders_all()->dict:
+    _ops = ['add', 'sub', 'mul', 'truediv', 'mod', 'floordiv', 'pow', 'matmul', 'and', 'or', 'xor', 'rshift', 'lshift',]
+    res  = {}
+    for x in _ops: res|_make_dunder(x)
+    return res
+
+_op_elem_mixin = type('_op_elem_mixin',(_op_elem_mixin,),_make_dunders_all())
 
 
 ######## MODULE MIXINS ########
 #region
 
-class node_mixin():
-    def fork(self):
-        ''' check if node exists within current context, 
-        otherwise copies and 'forks' '''
-        TODO
 
-    ...
+def _default_dict_true(dict):
+    def __missing__(self,key):
+        return True
+def _default_dict_dict(dict):
+    def __missing__(self,key):
+        var = {}
+        self[key] = var
+        return var
+
+
+class graph_mixin(_mixin.graph):
+    @contextmanager
+    def Monadish_Env(self, 
+                     auto_add_nodes    = True, 
+                     auto_add_links    = True, 
+                     auto_delete       = True, 
+                     auto_merge_target = None,
+                     op_env            = None
+                     ):
+        ''' Creates a temporary subgraph that alllows auto-merging with base graph & a patch/operating env for resolving arithmatic symbol ops '''
+        with context_current_patch(op_env):
+            subgraph = self.subgraphs.new(key='Monadish_Env')
+            with subgraph.As_Env(auto_add_nodes=auto_add_nodes,
+                                 auto_add_links=auto_add_links):
+                yield subgraph
+            if auto_merge_target:
+                auto_merge_target.copy_in_nodes(*subgraph.nodes, keep_links = True, filter = subgraph._Monadish_Merge_Filter)
+            if auto_delete:
+                self.subgraphs.free(subgraph)
+
+
+class node_collection_mixin(_mixin.node_collection):
+    @hook(event='new_item', mode='post')
+    def _hook_special_monadish(self,item):
+        ''' Ensure that a node added inside of a context sets the correct flags for actions that modify the graph to do so in a context not submitted to the main graph '''
+        sg = item.context.subgraph
+        if ck := getattr(sg,'_monadish_context_key_',None):
+            if (k:=ck.get()) != ('main',):
+                sg._monadish_special_context[k[-1]][item] = True
+                sg._monadish_special_context[k[ 0]][item] = False
+
+
+class subgraph_mixin(_mixin.subgraph):
+    _monadish_special_context_ : _default_dict_dict
+    _monadish_context_key_     : ContextVar 
+
+    def _monadish_ensure_sc_(self):
+        ''' Ensure special context variables are placed'''
+        if not hasattr(self,'_monadish_special_context_'):
+            self._monadish_special_context_         = _default_dict_dict()
+            self._monadish_special_context_['base'] = _default_dict_true()
+        if not hasattr(self,'_monadish_context_key_'):
+            self._monadish_context_key_ = ContextVar(f'{self.name}_context_key', default=('base',))
+            
+    def Monadish_Merge_Contexts(self,key1,key2):
+        ''' Merge into key1 '''
+        a = self._monadish_special_context_[key1]
+        b = self._monadish_special_context_[key2]
+        self._monadish_special_context_[key1] = b|a
+
+    def Monadish_Context_Item_Enabled(self,item)->bool:
+        for k in self._monadish_context_key_.get():
+            res = self._monadish_special_context_.get()[k][item]
+            if res is not None: 
+                return res
+        raise Exception('Missing "base" key ')
+
+    @contextmanager
+    def Monadish_Temp(self, key:str):
+        ''' Contexts exist as a diff against the contexts, thus nested context's just iterate over keys
+        To merge contexts, use Monadish_Merge_Contexts '''
+        
+        self._monadish_ensure_special_context_()
+        ck = self._monadish_context_key_
+        assert key not in ck.get()
+        current_context_value = ck.get()
+        c = current_context_value=+(key,)
+        t = ck.set(c)
+
+        yield key
+
+        ck.reset(t)
+
+
+class socket_collection_mixin(_mixin.socket_collection):
+    def _monadish_unused_socket_groups(self,claimed_groups:list[socket_group]=None):
+        ''' Yield unused potential from structural definition & add number of times cls apears in claimed arg'''
+
+        if claimed_groups is None: claimed_groups = []
+
+        for potential_group in self.Groups:
+            max_inst = potential_group.SocketGroup_Quantity_Max
+            inst_current_or_claimed =  len([x for x in self.groups if (isinstance(x, potential_group))])
+            inst_current_or_claimed =+ len([x for x in self.groups if (x in claimed_groups)])
+            if max_inst < inst_current_or_claimed:
+                yield potential_group
+
+
+#### Adding dunder methods mixins ####
+class sg_mixin(_op_elem_mixin,_mixin.socket_group):...
+class socket_mixin(_op_elem_mixin,_mixin.socket):...
+class node_mixin(_op_elem_mixin,_mixin.node):...
+
+
+main._loader_mixins_ = [
+    graph_mixin,
+    subgraph_mixin,
+    socket_collection_mixin,
+    sg_mixin,
+    socket_mixin,
+    node_mixin,
+    ]
 
 #endregion
 
