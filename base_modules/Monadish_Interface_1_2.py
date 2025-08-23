@@ -1,16 +1,28 @@
+''' Atomic recursion-operation monadish, to allow for dev override and use of env 
+Yeah, it's overkill :D
+'''
+
+from ..models.struct_module    import module, module_test
+from ..models.base_node        import socket_group
+from .Execution_Types          import _mixin, item
+from ..models.struct_hook_base import hook
+
+from types       import LambdaType,GeneratorType,FunctionType
+from contextlib  import contextmanager
+from inspect     import isgenerator
 from contextvars import ContextVar
 from typing      import Any,Self
-from types       import LambdaType,GeneratorType,FunctionType
-from inspect     import isgenerator
-from copy import copy
+from functools   import partial
+from copy        import copy
 
 _ORDER   = [] #For verifying that (project returns downwards on at least one item) and (preprocess doesnt move things upwards) 
 
 _ALL_OPS = ('add', 'sub', 'mul', 'truediv', 'mod', 'floordiv', 'pow', 'matmul', 'and', 'or', 'xor', 'rshift', 'lshift','radd', 'rsub', 'rmul', 'rtruediv', 'rmod', 'rfloordiv', 'rpow', 'rmatmul', 'rand', 'ror', 'rxor', 'rrshift', 'rlshift',)
     #Not ugly at all...
 
-from functools import partial
-from contextlib import contextmanager
+######## OPERATION OBJ & WRAPPER ########
+#region
+
 class _operation():
     siblings:list[Self]
 
@@ -129,6 +141,11 @@ class _operation():
     
 operation = _operation.wrapper
 
+#endregion
+
+######## OPERATION CONTAINER BASE TYPES ########
+#region
+
 class _patches_item_list(list):
     def __iter__(self):
         seen_keys = []
@@ -143,8 +160,7 @@ class _patches_item_list(list):
                 seen_keys.append(k)
             yield x
         return StopIteration
-
-
+        
 class _patches_type_mode(dict):
     def __missing__(self,key):
         self[key] = ls = _patches_item_list()
@@ -248,7 +264,11 @@ class Patches():
         new.project     = self.project     + other.project     
         return new
         
-current_patch_inst = ContextVar('current_patch_inst', default=None)
+#endregion
+
+
+######## DEFAULT OPERATION CONTAINER ########
+#region
 
 class default_patches:
     ''' Simpler example for time, only a few operations. Nothing deeply recursive. Meant to be only (node --op--> node) which projects to (sg --op--> sg) where left must be fullfilled & right can accomidate with potential sg s '''
@@ -293,11 +313,16 @@ class default_patches:
         In this module it will project sg -> sg & potential_sg '''
         #TODO
 
-class second_level_patches:
-    patches = Patches()
-    ...
+#endregion
 
-def test():
-    assert b == (a >> b) 
+######## ENV VARIABLES ########
+
+current_patch_inst = ContextVar('current_patch_inst', default=None)
+
+
+
+
+# def test():
+#     assert b == (a >> b) 
 
 
