@@ -6,6 +6,10 @@ from ..models.struct_module    import module, module_test
 from ..models.base_node        import socket_group
 from .Execution_Types          import _mixin, item
 from ..models.struct_hook_base import hook
+from .utils.print_debug import (debug_print_wrapper as dp_wrap, 
+                                _debug_print        as dprint ,
+                                debug_level                   , 
+                                debug_targets                 ) 
 
 from types       import LambdaType,GeneratorType,FunctionType
 from contextlib  import contextmanager
@@ -19,6 +23,63 @@ _ORDER   = [] #For verifying that (project returns downwards on at least one ite
 
 _ALL_OPS = ('add', 'sub', 'mul', 'truediv', 'mod', 'floordiv', 'pow', 'matmul', 'and', 'or', 'xor', 'rshift', 'lshift','radd', 'rsub', 'rmul', 'rtruediv', 'rmod', 'rfloordiv', 'rpow', 'rmatmul', 'rand', 'ror', 'rxor', 'rrshift', 'rlshift',)
     #Not ugly at all...
+
+
+######## MODULE HEADER ########
+#region
+class main(module):
+    ''' A monad-like interface for creating node trees using contextual envs as req '''
+    UID     = 'Monadish_Interface'
+    Version = '1.2'
+
+#endregion
+
+
+######## ENV VARIABLES ########
+#region 
+
+current_patch_inst = ContextVar('current_patch_inst', default=None)
+
+#endregion
+
+
+######## MODULE MIXINS ########
+#region
+
+
+#endregion
+
+
+######## MODULE ITEMS ########
+#region
+
+class _delay:... #Utility identifier class
+
+class delay_mutable(_delay):
+    ''' TODO: a slice/socket or similar used on the delay node
+    passes creation arguments to be used in resolving a delay '''
+
+class delay_node(item.node,_delay):
+    ''' TODO: A node that intakes operations into a delay, 
+    re-applies them to the acting as node 
+    Will require adjustments to safeties around sockets & similar '''
+    is_resolved : bool
+    operations  : list 
+    acting_node : item.node
+
+    def resolve_delayed():
+        ... #TODO
+
+    def append_operation(op,sg,l,r, patches):
+        ... #TODO
+
+main._loader_items_.extend([
+    delay_node,
+    ])
+
+
+#endregion
+
 
 ######## OPERATION OBJ & WRAPPER ########
 #region
@@ -142,6 +203,7 @@ class _operation():
 operation = _operation.wrapper
 
 #endregion
+
 
 ######## OPERATION CONTAINER BASE TYPES ########
 #region
@@ -315,14 +377,186 @@ class default_patches:
 
 #endregion
 
-######## ENV VARIABLES ########
 
-current_patch_inst = ContextVar('current_patch_inst', default=None)
+######## TEST-ONLY ITEMS ########
+#region
+
+class _m():
+    Module  = main 
+    Label   = 'test_item'
+    Version = '1.0'
+    ...
+
+class a_socket(_m,item.socket):
+    UID        = 'Test_MonadSocket_A'
+
+    Value_In_Types    = str
+    Value_Out_Type    = str
+    Value_Default     = 'c'
+
+class b_socket(_m,item.socket):
+    UID        = 'Test_MonadSocket_B'
+
+    Value_In_Types    = int
+    Value_Out_Type    = int
+    Value_Default     = 'c'
+
+class c_socket(_m,item.socket):
+    UID        = 'Test_MonadSocket_C'
+
+    Value_In_Types    = (int,str)
+    Value_Out_Type    = str
+    Value_Default     = 'c'
+
+class a_socket(_m,item.socket):
+    UID        = 'Test_MonadSocket_A'
+
+    Value_In_Types    = str
+    Value_Out_Type    = str
+    Value_Default     = 'c'
+
+class b_socket(_m,item.socket):
+    UID        = 'Test_MonadSocket_B'
+
+    Value_In_Types    = int
+    Value_Out_Type    = int
+    Value_Default     = 'c'
+
+class c_socket(_m,item.socket):
+    UID        = 'Test_MonadSocket_C'
+
+    Value_In_Types    = (int,str)
+    Value_Out_Type    = str
+    Value_Default     = 'c'
+
+class node_a1_a1(_m,item.exec_node):
+    UID     = 'node_a1_a1'
+
+    in_sockets    = [socket_group.construct('set_a', Sockets=[a_socket])]
+    out_sockets   = [socket_group.construct('set_a', Sockets=[a_socket])]
+    # side_sockets  = [socket_group.construct('set_a', Sockets=[a_socket])]
+
+class node_b1_b1(_m,item.exec_node):
+    UID     = 'node_b1_b1'
+    in_sockets    = [socket_group.construct('set_a', Sockets=[b_socket])]
+    out_sockets   = [socket_group.construct('set_a', Sockets=[b_socket])]
+
+class node_c1_c1(_m,item.exec_node):
+    UID     = 'node_c1_c1'
+    in_sockets    = [socket_group.construct('set_a', Sockets=[c_socket])]
+    out_sockets   = [socket_group.construct('set_a', Sockets=[c_socket])]
+
+class node_left_simple_1(_m,item.exec_node):
+    UID     = 'node_left_simple_1'
+    in_sockets   = []
+    side_sockets = []
+    out_sockets  = [socket_group.construct('side_a', Sockets=[a_socket,
+                                                               c_socket]),
+                    socket_group.construct('side_a', Sockets=[b_socket])]
+
+class node_right_simple_1(_m,item.exec_node):
+    UID     = 'node_right_simple_1'
+    side_sockets = []
+    out_sockets  = []
+    in_sockets   = [socket_group.construct('side_b1', Sockets=[a_socket,
+                                                               c_socket]),
+                    socket_group.construct('side_b2', Sockets=[b_socket])]
+
+main._loader_items_.extend([
+    a_socket            ,
+    b_socket            ,
+    c_socket            ,
+    node_a1_a1          ,
+    node_b1_b1          ,
+    node_c1_c1          ,
+    node_left_simple_1  ,
+    node_right_simple_1 ,
+    ])
+
+#endregion
 
 
+######## TESTS ########
+#region
+
+class _test_patch_simple():
+    patches = Patches()
+
+    @operation(patches, op = ('lshift','ilshift'), mode = 'preprocess')
+    def logical_direction(cls, op,sg,l,r, *args, **kwargs):
+        ''' PreProcess: Switch logical direction with above ops '''
+        if op is   'lshift'  : op = 'rshift'
+        elif op is 'ilshift' : op = 'irshift'
+        return (op,sg,r,l) + args, kwargs
+
+    @operation(patches,Any)
+    def return_right(cls,op,sg,l,r,*args,**kwargs):
+        return r
 
 
-# def test():
-#     assert b == (a >> b) 
+class _tests:
+    @dp_wrap(threshold = 0)
+    def automerge_test(graph,subgraph):
+        ''' Test if auto_merge_target works '''
+        with graph.Monadish_Env(auto_merge_target = subgraph) as _sg:
+            left  = node_left_simple_1(default_sockets=True)
+            assert subgraph is not _sg
+            assert left.subgraph is _sg
+        assert left.subgraph is subgraph
 
+    @dp_wrap(threshold = 0)
+    def loading_patches_test(graph,subgraph):
+        ''' Test if patches are loaded correctly '''
+        with graph.Monadish_Env(op_env = _test_patch_simple.patches):
+            left  = node_left_simple_1(default_sockets=True)
+            right = node_right_simple_1(default_sockets=True)
 
+            assert right is (left >> right)
+            assert left  is (left << right)
+            assert right is (left +  right)
+
+    @dp_wrap(threshold = 0)
+    def temp_env_test(graph,subgraph):
+        ''' Test walk rules in special env layers '''
+        with graph.Monadish_Env(op_env = default_patches.patches) as _sg:
+            left  = node_left_simple_1(default_sockets=True)
+            left >> right
+
+            with _sg.Monadish_Temp():
+                right = node_right_simple_1(default_sockets=True)
+                assert right not in _sg.env['base']
+                #TODO: NOT CORRECT METHOD OF VERIFYING
+                   
+            subgraph.merge_in_walk(right)
+
+    @dp_wrap(threshold = 0)
+    def temp_env_with_delay_test(graph,subgraph):
+        ''' Test delay in env '''
+        with graph.Monadish_Env(op_env = default_patches.patches) as _sg:
+            left  = node_left_simple_1(default_sockets=True)
+            right = delay_node(default_sockets=True)
+            left >> right
+
+            with _sg.Monadish_Temp():
+                real_right_node = node_right_simple_1(default_sockets=True)
+                right @= real_right_node
+                subgraph.merge_in_walk(right)
+
+        assert len(subgraph.nodes) == 2
+        assert real_right_node.label in subgraph.nodes.keys()
+        assert not right.label in subgraph.nodes.keys()
+        
+
+main._module_tests_.append(module_test('TestA',
+                module      = main,
+                module_iten = {main.UID : main.Version,
+                               'Core_Execution':'2.0'}, 
+                funcs       = [
+                                _tests.automerge_test           ,
+                                # _tests.loading_patches_test     ,
+                                # _tests.temp_env_test            ,
+                                # _tests.temp_env_with_delay_test ,
+                              ],
+                ))
+
+#endregion
