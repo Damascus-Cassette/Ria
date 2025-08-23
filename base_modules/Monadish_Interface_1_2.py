@@ -307,7 +307,6 @@ class _operation():
         self.allow_fallback = allow_fallback
         self.filter         = filter
         self.safe           = safe
-        self.cast_to        = cast_to
 
     def match(self,*args,**kwargs):
         if isinstance(self.filter, LambdaType):
