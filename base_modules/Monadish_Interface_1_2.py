@@ -46,6 +46,13 @@ current_patch_inst = ContextVar('current_patch_inst', default=None)
 ######## MODULE MIXINS ########
 #region
 
+class node_mixin():
+    def fork(self):
+        ''' check if node exists within current context, 
+        otherwise copies and 'forks' '''
+        TODO
+
+    ...
 
 #endregion
 
@@ -520,14 +527,26 @@ class _tests:
         ''' Test walk rules in special env layers '''
         with graph.Monadish_Env(op_env = default_patches.patches) as _sg:
             left  = node_left_simple_1(default_sockets=True)
-            left >> right
 
             with _sg.Monadish_Temp():
                 right = node_right_simple_1(default_sockets=True)
                 assert right not in _sg.env['base']
                 #TODO: NOT CORRECT METHOD OF VERIFYING
-                   
+            
             subgraph.merge_in_walk(right)
+
+    @dp_wrap(threshold = 0)
+    def temp_env_fork_test(graph,subgraph):
+        ''' Test forking of mutating operations within a temp env '''
+        with graph.Monadish_Env(op_env = default_patches.patches) as _sg:
+            left  = node_left_simple_1(default_sockets=True)
+            right = node_right_simple_1(default_sockets=True)
+
+            with _sg.Monadish_Temp():
+                new_right = left >> right
+                #Mutating operations fork affected items.
+            assert new_right != right
+
 
     @dp_wrap(threshold = 0)
     def temp_env_with_delay_test(graph,subgraph):
@@ -555,8 +574,10 @@ main._module_tests_.append(module_test('TestA',
                                 _tests.automerge_test           ,
                                 # _tests.loading_patches_test     ,
                                 # _tests.temp_env_test            ,
+                                # _tests.temp_env_fork_test       ,
                                 # _tests.temp_env_with_delay_test ,
                               ],
                 ))
 
 #endregion
+
