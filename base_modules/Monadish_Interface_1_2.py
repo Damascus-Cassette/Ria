@@ -106,10 +106,10 @@ _op_elem_mixin = type('_op_elem_mixin',(_op_elem_mixin,),_make_dunders_all())
 #region
 
 
-def _default_dict_true(dict):
+class _default_dict_true(dict):
     def __missing__(self,key):
         return True
-def _default_dict_dict(dict):
+class _default_dict_dict(dict):
     def __missing__(self,key):
         var = {}
         self[key] = var
@@ -138,14 +138,15 @@ class graph_mixin(_mixin.graph):
 
 
 class node_collection_mixin(_mixin.node_collection):
-    @hook(event='new_item', mode='post')
+    @hook(event='__setitem__', mode='post')
     def _hook_special_monadish(self,item):
         ''' Ensure that a node added inside of a context sets the correct flags for actions that modify the graph to do so in a context not submitted to the main graph '''
         sg = item.context.subgraph
         if ck := getattr(sg,'_monadish_context_key_',None):
-            if (k:=ck.get()) != ('main',):
-                sg._monadish_special_context[k[-1]][item] = True
-                sg._monadish_special_context[k[ 0]][item] = False
+            if len((k:=ck.get())) >= 2:
+                sg._monadish_special_context_[k[-1]][item] = True
+                sg._monadish_special_context_[k[ 0]][item] = False
+        return item
 
 
 class subgraph_mixin(_mixin.subgraph):
@@ -158,7 +159,7 @@ class subgraph_mixin(_mixin.subgraph):
             self._monadish_special_context_         = _default_dict_dict()
             self._monadish_special_context_['base'] = _default_dict_true()
         if not hasattr(self,'_monadish_context_key_'):
-            self._monadish_context_key_ = ContextVar(f'{self.name}_context_key', default=('base',))
+            self._monadish_context_key_ = ContextVar(f'{self.label}_context_key', default=('base',))
             
     def Monadish_Merge_Contexts(self,key1,key2):
         ''' Merge into key1 '''
@@ -171,16 +172,20 @@ class subgraph_mixin(_mixin.subgraph):
             return True
         if not issubclass(inst.__class__, item.node): 
             return True
-        for k in self._monadish_context_key_.get():
-            res = self._monadish_special_context_.get()[k][inst]
+        for k in self._monadish_context_key_.get()[-1:]:
+            res = self._monadish_special_context_[k][inst]
             if res is not None: 
                 return res
         raise Exception('Missing "base" key ')
 
     @contextmanager
-    def Monadish_Temp(self, key:str):
+    def Monadish_Temp(self, key:str, **kwargs):
         ''' Contexts exist as a diff against the contexts, thus nested context's just iterate over keys
-        To merge contexts, use Monadish_Merge_Contexts '''
+        To merge contexts, use Monadish_Merge_Contexts 
+        Allows env flags to be declared, uses as_env.
+        yields key and filter for merge in.
+        Shouldnt be done in a nested context
+        '''
         
         self._monadish_ensure_sc_()
         ck = self._monadish_context_key_
@@ -189,7 +194,10 @@ class subgraph_mixin(_mixin.subgraph):
         c = current_context_value + (key,)
         t = ck.set(c)
 
-        yield key
+        self._monadish_special_context_[key] = {}
+
+        with self.As_Env(**kwargs):
+            yield key,self.Monadish_Context_Item_Enabled
 
         ck.reset(t)
 
@@ -218,6 +226,7 @@ main._loader_mixins_ = [
     graph_mixin,
     subgraph_mixin,
     socket_collection_mixin,
+    node_collection_mixin,
     sg_mixin,
     socket_mixin,
     node_mixin,
@@ -331,6 +340,7 @@ class _operation():
         self.filter         = filter
         self.safe           = safe
 
+    @dp_wrap(0)
     def match(self,*args,**kwargs):
         if isinstance(self.filter, LambdaType):
             return self.filter(*args,**kwargs)
@@ -400,13 +410,13 @@ class _patches_item_list(list):
         for x in super().__iter__():
             x:_operation
             k = x.key
-            if not x.allow_fallback:
-                break
             if k and k in seen_keys:
                 continue
             elif k:
                 seen_keys.append(k)
             yield x
+            if not x.allow_fallback:
+                break
         return StopIteration
         
 class _patches_type_mode(dict):
@@ -443,6 +453,7 @@ class Patches():
         self.operation   = _patches_type_mode()
         self.project     = _patches_type_mode()
     
+    @dp_wrap(0)
     def __call__(self,op,sg,l,r):
         e_key = self.temp_item_env_open(sg)
         res = self.resolve_operation(op,sg,l,r)
@@ -465,13 +476,13 @@ class Patches():
         #merge if applied
         #free  if unused
         ...
-
+    @dp_wrap(0, print_post=True, print_result=True)
     def resolve_operation(self,op,*args,**kwargs)->LambdaType|None:
         ''' prep resolve operation via order of operations, if operation is possible returns a lambda that resolves head operation'''
         x:_operation
         for x in self.preprocess[op]:
             if x.match(op,*args,**kwargs):
-                (op,*args), kwargs =x(op,*args,**kwargs)
+                (op,*args), kwargs = x(op,*args,**kwargs)
                     
         for x in self.s_operation[op]:
             if x.match(op,*args,**kwargs):
@@ -525,14 +536,14 @@ class default_patches:
     patches = Patches()
 
     @operation(patches, op = ('lshift','ilshift'), mode = 'preprocess')
-    def logical_direction(cls, op,sg,l,r, *args, **kwargs):
+    def logical_direction(op,sg,l,r, *args, **kwargs):
         ''' PreProcess: Switch logical direction with above ops '''
         if   op == 'lshift'  : op = 'rshift'
         elif op == 'ilshift' : op = 'irshift'
         return (op,sg,r,l) + args, kwargs
     
     @operation(patches, Any, but = 'imat', mode = 's_operation', filter= lambda sg,l,r: issubclass(l.__class__,_delay) or issubclass(r.__class__,_delay))
-    def delay_node(cls, op,sg,l,r, *args, **kwargs):
+    def delay_node(op,sg,l,r, *args, **kwargs):
         ''' A delayed item is one that isnt defined yet, but is used anyway. 
         When the node is replaced using the @= on it, it resolves all operations. 
         Nested delays are point to their contextual or perm replacement 
@@ -668,8 +679,10 @@ main._loader_items_.extend([
 
 class _test_patch_simple():
     patches = Patches()
+
     @operation(patches, op = ('lshift','ilshift'), mode = 'preprocess')
-    def logical_direction(cls, op,sg,l,r, *args, **kwargs):
+    @dp_wrap(0, print_post=True, print_result=True)
+    def logical_direction(op,sg,l,r, *args, **kwargs):
         ''' PreProcess: Switch logical direction with above ops '''
         if   op == 'lshift'  : op = 'rshift'
         elif op == 'ilshift' : op = 'irshift'
@@ -677,6 +690,7 @@ class _test_patch_simple():
         
 
     @operation(patches,Any)
+    @dp_wrap(0, print_post=True, print_result=True)
     def return_right(op,sg,l,r,*args,**kwargs):
         return r
 
@@ -691,7 +705,6 @@ class _tests:
             from ..models.struct_context import _context
             print(_context['node_coll'].get())
             left  = node_left_simple_1(default_sockets=True)
-            print('SG NODES',list(_sg.nodes.values()))
             assert subgraph is not _sg
             assert left.context.subgraph is _sg
         # assert left.copied_to[subgraph].context.subgraph is subgraph
@@ -716,21 +729,28 @@ class _tests:
         with graph.Monadish_Env(op_env = default_patches.patches) as _sg:
             left  = node_left_simple_1(default_sockets=True)
 
-            with _sg.Monadish_Temp():
+            with _sg.Monadish_Temp('Temp', auto_add_nodes = True) as (k,f):
                 right = node_right_simple_1(default_sockets=True)
-                assert right not in _sg.env['base']
-                #TODO: NOT CORRECT METHOD OF VERIFYING
+                    # Gets set to subgraph's temp context on setitem, 
+                    # therfore it needs to be added manually or via auto_add_nodes
+                assert     _sg._monadish_special_context_['Temp'][right]
+                assert not _sg._monadish_special_context_['base'][right]
+                
+                subgraph.copy_walk(right, filter=f)
+
+            assert not _sg.Monadish_Context_Item_Enabled(right)
             
-            subgraph.merge_in_walk(right)
+            subgraph.copy_walk(right,filter = f)
+                #TODO BUG: This Fails silently as nothing is returned 
 
     @dp_wrap(0)
     def temp_env_fork_test(graph,subgraph):
         ''' Test forking of mutating operations within a temp env '''
         with graph.Monadish_Env(op_env = default_patches.patches) as _sg:
-            left  = node_left_simple_1(default_sockets=True)
-            right = node_right_simple_1(default_sockets=True)
+            left  = node_left_simple_1( default_sockets = True)
+            right = node_right_simple_1(default_sockets = True)
 
-            with _sg.Monadish_Temp():
+            with _sg.Monadish_Temp('Temp'):
                 new_right = left >> right
                 #Mutating operations fork affected items.
             assert new_right != right
@@ -743,7 +763,7 @@ class _tests:
             right = delay_node(default_sockets=True)
             left >> right
 
-            with _sg.Monadish_Temp():
+            with _sg.Monadish_Temp('Temp'):
                 real_right_node = node_right_simple_1(default_sockets=True)
                 right @= real_right_node
                 subgraph.merge_in_walk(right)
@@ -761,7 +781,7 @@ main._module_tests_.append(module_test('TestA',
                 funcs       = [
                                 _tests.automerge_test           ,
                                 _tests.loading_patches_test     ,
-                                # _tests.temp_env_test            ,
+                                _tests.temp_env_test            ,
                                 # _tests.temp_env_fork_test       ,
                                 # _tests.temp_env_with_delay_test ,
                               ],

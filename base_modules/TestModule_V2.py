@@ -20,6 +20,7 @@ class main(module):
         @hook(event='__setitem__', mode='post')
         def _new(self,item):
             test_var.set(True)
+            return item
 
     Deps = [
         ('required','Core_Execution','=(2.0)','Failure_Message')

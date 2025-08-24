@@ -148,7 +148,7 @@ class _hook(_shared_class):
         assert self.mode is not None
         assert self.mode != 'context'
 
-        if self.see_args and (self.passthrough or self.mode == 'wrap'):
+        if self.see_args and (self.passthrough or self.mode in ['wrap','post']):
             res =  self.func(container,*args,**kwargs)
             assert res is not None
             return res
@@ -156,7 +156,7 @@ class _hook(_shared_class):
             self.func(container,*args,**kwargs)
             return args,kwargs
         else: 
-            self.func()
+            return self.func()
         
     def return_context_generator_object(self,container,*args,**kwargs):
         return _enter_exit_hidden(self.func(container,*args,**kwargs))
@@ -391,7 +391,6 @@ class hook_group():
             
             res = func(container,*args,**kwargs)
             # res = func(container,*args,**kwargs)
-
             for x in post:
                 res = x.run(container, res)
 

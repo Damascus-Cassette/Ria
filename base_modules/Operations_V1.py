@@ -62,7 +62,8 @@ class main(module):
                       dir             : str|tuple       = ('in','side','out'),
                       dir_constrained : bool            = False,
                       return_memo     : bool            = False, 
-                      memo            : dict[str,Any]   = None
+                      memo            : dict[str,Any]   = None,
+                      filter          : LambdaType|None = None,
                       ):
             ''' Walk_in with a direction, copy nodes and copy-convert links '''
             if not isinstance(headers,(tuple,list,set)):
@@ -73,7 +74,7 @@ class main(module):
             chain = []
 
             for node in headers:
-                _ns,_ls = node.walk(direction = dir,chain=chain,dir_constrained =dir_constrained, return_links = True)
+                _ns,_ls = node.walk(direction = dir,chain=chain,dir_constrained =dir_constrained, return_links = True, filter = filter)
                 nodes.extend(_ns)
                 links.extend(_ls)
             return self.copy_in_nodes(nodes=nodes, links=links, keep_links=True, return_memo=return_memo, memo=memo)
@@ -120,10 +121,10 @@ class main(module):
         def other_nodes(self, yield_links=False):
             ''' Yields other nodes and optional link that goes there '''
 
-            if self.Dir in ('in','side'): other_attr = 'from_node'
-            else:                         other_attr = 'to_node'
+            if self.Direction in ('in','side'): other_attr = 'from_node'
+            else:                               other_attr = 'to_node'
 
-            for socket in self.sockets:
+            for socket in self:
                 for link in socket.links:
                     other_node = getattr(link,other_attr)
                     if yield_links: yield other_node, link
