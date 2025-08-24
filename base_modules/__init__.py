@@ -14,7 +14,7 @@ modules = [
 
 base_module_defaults = {
     TestModule_V2.UID : TestModule_V2.Version,
-    Execution_V2.UID  : Execution_V2.Version,
+    Execution_V2.UID  : Execution_V2.Version ,
     Operations_V1.UID : Operations_V1.Version,
     }
     #Default versions produced
