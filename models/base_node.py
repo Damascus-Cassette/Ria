@@ -53,9 +53,9 @@ class link(item_base,BaseModel,ConstrBase, Hookable):
 
     def __init__(self, out_socket=None, in_socket=None):
         self.context = self.context(self)
-        self._collection_item_auto_add_('link_coll','auto_add_sockets')
         self.out_socket = out_socket
         self.in_socket   = in_socket
+        self._collection_item_auto_add_('link_coll','auto_add_sockets')
     
     @property
     def out_socket(self):
@@ -388,7 +388,6 @@ class node(item_base,BaseModel,ConstrBase, Hookable):
 
     def __init__(self,/,*,default_sockets:bool = False):
         self.context = self.context(self)
-        self._collection_item_auto_add_('node_coll','auto_add_nodes')
         self.In_Sockets   = self.in_sockets   #Consider mandating this structure def as capital
         self.Out_Sockets  = self.out_sockets  
         self.Side_Sockets = self.side_sockets 
@@ -398,6 +397,7 @@ class node(item_base,BaseModel,ConstrBase, Hookable):
         if default_sockets:
             self.default_sockets()
         self._context_walk_()
+        self._collection_item_auto_add_('node_coll','auto_add_nodes')
 
     def default_sockets(self):
         self.in_sockets.default_sockets()
@@ -455,15 +455,17 @@ class subgraph(item_base, BaseModel, ConstrBase, Hookable):
 
     def __init__(self,):
         self.context = self.context(self)
-        self._collection_item_auto_add_('subgraph_col','auto_add_subgraphs')
         with self.context.register():
             self.links   = link_collection()
             self.nodes   = node_collection()
+        self._collection_item_auto_add_('subgraph_col','auto_add_subgraphs')
 
     @contextmanager
     def As_Env(self,auto_add_nodes=True,auto_add_links=True):
-        with self.context.As_Env(auto_add_nodes=auto_add_nodes,
-                                 auto_add_links=auto_add_links):
+        with (self.context.As_Env(auto_add_nodes=auto_add_nodes,
+                                  auto_add_links=auto_add_links), 
+              self.nodes.context.register(), 
+              self.links.context.register()):
             yield self
         
 
@@ -522,9 +524,9 @@ class graph(item_base, BaseModel, ConstrBase,  Hookable):
 
     def __init__(self,module_iten:dict=None):
         self.context    = self.context(self)
-        self._collection_item_auto_add_('graph_coll',True)
         self.module_col = local_module_collection(module_iten=module_iten)
         self.subgraphs  = subgraph_collection()
+        self._collection_item_auto_add_('graph_coll',True)
 
 class graph_collection(BaseModel, collection_base, ConstrBase, Hookable):
     _io_bin_name_ = 'graph'

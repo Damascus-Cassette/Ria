@@ -56,7 +56,7 @@ def context_current_patch(item:'Patches'):
 #region 
 
 def resolve_operation_in_context(*args,**kwargs):
-    return current_patch_inst.get().resolve_operation(*args,**kwargs)
+    return current_patch_inst.get()(*args,**kwargs)
 
 class _op_elem_mixin:
     ''' All subclasses generate an operational handler and return the result '''
@@ -91,10 +91,12 @@ def _make_dunder(name_root)->dict[FunctionType]:
 def _make_dunders_all()->dict:
     _ops = ['add', 'sub', 'mul', 'truediv', 'mod', 'floordiv', 'pow', 'matmul', 'and', 'or', 'xor', 'rshift', 'lshift',]
     res  = {}
-    for x in _ops: res|_make_dunder(x)
+    for x in _ops: res = res|_make_dunder(x)
     return res
 
 _op_elem_mixin = type('_op_elem_mixin',(_op_elem_mixin,),_make_dunders_all())
+
+# print(_make_dunders_all())
 
 #endregion
 
@@ -163,11 +165,13 @@ class subgraph_mixin(_mixin.subgraph):
         b = self._monadish_special_context_[key2]
         self._monadish_special_context_[key1] = b|a
 
-    def Monadish_Context_Item_Enabled(self,item)->bool:
-        if not issubclass(item,item.node): 
+    def Monadish_Context_Item_Enabled(self,inst)->bool:
+        if not hasattr(self,'_monadish_context_key_'):
+            return True
+        if not issubclass(inst.__class__, item.node): 
             return True
         for k in self._monadish_context_key_.get():
-            res = self._monadish_special_context_.get()[k][item]
+            res = self._monadish_special_context_.get()[k][inst]
             if res is not None: 
                 return res
         raise Exception('Missing "base" key ')
@@ -177,7 +181,7 @@ class subgraph_mixin(_mixin.subgraph):
         ''' Contexts exist as a diff against the contexts, thus nested context's just iterate over keys
         To merge contexts, use Monadish_Merge_Contexts '''
         
-        self._monadish_ensure_special_context_()
+        self._monadish_ensure_sc_()
         ck = self._monadish_context_key_
         assert key not in ck.get()
         current_context_value = ck.get()
@@ -234,6 +238,10 @@ class delay_node(item.node,_delay):
     ''' TODO: A node that intakes operations into a delay, 
     re-applies them to the acting as node 
     Will require adjustments to safeties around sockets & similar '''
+
+    UID = 'Monadish_Delay_Node'
+    Version = '1.0'
+
     is_resolved : bool
     operations  : list 
     acting_node : item.node
@@ -388,7 +396,7 @@ operation = _operation.wrapper
 class _patches_item_list(list):
     def __iter__(self):
         seen_keys = []
-        for x in super().__iter__:
+        for x in super().__iter__():
             x:_operation
             k = x.key
             if not x.allow_fallback:
@@ -436,12 +444,13 @@ class Patches():
     
     def __call__(self,cls,op,sg,l,r):
         self.temp_item_env(sg)
-        
+        print('INSIDE FO PATCHES OBJ')
         res = self.resolve_operation(cls,op,sg,l,r)
-        if res: 
-            result =  res()
+        if res:
+            if isinstance(res,LambdaType): 
+                res =  res()  
             self.temp_item_env_close()
-            return result
+            return res
         else:
             self.temp_item_env_cancel()
             raise Exception(f'COULD NOT RESOLVE LR AND OP! {l} --{op}--> {r}')
@@ -658,13 +667,13 @@ main._loader_items_.extend([
 
 class _test_patch_simple():
     patches = Patches()
-
     @operation(patches, op = ('lshift','ilshift'), mode = 'preprocess')
     def logical_direction(cls, op,sg,l,r, *args, **kwargs):
         ''' PreProcess: Switch logical direction with above ops '''
         if   op == 'lshift'  : op = 'rshift'
         elif op == 'ilshift' : op = 'irshift'
         return (op,sg,r,l) + args, kwargs
+        
 
     @operation(patches,Any)
     def return_right(cls,op,sg,l,r,*args,**kwargs):
@@ -675,12 +684,18 @@ class _tests:
     @dp_wrap(0)
     def automerge_test(graph,subgraph):
         ''' Test if auto_merge_target works '''
-        with graph.Monadish_Env(auto_merge_target = subgraph) as _sg:
+        # with subgraph.As_Env(auto_add_nodes=True):
+        #     _sg = subgraph
+        with graph.Monadish_Env(auto_add_nodes=True, auto_merge_target=subgraph) as _sg:
+            from ..models.struct_context import _context
+            print(_context['node_coll'].get())
             left  = node_left_simple_1(default_sockets=True)
+            print('SG NODES',list(_sg.nodes.values()))
             assert subgraph is not _sg
             assert left.context.subgraph is _sg
         # assert left.copied_to[subgraph].context.subgraph is subgraph
         assert subgraph.nodes[0].UID == left.UID
+        assert subgraph.nodes[0] != left
 
     @dp_wrap(0)
     def loading_patches_test(graph,subgraph):
@@ -689,8 +704,9 @@ class _tests:
             left  = node_left_simple_1(default_sockets=True)
             right = node_right_simple_1(default_sockets=True)
 
-            assert right is (left >> right)
+            print(left << right)
             assert left  is (left << right)
+            assert right is (left >> right)
             assert right is (left +  right)
 
     @dp_wrap(0)
@@ -718,7 +734,6 @@ class _tests:
                 #Mutating operations fork affected items.
             assert new_right != right
 
-
     @dp_wrap(0)
     def temp_env_with_delay_test(graph,subgraph):
         ''' Test delay in env '''
@@ -744,7 +759,7 @@ main._module_tests_.append(module_test('TestA',
                                'Operations'    :'1.0'}, 
                 funcs       = [
                                 _tests.automerge_test           ,
-                                # _tests.loading_patches_test     ,
+                                _tests.loading_patches_test     ,
                                 # _tests.temp_env_test            ,
                                 # _tests.temp_env_fork_test       ,
                                 # _tests.temp_env_with_delay_test ,

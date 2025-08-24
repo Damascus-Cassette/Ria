@@ -23,7 +23,7 @@ class item_base():
         return f"['{self.key}']"
     def _collection_item_auto_add_(self,add_to:str,flag:str|bool):
         ''' Auto append to context[add_to] if context_flags[flag] '''
-        if (p_col:=_context[add_to].get()):
+        if not (p_col:=_context[add_to].get()) is False:
             if self not in p_col.values() and ((flag is True) or context_flags[flag].get()):
                 p_col[getattr(self,'Label',getattr(self,'UID',self.__class__.__name__))] = self
 
@@ -206,8 +206,9 @@ class collection_base[T=item_base]():
         memo = copy(memo)
         new = deepcopy(item,memo=memo)
         if keep: self[self.make_unique_key(new.key)] = new
-        if return_memo: new,memo
+        if return_memo: return new,memo 
         return new
+    
     def copy_multi(self,items:slice|tuple[T],safe=True,keep=True,return_memo=False,memo=None)->tuple[T]:        
         ''' deepcopy items and return the copy. 
         memo is shared accross all deepcopy calls

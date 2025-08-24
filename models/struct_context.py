@@ -128,7 +128,7 @@ class context():
         if id(self._parent) not in memo.keys():
             raise Exception('Context cannot be deepcopied directly!')
         new_parent = memo[id(self._parent)]
-        result = context(new_parent)
+        result = self.__class__(new_parent)
         memo[id(self)] = result
         return result
     

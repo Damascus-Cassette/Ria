@@ -78,7 +78,6 @@ def basic_exec_test(graph,subgraph):
 
         nodeb.in_sockets[1].value = 'c'
 
-        
         subgraph.nodes['nodea'] = nodea
         subgraph.nodes['nodeb'] = nodeb
         link_a = subgraph.links.new(key='Link',
