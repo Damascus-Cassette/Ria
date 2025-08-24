@@ -542,7 +542,7 @@ class default_patches:
         elif op == 'ilshift' : op = 'irshift'
         return (op,sg,r,l) + args, kwargs
     
-    @operation(patches, Any, but = 'imat', mode = 's_operation', filter= lambda sg,l,r: issubclass(l.__class__,_delay) or issubclass(r.__class__,_delay))
+    @operation(patches, Any, but = 'imat', mode = 's_operation', filter= lambda op,sg,l,r: issubclass(l.__class__,_delay) or issubclass(r.__class__,_delay))
     def delay_node(op,sg,l,r, *args, **kwargs):
         ''' A delayed item is one that isnt defined yet, but is used anyway. 
         When the node is replaced using the @= on it, it resolves all operations. 
@@ -555,18 +555,18 @@ class default_patches:
             r.append_operation('r{op}',sg,l,r, patches = current_patch_inst.get())
         return r
     
-    @operation(patches, 'imat', mode = 's_operation', filter= lambda sg,l,r: issubclass(l.__class__,_delay))
+    @operation(patches, 'imat', mode = 's_operation', filter= lambda op,sg,l,r: issubclass(l.__class__,_delay))
     def replace_delay(cls, op,sg,l,r, *args, **kwargs):
         ''' Replaces the delay item, which resolves all pending operations'''
         l.replace_with(r)
         return r
         
-    @operation(patches, op = ('lshift','ilshift'), filter = lambda sg,l,r: isinstance(l,socket_group) or isinstance(r,socket_group))
+    @operation(patches, op = ('lshift','ilshift'), filter = lambda op,sg,l,r: isinstance(l,socket_group) or isinstance(r,socket_group))
     def operation_sg_sg_connect(cls, op,sg,l,r, *args, **kwargs):
         ''' TODO Apply the connection between socket groups'''
         ...
 
-    @operation(patches, op = Any, mode = 'project', filter = lambda sg,l,r: all([issubclass(l.__class__,item.node),issubclass(r.__class__,item.node)]) and any([r.zip_flag, l.zip_flag]) )
+    @operation(patches, op = Any, mode = 'project', filter = lambda op,sg,l,r: all([issubclass(l.__class__,item.node),issubclass(r.__class__,item.node)]) and any([r.zip_flag, l.zip_flag]) )
     def project_zip_node(cls, op,sg,l,r, *args, **kwargs)->LambdaType:
         ''' Project operation in a zip fashion, returns a lambda that undoes zip_flag and does operation 
         projection must return LambdaType that resolves action and casts type to correct group 
@@ -753,6 +753,9 @@ class _tests:
             with _sg.Monadish_Temp('Temp'):
                 new_right = left >> right
                 #Mutating operations fork affected items.
+            
+            # assert new_right is not False
+            # raise Exception(left, right, new_right)
             assert new_right != right
 
     @dp_wrap(0)
@@ -782,7 +785,7 @@ main._module_tests_.append(module_test('TestA',
                                 _tests.automerge_test           ,
                                 _tests.loading_patches_test     ,
                                 _tests.temp_env_test            ,
-                                # _tests.temp_env_fork_test       ,
+                                _tests.temp_env_fork_test       ,
                                 # _tests.temp_env_with_delay_test ,
                               ],
                 ))
