@@ -444,24 +444,24 @@ class Patches():
         self.project     = _patches_type_mode()
     
     def __call__(self,op,sg,l,r):
-        self.temp_item_env(sg)
-        print('INSIDE FO PATCHES OBJ')
+        e_key = self.temp_item_env_open(sg)
         res = self.resolve_operation(op,sg,l,r)
         if res:
             if isinstance(res,LambdaType): 
                 res =  res()  
-            self.temp_item_env_close()
+            self.temp_item_env_close(sg, e_key)
             return res
         else:
-            self.temp_item_env_cancel()
+            self.temp_item_env_cancel(sg, e_key)
             raise Exception(f'COULD NOT RESOLVE LR AND OP! {l} --{op}--> {r}')
 
-    
-
-    def temp_item_env_open(subgraph):
-        ''' Create a temporary env to place new nodes in, then free after completion '''
+    def temp_item_env_close(self,sg, e_key):...
+    def temp_item_env_cancel(self,sg, e_key):...
+    def temp_item_env_open(self,subgraph):
+        ''' Create a temporary env to place new nodes in for possible action validation, then rid env and rid or keep nodes or links after completion, '''
         #Set env
-        yield
+        # Retrun env key
+        # yield
         #merge if applied
         #free  if unused
         ...
