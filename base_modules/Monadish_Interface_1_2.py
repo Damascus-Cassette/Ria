@@ -64,23 +64,24 @@ class _op_elem_mixin:
     dir_flag : str  = 'pos'
 
     def __invert__(self): self.zip_flag = True
-    def __pos__(self): self.dir_flag = 'pos'
-    def __neg__(self): self.dir_flag = 'neg'
+    def __pos__(self)   : self.dir_flag = 'pos'
+    def __neg__(self)   : self.dir_flag = 'neg'
 
+#Format for calls rn is op,sg,l,r
 def _make_dunder(name_root)->dict[FunctionType]:
     name = name_root
     def f(self,other):
-        return resolve_operation_in_context(self,other,name_root)        
+        return resolve_operation_in_context(name_root,      self.context.subgraph, self, other)        
 
     def f_inclusionary(self,other):
-        return resolve_operation_in_context(self,other,'i'+name_root)
+        return resolve_operation_in_context('i'+name_root,  self.context.subgraph , self, other)
     
     def f_reverse(self,other):
-        return resolve_operation_in_context(other,self,'r'+name_root)
+        return resolve_operation_in_context('r'+name_root,  self.context.subgraph, other,self)
 
     def f_reverse_inclusionary(self,other):
-        return resolve_operation_in_context(other,self,'ri'+name_root)
-        ...
+        return resolve_operation_in_context('ri'+name_root, self.context.subgraph,other,self)
+
     return {
         f'__{name_root}__'  : f,
         f'__i{name_root}__' : f_inclusionary,
@@ -442,10 +443,10 @@ class Patches():
         self.operation   = _patches_type_mode()
         self.project     = _patches_type_mode()
     
-    def __call__(self,cls,op,sg,l,r):
+    def __call__(self,op,sg,l,r):
         self.temp_item_env(sg)
         print('INSIDE FO PATCHES OBJ')
-        res = self.resolve_operation(cls,op,sg,l,r)
+        res = self.resolve_operation(op,sg,l,r)
         if res:
             if isinstance(res,LambdaType): 
                 res =  res()  
@@ -465,26 +466,26 @@ class Patches():
         #free  if unused
         ...
 
-    def resolve_operation(self,cls,op,*args,**kwargs)->LambdaType|None:
+    def resolve_operation(self,op,*args,**kwargs)->LambdaType|None:
         ''' prep resolve operation via order of operations, if operation is possible returns a lambda that resolves head operation'''
         x:_operation
         for x in self.preprocess[op]:
-            if x.match(cls,op,*args,**kwargs):
-                (op,*args), kwargs =x(cls,op,*args,**kwargs)
+            if x.match(op,*args,**kwargs):
+                (op,*args), kwargs =x(op,*args,**kwargs)
                     
         for x in self.s_operation[op]:
-            if x.match(cls,op,*args,**kwargs):
-                if res:=x(cls,op,*args,**kwargs):
+            if x.match(op,*args,**kwargs):
+                if res:=x(op,*args,**kwargs):
                     return res
 
         for x in self.operation[op]:
-            if x.match(cls,op,*args,**kwargs):
-                if res:=x(cls,op,*args,**kwargs):
+            if x.match(op,*args,**kwargs):
+                if res:=x(op,*args,**kwargs):
                     return res
 
         for x in self.project[op]:
-            if x.match(cls,op,*args,**kwargs):
-                if res:=x(cls,op,*args,**kwargs):
+            if x.match(op,*args,**kwargs):
+                if res:=x(op,*args,**kwargs):
                     return res
 
     def intake_operation(self,oper:_operation):
@@ -676,7 +677,7 @@ class _test_patch_simple():
         
 
     @operation(patches,Any)
-    def return_right(cls,op,sg,l,r,*args,**kwargs):
+    def return_right(op,sg,l,r,*args,**kwargs):
         return r
 
 
