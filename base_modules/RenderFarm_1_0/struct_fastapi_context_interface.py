@@ -62,7 +62,7 @@ class _io():
                 case MODES.MANAGER:
                     ...
         else:
-            match mode(), :
+            match mode():
                 case 
     
     
@@ -78,6 +78,7 @@ class _io():
         ''' contextually set connection or call locally, if _con, _rep are not set otherwise '''
     def lc(self, *args, _inst=None, _con=None,_rep=None, **kwargs):
         ''' contextually set connection or call locally, if _con, _rep are not set otherwise '''
+        ''' These all call '''
 
 def io():
     ...
