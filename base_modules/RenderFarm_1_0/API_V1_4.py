@@ -2,7 +2,7 @@
 from enum import Enum
 from inspect import isclass
 import fastapi
-
+from types import FunctionType
 
 class Int(Enum):
     ''' If a call comes from an internal interface '''
@@ -89,27 +89,35 @@ class Entity_Interface():
     def __init__(self):
         self.is_local = True
         self.connection_handler = Ext_Interface_Handlder(self)
+        self.router             = fastapi.APIRouter()
+        for k,v in self._subinterfaces():
+            v._register(self.router)
 
 
 class SubInterface():
     ''' In short these interfaces should know all routed functions & their interfaces
     Also 
     '''
-    _router : fastapi.APIRouter | None 
+    _router      : fastapi.APIRouter | None 
 
     def __init__(self,parent:Entity_Interface):
         self.parent = parent
 
-    # def __get__(self,inst,inst_cls):
-    #     self.parent = inst
-    #     return self
+    def _api_items(self):
+        for k in dir(self):
+            v = getattr(self,k)
+            if isinstance(v,api_item):
+                yield k,v
 
-    def __init_subclass__(cls):
-        for k in dir(cls):
-            v = getattr(cls,k)
-            if isinstance(v,_routed_func):
-                #Attach to router
-                ...
+    def _register(self,router:fastapi.APIRouter):
+        self._router = self.make_router()
+        for k,v in self._api_items():
+            v._register(router)
+        router.add_route(self._router)
+
+    def make_router(self,):
+        return fastapi.APIRouter()
+
 
 class Ext_Interface_Handlder():
     ''' Singleton per primary entity that handles creating and merging connections based on roles as well as registering complete routes '''
@@ -133,18 +141,56 @@ class _routed_func():
     def match(self,*args,**kwargs):
         return self.filter(*args,**kwargs)
 
-class api():
+class _api_item():
     ''' API Function wrapper, registers functions to an API router object on call. 
     Enteres and exists context declareing role & context stuff as inline as possible
     Allows sub-functions that route based on context, otherwise falls back to first wrappped function.
     '''
     _routes = list[_routed_func]
+    _path        : str
+    _fapi_args   : tuple
+    _fapi_kwargs : dict
+    _func_base   : FunctionType
 
-    def __init__(self, endpoint):
-        self._endpoint = endpoint
-        return self
-    def __call__(self, func):
-        self._func_fallback = func
+
+    def __init__(self,func, path, *args,**kwargs)->Self:
+        self.func         = func
+        self._path        = path
+        self._fapi_args   = args
+        self._fapi_kwargs = kwargs
+        self._methods     = []
+
+    @classmethod
+    def _init_wrapper(cls,path,*args,**kwargs):
+        def wrapper(func):
+            cls(func,path,*args,**kwargs)
+        return wrapper
+    
+    def __call__(self, *args,**kwargs):
+        self._internal_call_interface(*args,**kwargs)
+
+    def _register(self,router:fastapi.APIRouter)->None:
+        args, kwargs = self._api_route_args()
+        router.add_api_route(self._api_route_args())
+        
+    def _api_route_arg(self)->tuple[tuple,dict]:
+        ''' Pass in the arguments of path and such '''
+        wrapped = self._external_call_interface()
+        path = self._path
+
+        return (path, wrapped) + self._fapi_args, {'methods':self._methods} | self._fapi_kwargs
+    
+    def _get_path():
+        ''' Get path in relation to parent container chain of subroutes/route/prefixes '''
+        ...
+
+    def _external_call_interface():
+        ''' This is the External header function '''
+        ...
+
+    def _internal_call_interface():
+        ''' This is the Internal header function '''
+        ...
 
     def _produce_filter(Self, self_role:Role, self:Int|Ext, requester:Int|Ext|Role, requester_state:State):
         def _filter():
@@ -152,12 +198,12 @@ class api():
         return _filter
 
     def _wrapper(_self, 
-            mode            :CALLS              , 
-            key             :str          = None, #Allows bypassing of wrapper in calling, for local calls and debugging
-            self_role       :Role         = None, 
-            self            :Int|Ext      = None, 
-            requester       :Int|Ext|Role = None, 
-            requester_state :State        = None,
+            mode            :CALLS               , 
+            key             :str          = None , #Allows bypassing of wrapper in calling, for local calls and debugging
+            self_role       :Role         = None , 
+            self            :Int|Ext      = None , 
+            requester       :Int|Ext|Role = None , 
+            requester_state :State        = None ,
             ):
         ''' Add an item to the wrapper with above arguments '''
         def wrapper(func):
@@ -180,27 +226,38 @@ class api():
         return wrapper
 
     @wraps(_wrapper)    
-    def Get(self,*args,**kwargs): return self._wrapper(CALLS.GET,*args,**kwargs)
+    def Get(self,*args,**kwargs): 
+        if CALLS.GET.value not in self._methods: 
+            self._methods.append(CALLS.Get.value)
+        return self._wrapper(CALLS.GET,*args,**kwargs)
     @wraps(_wrapper)    
-    def Post(self,*args,**kwargs): return self._wrapper(CALLS.POST,*args,**kwargs)
+    def Post(self,*args,**kwargs): 
+        if CALLS.POST.value not in self._methods: 
+            self._methods.append(CALLS.POST.value)
+        return self._wrapper(CALLS.POST,*args,**kwargs)
     @wraps(_wrapper)    
-    def Patch(self,*args,**kwargs): return self._wrapper(CALLS.PATCH,*args,**kwargs)
+    def Patch(self,*args,**kwargs): 
+        if CALLS.PATCH.value not in self._methods: 
+            self._methods.append(CALLS.PATCH.value)
+        return self._wrapper(CALLS.PATCH,*args,**kwargs)
     @wraps(_wrapper)    
-    def Delete(self,*args,**kwargs): return self._wrapper(CALLS.DELETE,*args,**kwargs)
+    def Delete(self,*args,**kwargs): 
+        return self._wrapper(CALLS.DELETE,*args,**kwargs)
+        if CALLS.DELETE.value not in self._methods: 
+            self._methods.append(CALLS.DELETE.value)
 
-    def _header_internal(self,...):
-        ...
-    def _header_external(self,...):
-        ...
+api_item = _api_item._init_wrapper
 
 import time
+
+
 
 class shared_subinterface(SubInterface):
     
     def call_ping(self,con):
         return con.cmds.ping()
 
-    @api('ping')
+    @api_item('ping')
     def ping(self, con:Entity_Interface):
         ''' Defines IO and Fallback'''
         raise Exception('FALLBACK ENCOUNTERED')
