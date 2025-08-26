@@ -55,7 +55,7 @@ class Entity_Interface():
     connection_handler : 'Ext_Interface_Handlder'
     @classmethod
     def as_connection(cls,connection:Connection)->Self:
-        new = cls.__new__()
+        new = cls.__new__(cls)
         new.connection = connection
         new.con_state  = State.UNTRUSTED
         return new
@@ -81,17 +81,22 @@ class Entity_Interface():
             if isinstance(v,SubInterface):
                 yield k,v
 
-    def __new__(self):
-        ''' Place Object's Sub IO  here '''
+    def __new__(cls):
+        self = super().__new__(cls) 
+        ''' Place Object's Sub IO here '''
         for k,v in self._subinterfaces_uninit():
             setattr(self,k,v(self))
+        return self
 
     def __init__(self):
         self.is_local = True
         self.connection_handler = Ext_Interface_Handlder(self)
-        self.router             = fastapi.APIRouter()
+        self.router             = self._make_router()
         for k,v in self._subinterfaces():
             v._register(self.router)
+    
+    def _make_router(self):
+        return fastapi.APIRouter()
 
 
 class SubInterface():
@@ -99,21 +104,21 @@ class SubInterface():
     Also 
     '''
     _router      : fastapi.APIRouter | None 
-
+    _path    : str
     def __init__(self,parent:Entity_Interface):
         self.parent = parent
 
     def _api_items(self):
         for k in dir(self):
             v = getattr(self,k)
-            if isinstance(v,api_item):
+            if isinstance(v,_api_item):
                 yield k,v
 
     def _register(self,router:fastapi.APIRouter):
         self._router = self.make_router()
         for k,v in self._api_items():
-            v._register(router)
-        router.add_route(self._router)
+            v._register(parent = self, router = router)
+        router.add_route(self._path,self._router)
 
     def make_router(self,):
         return fastapi.APIRouter()
@@ -156,7 +161,7 @@ class _routed_func():
     def match(self,*args,**kwargs):
         ... #TODO: Filter based on context. Objects, Ie this.parent's.state
         # return self.filter(*args,**kwargs)
-
+import inspect
 class _api_item():
     ''' API Function wrapper, registers functions to an API router object on call. 
     Enteres and exists context declareing role & context stuff as inline as possible
@@ -168,9 +173,8 @@ class _api_item():
     _fapi_kwargs : dict
     _func_base   : FunctionType
 
-
     def __init__(self,func, path, *args,**kwargs)->Self:
-        self.func         = func
+        self._func_base   = func
         self._path        = path
         self._fapi_args   = args
         self._fapi_kwargs = kwargs
@@ -184,19 +188,35 @@ class _api_item():
 
         return wrapper
     
-    def __call__(self, *args,**kwargs):
-        self._internal_call_interface(*args,**kwargs)
+    def __get__(self,inst,inst_cls):
+        return partial(self,inst)
 
-    def _register(self,router:fastapi.APIRouter)->None:
-        args, kwargs = self._api_route_args()
-        router.add_api_route(self._api_route_args())
-        
-    def _api_route_arg(self)->tuple[tuple,dict]:
+    def __call__(self, parent, *args,**kwargs):
+        self._call_interface(parent, None, *args,**kwargs)
+
+    def _register(self, parent:SubInterface, router:fastapi.APIRouter)->None:
+        args, kwargs = self._api_route_arg(parent)
+        router.add_api_route(*args,**kwargs)
+
+    def _api_route_arg(self,parent:SubInterface)->tuple[tuple,dict]:
         ''' Pass in the arguments of path and such '''
-        wrapped = self._external_call_interface()
-        path = self._path
+        wrapped = self._produce_ext_handler(parent)
+        path    = self._path
 
         return (path, wrapped) + self._fapi_args, {'methods':self._methods} | self._fapi_kwargs
+    
+    def _produce_ext_handler(self,parent:SubInterface):
+        ''' Produces the incoming connection (ext->local) handler for a function '''
+        #TODO: HAVE CONNECTION->ENTITY HANLDER INSERTED HERE
+        
+        sig = inspect.signature(self._func_base)
+        
+        def wrapped(request:fastapi.Request,*args,**kwargs):
+            return self._call_interface(parent,request,*args,**kwargs)
+        
+        wrapped.__signature__ = sig.replace(parameters=list(sig.parameters.values())[2:].insert(0,fastapi.Request))        
+        return wrapped
+
 
     def _wrapper(self, 
             mode            :CALLS               , 
@@ -250,15 +270,12 @@ class _api_item():
         including variables and exposing as (params, func) '''
         # p_params, p_func = self._parent._get_path()
         #TODO
-    
-    def _external_call_interface():
-        ''' Match func based on context '''
-        #DO these two need to be different? If I'm inheriting a connection?
 
-    def _internal_call_interface():
-        ''' This is the Internal header function, 
-        match and call direct w/out connection OR with inherited connection '''
-        #TODO
+    def _call_interface(self, parent:SubInterface, con:None|Entity_Interface, *args,**kwargs):
+        ''' Match func based on context,  '''
+        print(self,parent,con)
+
+        #DO these two need to be different? If I'm inheriting a connection?
 
 api_item = _api_item._init_wrapper
 
@@ -268,30 +285,31 @@ import time
 if __name__ == '__main__':
 
     class shared_subinterface(SubInterface):
-    
+        _path = '/cmds/'
+
         def call_ping(self,con):
             return con.cmds.ping()
 
-        @api_item('ping')
-        def ping(self, con:Entity_Interface):
+        @api_item('/ping')
+        def ping(self, con:Entity_Interface)->str:
             ''' Defines IO and Fallback'''
             raise Exception('FALLBACK ENCOUNTERED')
 
         @ping.Get(key = 'all_get') #Blank, Thus filter should always be encounterd
-        def _ping(self, con:Entity_Interface):
+        def _ping(self, con:Entity_Interface)->str:
             return { 'cmd' : CALLS.GET.value,  'name' : con.name,  'state' : con.con_state }
 
-        @ping.Post(key = 'all_set') #Blank, Thus filter should always be encounterd
-        def _ping(self, con:Entity_Interface):
-            return { 'cmd' : CALLS.POST.value,  'name' : con.name,  'state' : con.con_state }
+        # @ping.Post(key = 'all_set') #Blank, Thus filter should always be encounterd
+        # def _ping(self, con:Entity_Interface):
+        #     return { 'cmd' : CALLS.POST.value,  'name' : con.name,  'state' : con.con_state }
 
-        @ping.Patch(key = 'all_patch') #Blank, Thus filter should always be encounterd
-        def _ping(self, con:Entity_Interface):
-            return { 'cmd' : CALLS.PATCH.value,  'name' : con.name,  'state' : con.con_state }
+        # @ping.Patch(key = 'all_patch') #Blank, Thus filter should always be encounterd
+        # def _ping(self, con:Entity_Interface):
+        #     return { 'cmd' : CALLS.PATCH.value,  'name' : con.name,  'state' : con.con_state }
 
-        @ping.Delete(key = 'all_del') #Blank, Thus filter should always be encounterd
-        def _ping(self, con:Entity_Interface):
-            return { 'cmd' : CALLS.DELETE.value,  'name' : con.name,  'state' : con.con_state }
+        # @ping.Delete(key = 'all_del') #Blank, Thus filter should always be encounterd
+        # def _ping(self, con:Entity_Interface):
+        #     return { 'cmd' : CALLS.DELETE.value,  'name' : con.name,  'state' : con.con_state }
         
 
     class A(Entity_Interface):
@@ -318,9 +336,10 @@ if __name__ == '__main__':
             return self.ext_con.cmds.ping()
     
     def test0():
-        
-        ...
-
+        a = A()
+        a.add_con(ip = 'localhost', port = '3000')
+        a.run_test()
+    test0()
 
     def test1():
         import argparse
