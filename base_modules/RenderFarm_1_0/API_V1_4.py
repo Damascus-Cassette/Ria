@@ -127,19 +127,35 @@ class Ext_Interface_Handlder():
         self.entity = entity
     
 
-from functools import wraps
+from functools import wraps, partial
 
 class _routed_func():
-    def __init__(self,mode:CALLS, func, filter):
-        self.mode   = mode
-        self.filter = filter
-        self.func   = func
+    def __init__(self,
+                 mode:CALLS      , 
+                 func            , 
+                 this_role       ,
+                 this            ,
+                 requester       ,
+                 requester_state ,
+                 ):
+        self.mode            = mode
+        self.func            = func
+        self.this_role       = this_role
+        self.this            = this
+        self.requester       = requester
+        self.requester_state = requester_state
         
-    def __call__(self, *args, **kwargs):
+    def __get__(self,inst,inst_cls):
+        if inst is None: return self.__class__
+        else:            return partial(self,inst)
+
+    def __call__(self, parent, *args, **kwargs):
+        ''' Direct call, regulardless of matching args '''
         return self.func(*args,**kwargs)
     
     def match(self,*args,**kwargs):
-        return self.filter(*args,**kwargs)
+        ... #TODO: Filter based on context. Objects, Ie this.parent's.state
+        # return self.filter(*args,**kwargs)
 
 class _api_item():
     ''' API Function wrapper, registers functions to an API router object on call. 
@@ -158,12 +174,14 @@ class _api_item():
         self._path        = path
         self._fapi_args   = args
         self._fapi_kwargs = kwargs
+        self._routes      = []
         self._methods     = []
 
     @classmethod
     def _init_wrapper(cls,path,*args,**kwargs):
         def wrapper(func):
-            cls(func,path,*args,**kwargs)
+            return cls(func,path,*args,**kwargs)
+
         return wrapper
     
     def __call__(self, *args,**kwargs):
@@ -179,29 +197,12 @@ class _api_item():
         path = self._path
 
         return (path, wrapped) + self._fapi_args, {'methods':self._methods} | self._fapi_kwargs
-    
-    def _get_path():
-        ''' Get path in relation to parent container chain of subroutes/route/prefixes '''
-        ...
 
-    def _external_call_interface():
-        ''' This is the External header function '''
-        ...
-
-    def _internal_call_interface():
-        ''' This is the Internal header function '''
-        ...
-
-    def _produce_filter(Self, self_role:Role, self:Int|Ext, requester:Int|Ext|Role, requester_state:State):
-        def _filter():
-            return True #TODO: Filtering
-        return _filter
-
-    def _wrapper(_self, 
+    def _wrapper(self, 
             mode            :CALLS               , 
             key             :str          = None , #Allows bypassing of wrapper in calling, for local calls and debugging
-            self_role       :Role         = None , 
-            self            :Int|Ext      = None , 
+            this_role       :Role         = None , 
+            this            :Int|Ext      = None , 
             requester       :Int|Ext|Role = None , 
             requester_state :State        = None ,
             ):
@@ -210,16 +211,14 @@ class _api_item():
             if isinstance(func,_routed_func):
                 func = func.func
             inst = _routed_func(
-                        Mode   = mode, 
+                        mode   = mode, 
                         func   = func,
-                        filter = _self._produce_filter(
-                            self_role       = self_role, 
-                            self            = self, 
-                            requester       = requester, 
-                            requester_state = requester_state,
-                            )
+                        this_role       = this_role, 
+                        this            = this, 
+                        requester       = requester, 
+                        requester_state = requester_state,
                         )
-            _self._routes.append(inst)
+            self._routes.append(inst)
             if key:
                 setattr(self,key,inst)
             return inst
@@ -228,7 +227,7 @@ class _api_item():
     @wraps(_wrapper)    
     def Get(self,*args,**kwargs): 
         if CALLS.GET.value not in self._methods: 
-            self._methods.append(CALLS.Get.value)
+            self._methods.append(CALLS.GET.value)
         return self._wrapper(CALLS.GET,*args,**kwargs)
     @wraps(_wrapper)    
     def Post(self,*args,**kwargs): 
@@ -242,104 +241,123 @@ class _api_item():
         return self._wrapper(CALLS.PATCH,*args,**kwargs)
     @wraps(_wrapper)    
     def Delete(self,*args,**kwargs): 
-        return self._wrapper(CALLS.DELETE,*args,**kwargs)
         if CALLS.DELETE.value not in self._methods: 
             self._methods.append(CALLS.DELETE.value)
+        return self._wrapper(CALLS.DELETE,*args,**kwargs)
+
+    def _get_route_path(self):
+        ''' Get path to call in relation to parent container chain of subroutes/route/prefixes, 
+        including variables and exposing as (params, func) '''
+        # p_params, p_func = self._parent._get_path()
+        #TODO
+    
+    def _external_call_interface():
+        ''' Match func based on context '''
+        #DO these two need to be different? If I'm inheriting a connection?
+
+    def _internal_call_interface():
+        ''' This is the Internal header function, 
+        match and call direct w/out connection OR with inherited connection '''
+        #TODO
 
 api_item = _api_item._init_wrapper
 
 import time
 
 
+if __name__ == '__main__':
 
-class shared_subinterface(SubInterface):
+    class shared_subinterface(SubInterface):
     
-    def call_ping(self,con):
-        return con.cmds.ping()
+        def call_ping(self,con):
+            return con.cmds.ping()
 
-    @api_item('ping')
-    def ping(self, con:Entity_Interface):
-        ''' Defines IO and Fallback'''
-        raise Exception('FALLBACK ENCOUNTERED')
+        @api_item('ping')
+        def ping(self, con:Entity_Interface):
+            ''' Defines IO and Fallback'''
+            raise Exception('FALLBACK ENCOUNTERED')
 
-    @ping.Get(key = 'all_get') #Blank, Thus filter should always be encounterd
-    def ping(self, con:Entity_Interface):
-        return { 'cmd' : CALLS.GET.value,  'name' : con.name,  'state' : con.con_state }
+        @ping.Get(key = 'all_get') #Blank, Thus filter should always be encounterd
+        def _ping(self, con:Entity_Interface):
+            return { 'cmd' : CALLS.GET.value,  'name' : con.name,  'state' : con.con_state }
 
-    @ping.POST(key = 'all_set') #Blank, Thus filter should always be encounterd
-    def ping(self, con:Entity_Interface):
-        return { 'cmd' : CALLS.POST.value,  'name' : con.name,  'state' : con.con_state }
+        @ping.Post(key = 'all_set') #Blank, Thus filter should always be encounterd
+        def _ping(self, con:Entity_Interface):
+            return { 'cmd' : CALLS.POST.value,  'name' : con.name,  'state' : con.con_state }
 
-    @ping.Patch(key = 'all_patch') #Blank, Thus filter should always be encounterd
-    def ping(self, con:Entity_Interface):
-        return { 'cmd' : CALLS.PATCH.value,  'name' : con.name,  'state' : con.con_state }
+        @ping.Patch(key = 'all_patch') #Blank, Thus filter should always be encounterd
+        def _ping(self, con:Entity_Interface):
+            return { 'cmd' : CALLS.PATCH.value,  'name' : con.name,  'state' : con.con_state }
 
-    @ping.Delete(key = 'all_del') #Blank, Thus filter should always be encounterd
-    def ping(self, con:Entity_Interface):
-        return { 'cmd' : CALLS.DELETE.value,  'name' : con.name,  'state' : con.con_state }
+        @ping.Delete(key = 'all_del') #Blank, Thus filter should always be encounterd
+        def _ping(self, con:Entity_Interface):
+            return { 'cmd' : CALLS.DELETE.value,  'name' : con.name,  'state' : con.con_state }
+        
+
+    class A(Entity_Interface):
+        role = Role.A
+        cmds = shared_subinterface
+        ext_con = 'B'
+
+
+        def add_con(self,ip,port):
+            con = Connection(ip=ip,port=port)
+            self.ext_con = B.as_connection(con)
+        def run_test(self):
+            return self.ext_con.cmds.ping()
+
+    class B(Entity_Interface):
+        role = Role.B
+        cmds = shared_subinterface
+        ext_con = A
+
+        def add_con(self,ip,port):
+            con = Connection(ip=ip,port=port)
+            self.ext_con = A.as_connection(con)
+        def run_test(self):
+            return self.ext_con.cmds.ping()
     
-
-class A(Entity_Interface):
-    role = Role.A
-    cmds = shared_subinterface
-    ext_con = 'B'
+    def test0():
+        
+        ...
 
 
-    def add_con(self,ip,port):
-        con = Connection(ip=ip,port=port)
-        self.ext_con = B.as_connection(con)
-    def run_test(self):
-        return self.ext_con.cmds.ping()
+    def test1():
+        import argparse
+        import sys
+        parser = argparse.ArgumentParser()
+        parser.add_argument('inst'       , default = None)
+        parser.add_argument('wait'       , default = 5)
+        parser.add_argument('try_delay'  , default = 5)
+        parser.add_argument('this_ip'    , default = 'localhost')
+        parser.add_argument('this_port'  , default = None)
+        parser.add_argument('other_ip'   , default = 'localhost')
+        parser.add_argument('other_port' , default = None)
 
-class B(Entity_Interface):
-    role = Role.B
-    cmds = shared_subinterface
-    ext_con = A
+        args,_ = parser.parse_known_args(sys.argv)
 
-    def add_con(self,ip,port):
-        con = Connection(ip=ip,port=port)
-        self.ext_con = A.as_connection(con)
-    def run_test(self):
-        return self.ext_con.cmds.ping()
-    
+        match args.inst:
+            case None:
+                ... #call subprocess to create both instances and exit
+                
+                sys.exit()
 
-if __name__ is '__main__':
-    import argparse
-    import sys
-    parser = argparse.ArgumentParser()
-    parser.add_argument('inst'       , default = None)
-    parser.add_argument('wait'       , default = 5)
-    parser.add_argument('try_delay'  , default = 5)
-    parser.add_argument('this_ip'    , default = 'localhost')
-    parser.add_argument('this_port'  , default = None)
-    parser.add_argument('other_ip'   , default = 'localhost')
-    parser.add_argument('other_port' , default = None)
+            case 'a': prim = A()
+            case 'b': prim = B()
 
-    args,_ = parser.parse_known_args(sys.argv)
+        #Start the server with A as a primary, create connection to other in {wait} seconds
+        # Close with message that was responded if successfull
 
-    match args.inst:
-        case None:
-            ... #call subprocess to create both instances and exit
-            
-            sys.exit()
-
-        case 'a': prim = A()
-        case 'b': prim = B()
-
-    #Start the server with A as a primary, create connection to other in {wait} seconds
-    # Close with message that was responded if successfull
-
-    #Fastapi start
-    #Fastapi server attach a.subgroutes
-    
-    time.sleep(args.wait)
-    res = None
-    prim.add_con(ip = args.other_ip,  port = args.other_port)
-    while res is not None:
-        time.sleep(args.try_delay)
-        try: 
-            res = prim.run_test()
-        except Exception as e:
-            print(e)
-    print(res)
-    
+        #Fastapi start
+        #Fastapi server attach a.subgroutes
+        
+        time.sleep(args.wait)
+        res = None
+        prim.add_con(ip = args.other_ip,  port = args.other_port)
+        while res is not None:
+            time.sleep(args.try_delay)
+            try: 
+                res = prim.run_test()
+            except Exception as e:
+                print(e)
+        print(res)
