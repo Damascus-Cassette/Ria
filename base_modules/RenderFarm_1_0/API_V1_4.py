@@ -1,14 +1,22 @@
 
-from enum import Enum
-from inspect import isclass
 import fastapi
-from types import FunctionType
+import inspect
+from functools import wraps, partial
+from types     import FunctionType
+from inspect   import isclass
+from enum      import Enum
 
 class Int(Enum):
     ''' If a call comes from an internal interface '''
+    A = 'A' 
+    B = 'B' 
+    UNDECLARED  = 'UNDECLARED'
     
 class Ext(Enum):
-    ''' If a call comes from an external/connection interface '''    
+    ''' If a call comes from an external/connection interface '''
+    A = 'A' 
+    B = 'B' 
+    UNDECLARED  = 'UNDECLARED'
     
 class Role(Enum):
     ''' Implicitly External '''
@@ -26,6 +34,7 @@ class CALLS(Enum):
     POST     = 'POST'
     PATCH    = 'PATCH'
     DELETE   = 'DELETE'
+
     INTERNAL = 'INTERNAL'
     CLI      = 'CLI'
 
@@ -37,13 +46,18 @@ class Connection():
     def __init__(self, ip, port, key=None, password=None):
         ...
 
-    def get(self):
+    entity : 'Entity_Interface'
+
+    def get(self,path,):
         ...
-    def post(self):
+    def post(self,path,):
         ...
-    def patch(self):
+    def patch(self,path,):
         ...
-    def delete(self):
+    def delete(self,path,):
+        ...
+
+    def incoming():
         ...
 
 from typing import Self
@@ -53,12 +67,19 @@ class Entity_Interface():
     connection : Connection = None
     con_state  : State     = State.UNTRUSTED
     connection_handler : 'Ext_Interface_Handlder'
+    role         : Role
+    role_mapping : dict
+    
     @classmethod
     def as_connection(cls,connection:Connection)->Self:
         new = cls.__new__(cls)
         new.connection = connection
         new.con_state  = State.UNTRUSTED
         return new
+    
+    def __init_subclass__(cls):
+        if di:=getattr(cls,'role_mapping',None):
+            di[cls.role.value] = cls
 
     def _incoming_request(self):
         ''' Request that was parsed to be for this object as a connection '''
@@ -104,9 +125,12 @@ class SubInterface():
     Also 
     '''
     _router      : fastapi.APIRouter | None 
-    _path    : str
+    _path        : str
+
+
     def __init__(self,parent:Entity_Interface):
         self.parent = parent
+
 
     def _api_items(self):
         for k in dir(self):
@@ -124,15 +148,16 @@ class SubInterface():
         return fastapi.APIRouter()
 
 
-class Ext_Interface_Handlder():
-    ''' Singleton per primary entity that handles creating and merging connections based on roles as well as registering complete routes '''
-    ... #TODO
+class Entity_Connection_Handler():
+    ''' Singleton that handles all connections '''
     
-    def __init__(self, entity: Entity_Interface):
-        self.entity = entity
+    entites = []
+
+    def  entity_rep_ensure(req)->Entity_Interface:
+        ''' Takes a connection, returns the relevent entity and creates as required '''
+        ...
     
 
-from functools import wraps, partial
 
 class _routed_func():
     def __init__(self,
@@ -161,7 +186,8 @@ class _routed_func():
     def match(self,*args,**kwargs):
         ... #TODO: Filter based on context. Objects, Ie this.parent's.state
         # return self.filter(*args,**kwargs)
-import inspect
+
+
 class _api_item():
     ''' API Function wrapper, registers functions to an API router object on call. 
     Enteres and exists context declareing role & context stuff as inline as possible
@@ -272,10 +298,11 @@ class _api_item():
         #TODO
 
     def _call_interface(self, parent:SubInterface, con:None|Entity_Interface, *args,**kwargs):
-        ''' Match func based on context,  '''
+        ''' Match func based on context. connection may or may not exist (if not assume internal?)  '''
         print(self,parent,con)
 
         #DO these two need to be different? If I'm inheriting a connection?
+
 
 api_item = _api_item._init_wrapper
 
@@ -283,9 +310,10 @@ import time
 
 
 if __name__ == '__main__':
-
+    
     class shared_subinterface(SubInterface):
-        _path = '/cmds/'
+        _path    = '/cmds/'
+        
 
         def call_ping(self,con):
             return con.cmds.ping()
@@ -299,36 +327,56 @@ if __name__ == '__main__':
         def _ping(self, con:Entity_Interface)->str:
             return { 'cmd' : CALLS.GET.value,  'name' : con.name,  'state' : con.con_state }
 
-        # @ping.Post(key = 'all_set') #Blank, Thus filter should always be encounterd
-        # def _ping(self, con:Entity_Interface):
-        #     return { 'cmd' : CALLS.POST.value,  'name' : con.name,  'state' : con.con_state }
+        @ping.Post(key = 'all_set') #Blank, Thus filter should always be encounterd
+        def _ping(self, con:Entity_Interface):
+            return { 'cmd' : CALLS.POST.value,  'name' : con.name,  'state' : con.con_state }
 
-        # @ping.Patch(key = 'all_patch') #Blank, Thus filter should always be encounterd
-        # def _ping(self, con:Entity_Interface):
-        #     return { 'cmd' : CALLS.PATCH.value,  'name' : con.name,  'state' : con.con_state }
+        @ping.Patch(key = 'all_patch') #Blank, Thus filter should always be encounterd
+        def _ping(self, con:Entity_Interface):
+            return { 'cmd' : CALLS.PATCH.value,  'name' : con.name,  'state' : con.con_state }
 
-        # @ping.Delete(key = 'all_del') #Blank, Thus filter should always be encounterd
-        # def _ping(self, con:Entity_Interface):
-        #     return { 'cmd' : CALLS.DELETE.value,  'name' : con.name,  'state' : con.con_state }
-        
+        @ping.Delete(key = 'all_del') #Blank, Thus filter should always be encounterd
+        def _ping(self, con:Entity_Interface):
+            return { 'cmd' : CALLS.DELETE.value,  'name' : con.name,  'state' : con.con_state }
+    
+    Role_Mapping = {}
+
+    class Undeclared(Entity_Interface):
+        role         = Role.UNDECLARED
+        role_mapping = Role_Mapping
+
 
     class A(Entity_Interface):
-        role = Role.A
+        #Type Declarations:
+        role         = Role.A
+        role_mapping = Role_Mapping
+
+        #SubInterfaces:
         cmds = shared_subinterface
-        ext_con = 'B'
+        
+        #Connections (Single):
+        ext_con : 'B'
 
-
+        #Test Funcs:
         def add_con(self,ip,port):
             con = Connection(ip=ip,port=port)
             self.ext_con = B.as_connection(con)
         def run_test(self):
             return self.ext_con.cmds.ping()
 
-    class B(Entity_Interface):
-        role = Role.B
-        cmds = shared_subinterface
-        ext_con = A
 
+    class B(Entity_Interface):
+        #Type Declarations:
+        role         = Role.B
+        role_mapping = Role_Mapping
+        
+        #SubInterfaces:
+        cmds = shared_subinterface
+        
+        #Connections (Single):
+        ext_con : A
+
+        #Test Funcs:
         def add_con(self,ip,port):
             con = Connection(ip=ip,port=port)
             self.ext_con = A.as_connection(con)
