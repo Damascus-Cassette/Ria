@@ -427,7 +427,7 @@ class Entity_Pool():
         Req_Header. -> Entity info -> Merge or New
            '''
         # a = getattr(self.Ext,request.header['role'],None)
-        role = request.headers.get('role', default = None)
+        role = request.headers.get('Entity_Role', default = None)
         if role is None:
             entity_type = self._default_unsigned
         else: 
@@ -457,14 +457,33 @@ class Entity_Pool():
 class Entity_Data():
     Is_Local        : bool
     Entity_Role     : str
+    
+    @property
+    def Entity_State(self,):
+        getattr()
 
     # Foreign_Attrs         : dict[str,str] = {} #Intake foreign as local?
-    # Lift_From_Request     : dict[str,str] = {} #Intake foreign as local?
-    
-    Publish_Attrs     : dict[str,str] = {}  #What Attrs to Publish about this instance
-        #As local -> foreign key
-    Identifying_Attrs : dict[str,str] = {}  #Merge when attrs are EQ or none are defined (Undefined as generic untrusted as a principle)
-        #As local -> foreign key
+    Lift_From_Request           : dict[str,str] = {}  
+    _Lift_From_Request_Defaults : dict[str,str] = {
+    }  #Requests values to add to self. Ie IP
+
+    Intake_Attrs                : dict[str,str]  
+    _Intake_Attrs_Defaults      : dict[str,str] = {
+        'Entity_State' : 'Noted_Entity_State'
+    }  #As foreign_key -> local_key
+
+    Publish_Attrs               : dict[str,str]  #What Attrs to Publish about this instance
+    _Publish_Attrs_Defaults     : dict[str,str] = {
+        'Entity_Role'  : 'Entity_Role' ,
+        'Entity_State' : 'Entity_State',
+    }  #As local -> foreign key
+
+    Identifying_Attrs           : dict[str,str]  #Merge when attrs are EQ or none are defined (Undefined as generic untrusted as a principle)
+    _Identifying_Attrs_Defaults : dict[str,str] = {
+        'Entity_Role'  : 'Entity_Role'
+    }  #As local == foreign key
+       #Merges when all true
+
 
     #FUGLY, IK, Should probably make foreign data a derived/constructed instead of the same?
     @classmethod
