@@ -119,7 +119,7 @@ class _Api_Item():
         for k,fl in self._modes.items():
             if k is Mode.INTERNAL: continue
             args, kwargs = self._api_route_args(fl[0].func,k,interface)
-            router.add_route(*args,**kwargs)
+            router.add_api_route(*args,**kwargs)
             print('ADDING TO ROUTER:', args,kwargs)
             print([x for x in router.routes])
 
@@ -136,16 +136,16 @@ class _Api_Item():
         
         print('ORIGINAL FUNC SIGNATURE:',_sig(func))
         sig = _sig(func)
-        # @wraps(func)
+        
         def wrapped(request:fastapi.Request,*args,**kwargs):
             Ext_Entity = interface.Root_Entity._entity_pool.ensure_request_entity(request)
-            print('INSIDE OF WRAPPED:', request, Ext_Entity, args,kwargs)
             return self._external_handler(interface, mode, request, interface.Root_Entity, Ext_Entity, *args, **kwargs)
-        wrapped.__name__ = func.__name__
-        # wrapped.__signature__ = sig.replace(parameters=list(sig.parameters.values())[2:].insert(0,fastapi.Request))
-        wrapped.__signature__ = sig.replace(parameters=list(sig.parameters.values())[2:])
-            #Spoof signature to that of wrapped_request + original
-        print('SIGNATURE:',_sig(wrapped))
+        wrapped.__name__      = func.__name__
+        wrapped.__signature__ = sig.replace(
+            parameters        = [_sig(wrapped).parameters['request'], *list(sig.parameters.values())[2:]], 
+            return_annotation = sig.return_annotation
+            )
+            #Spoof signature to that of wrapped_request + original for fastapi introspection
         return wrapped
 
 
@@ -312,6 +312,16 @@ class Entity:
     
     @classmethod
     def As_Connection_From_Request(cls,request:fastapi.Request,entity_data)->Self:
+        inst = cls()
+        inst.connnection = None
+        inst.conn_state  = inst._entity_pool._default_con_state
+        
+        inst._entity_data = entity_data
+        assert not entity_data.Is_Local
+        
+        inst.Is_Local    = False
+        inst.Start_App   = None
+        return inst
         ...
         # inst = cls.As_Connection(Connection(request.url,request.port) )
         # inst._entity_data = entity_data
@@ -321,6 +331,7 @@ class Entity:
         inst = cls()
         inst.connection   = None
         inst._entity_data = entity_data
+        assert not entity_data.Is_Local
         inst.conn_state   = inst._entity_pool._default_con_state
         inst.Is_Local     = False
         inst.Start_App    = None
@@ -420,20 +431,22 @@ class Entity_Pool():
         if role is None:
             entity_type = self._default_unsigned
         else: 
-            entity_type = self._Entities.get(role,default = self._default_signed)
+            entity_type = self._Entities.get(role, default = self._default_signed)
         
-        u_entity_data = entity_type._entity_data._init_foreign_(request)
+        u_entity_data = entity_type._entity_data._init_foreign_(entity_type,request)
         
-        for e in self.Entities:
+        for e in self.entities:
             if e._entity_data == u_entity_data:
                 e._entity_data._intake_foreign_contact_(u_entity_data)
                 return e
 
         if role is None:
-            return entity_type.As_Undeclared_Connection(u_entity_data)
+            new_entity = entity_type.As_Undeclared_Connection(u_entity_data)
 
-        return entity_type.As_Connection_From_Request(request,u_entity_data)
-
+        new_entity = entity_type.As_Connection_From_Request(request,u_entity_data)
+        self.add_entity(new_entity)
+        return new_entity
+    
     def add_entity(self,entity):
         ''' force add an entity, TODO: tighten up entity pool logic '''
         self.entities.append(entity)
@@ -444,7 +457,14 @@ class Entity_Pool():
 class Entity_Data():
     Is_Local        : bool
     Entity_Role     : str
-    Published_Attrs : list = tuple()  #List of all attributes published by the pimary entity, 
+
+    # Foreign_Attrs         : dict[str,str] = {} #Intake foreign as local?
+    # Lift_From_Request     : dict[str,str] = {} #Intake foreign as local?
+    
+    Publish_Attrs     : dict[str,str] = {}  #What Attrs to Publish about this instance
+        #As local -> foreign key
+    Identifying_Attrs : dict[str,str] = {}  #Merge when attrs are EQ or none are defined (Undefined as generic untrusted as a principle)
+        #As local -> foreign key
 
     #FUGLY, IK, Should probably make foreign data a derived/constructed instead of the same?
     @classmethod
@@ -456,20 +476,38 @@ class Entity_Data():
         return inst
     
     @classmethod
-    def _init_foreign_(cls, request:fastapi.Request):
-        return cls()
+    def _init_foreign_(cls, entity_type:Entity, request:fastapi.Request):
+        '''Create from foreign '''
+        inst = cls()
+        inst.Entity_Role = entity_type.Entity_Role
+        inst.Is_Local    = False
+        return inst
 
-    def __init__(self):
-        ...
+    def __init__(self): ...
 
-    def _intake_foreign_contact_(self, foreing_data:Self):
+    def _intake_foreign_contact_(self, foreign:Self):
         assert not self.Is_Local
         print('FOREIGN CONTACT INTAKE RUN')
 
     def _post_header_data_(self)->dict:
         print('HEADER DATA POST RUN')
     
+    def __eq__(self, other:Self):
+        if len(self.Identifying_Attrs) == 0 : raise Exception('Mergeable Attrs must be defined!')
+        print(self,other,'IN EQ')
+        if not (self.__class__ is other.__class__):
+            return False 
 
+        for k,v in self.Identifying_Attrs.items():
+            local_val   = getattr(self , k , _unset)
+            foreign_val = getattr(other, v , _unset)
+            if (foreign_val is _unset) or (local_val is _unset):
+                print(foreign_val)
+                print(local_val)
+                raise Exception('IDENTIFIERS FROM HEADERS ARE NOT DECLARED ON BOTH')
+            if not local_val == foreign_val:
+                return False
+        return True
 
 if __name__ == '__main__':
     
@@ -479,24 +517,28 @@ if __name__ == '__main__':
         Interface_Subpath = '/cmds'
 
         @Api_Item('/ping/{msg}',)
-        def ping(self,entity, msg)->str:
-            return f'suceeded {msg} from {entity.connection.ip}'
+        def ping(self, entity:Entity, msg:str)->str:
+            return f'Message {msg} from {entity}, role: {entity.Entity_Role}'
 
-        @ping.Get(this_role = 'Ext', ) # this_state = 'States.Trusted') #Sender
-        def _ping(self,entity, msg):
+        @ping.Get() # this_state = 'States.Trusted') #Sender
+        def _ping(self,entity, msg:str):
             return self.Root_Entity.connection.get(self.ping.get_path(), msg)
         
-        @ping.Internal_Primary()
-        def _ping(self,root_entity,msg):
-            root_entity._entity_pool[0].cmds.ping(msg) 
-            #if this object is the primary entity and the call is internal. 
+        # @ping.Internal_Primary()
+        # def _ping(self,root_entity,msg):
+        #     root_entity._entity_pool[0].cmds.ping(msg) 
+        #     #if this object is the primary entity and the call is internal. 
         
     class common_entity_data(Entity_Data):
         ''' What to share in the header when communicating, Should be unique ID to object, requires mergeable info. 
         If a new connection the entity should become untrusted again '''
+        Identifying_Attrs ={'Entity_Role':'Entity_Role'}
 
-    class Undeclared(Entity):
-        Entity_Role = 'Undeclared'
+    class Unsigned(Entity):
+        Entity_Role = 'Unsigned'
+        _entity_data = common_entity_data
+    class Malformed(Entity):
+        Entity_Role = 'Malformed'
         _entity_data = common_entity_data
 
     class A(Entity):
@@ -510,9 +552,9 @@ if __name__ == '__main__':
         _entity_data = common_entity_data
 
     class entity_pool(Entity_Pool):
-        _default_signed   = Undeclared #Signed but incompatable 
-        _default_unsigned = Undeclared 
-        Entities = [A, B, Undeclared]
+        _default_signed   = Malformed #Signed but incompatable 
+        _default_unsigned = Unsigned 
+        Entities = [A, B, Malformed,Unsigned]
 
         class Conn_States(Enum):
             DEFAULT = 'DEFAULT'
