@@ -626,13 +626,17 @@ if __name__ == '__main__':
     SHARED_ENTITY_POOL = _Entity_Pool()
 
     a = A._init_as_local_(SHARED_ENTITY_POOL)
-    app = a.Create_App()
+    app_a = a.Create_App()
 
-    @app.get("/url-list")
+    a = A._init_as_local_(SHARED_ENTITY_POOL)
+    app_b = a.Create_App()
+
+    @app_a.get("/url-list")
+    @app_b.get("/url-list")
     def get_all_urls():
         url_list = [{"path": route.path, "name": route.name} for route in app.routes]
         return url_list
 
-    import uvicorn
-    uvicorn.run(app, host = '127.0.0.1', port = '4000')
+    # import uvicorn
+    # uvicorn.run(app, host = '127.0.0.1', port = '4000')
 
