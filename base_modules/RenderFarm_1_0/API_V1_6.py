@@ -55,7 +55,7 @@ class _ol_func_item():
     def execute(self, container, this_entity:'Entity', other_entity:'Entity', *args,**kwargs):
         return self.func(container,this_entity, other_entity, *args,**kwargs)
 
-    def match(self,this_entity:'Entity',other_entity:'Entity'):
+    def match(self,mode:Command,this_entity:'Entity',other_entity:'Entity',request:Request):
         raise Exception('Child class expected to handle this')
     
     @classmethod
@@ -82,19 +82,30 @@ class _ol_func_item():
 class _ol_func_item_recieve(_ol_func_item):
     ''' Ext -- calling -> Int '''
 
-    def match(self,this_entity:'Entity_Int',other_entity:'Entity_Ext'):
-        assert this_entity.Is_Int
-        assert other_entity.Is_Ext
-        ... #TODO
+    def __call__(self, *args, **kwds):
+        return self.func(*args, **kwds)
+    
+    def match(self,mode:Command,this_entity:'Entity',other_entity:'Entity',request:Request):
+        assert this_entity.Is_Local_State is Entity_Int
+        assert other_entity.Is_Local_State is Entity_Ext
+
+        #TODO: Convert to a lambda as argument for filter
+        return True
+
 
 class _ol_func_item_deliver(_ol_func_item):
     ''' Int -- calling -> Ext '''
     
-    def match(self,this_entity:'Entity_Ext',other_entity:'Entity_Int'):
-        assert this_entity.Is_Ext
-        assert other_entity.Is_Int
-        ... #TODO
+    def __call__(self, *args, **kwds):
+        return self.func(*args, **kwds)
 
+    # def match(self,this_entity:'Entity_Ext',other_entity:'Entity_Int'):
+    def match(self,mode:Command,this_entity:'Entity',other_entity:'Entity',request:Request):
+        assert this_entity.Is_Local_State is Entity_Ext
+        assert other_entity.Is_Local_State is Entity_Int
+
+        #TODO: Convert to a lambda as argument for filter
+        return True
 
 
 class _OL_Container():
@@ -142,19 +153,34 @@ class _OL_Container():
         new._container = container
         return new
     
-    def __call__(self, other_entity, request=None, *args, **kwargs):
+    def __call__(self, other_entity, mode, request=None, *args, **kwargs):
         ''' Unfortunatly does require other entity to be declared as far as I can tell '''
-        this_entity = self._container.Root_Entity
-        recieving   = this_entity.Is_Internal
+        this_entity = self._container._Root_Entity
+        recieving   = this_entity.Is_Local_State is Entity_Int
 
         if recieving:
-            assert request is not None 
-            func = self.find_recieving (this_entity,other_entity,request)
+            assert request is not None
+            func = self.find_recieving (mode,this_entity,other_entity,request)
             return func(self._container, this_entity, other_entity, *args, **kwargs)
         else: 
-            func = self.find_delivering(this_entity,other_entity)
+            func = self.find_delivering(mode,this_entity,other_entity)
             return func(self._container, this_entity, other_entity, request, *args, **kwargs)
-        
+    
+    def find_recieving(self, mode, this_entity,other_entity,request):
+        for item in self._reciever_functions[mode]:
+            item : _ol_func_item_recieve
+            if item.match(mode, this_entity, other_entity, request):
+                return item
+        return self._origin_func
+            
+    def find_delivering(self, mode, this_entity,other_entity): 
+        for item in self._deliver_functions[mode]:
+            item : _ol_func_item_deliver
+            if item.match(mode, this_entity ,other_entity):
+                return item
+        return self._origin_func
+
+
     def add_func_container(self,mode,func_item:_ol_func_item):
         if   isinstance(func_item,_ol_func_item_deliver):
             self._delivery_functions[mode].append(func_item)
@@ -169,35 +195,31 @@ class _OL_Container():
     def _register(self, router, entity_pool, args=None, kwargs=None):
         ''' Registers reciever functions to contextual entity pool '''
         for mode, func_list in self._reciever_functions.items():
-            raise Exception('GOT HERE')
             face_ol_item : _ol_func_item_recieve = func_list[0] #First func in list is used to define the interface.
             # _args,_kwargs = face_func._api_route_args(self._container._root_entity, self._container, self, router, *args, **kwargs)
             _args,_kwargs = self._api_router_args_(face_ol_item, entity_pool, mode, args, kwargs)
             router.add_api_route(*_args,**_kwargs)
 
     def _api_router_args_(self, face_ol_item:_ol_func_item_recieve, entity_pool, mode:Enum, args=None, kwargs=None)->tuple[tuple,dict]:
-        self._api_rout_wrapped_func_(face_ol_item,entity_pool)
         if kwargs is None: kwargs = {}
         if args   is None: args   = tuple()
 
-        wrapped = self._api_route_wrapped_func_(face_ol_item, entity_pool)
+        wrapped = self._api_route_wrapped_func_(face_ol_item, mode, entity_pool)
         path    = self._path
 
         return (path, wrapped) + self._f_args + args, {'methods':[mode.value]} | self._f_kwargs | kwargs
 
-    def _api_route_wrapped_func_(self, face_ol_item:_ol_func_item_recieve, entity_pool)->FunctionType:
+    def _api_route_wrapped_func_(self, face_ol_item:_ol_func_item_recieve, mode, entity_pool)->FunctionType:
         func = face_ol_item.func
-        sig = _sig()
-
-        entity_pool = context_pool.get()
+        sig = _sig(func)
         
         def wrapped(request:Request,*args,**kwargs):
-            ext_entity = entity_pool.ensure_request_entity(request)
-            return self(ext_entity,request,*args,**kwargs)
+            ext_entity = entity_pool._ensure_incoming_entity_(request)
+            return self(ext_entity, mode, request, *args,**kwargs)
         
         wrapped.__name__      = func.__name__
         wrapped.__signature__ = sig.replace(
-            parameters        = [_sig(wrapped).parameters['request'], *list(sig.parameters.values())[2:]], 
+            parameters        = [_sig(wrapped).parameters['request'], *list(sig.parameters.values())[3:]], 
             return_annotation = sig.return_annotation
             )
         #Spoof signature to that of wrapped_request + original for fastapi introspection
@@ -286,7 +308,7 @@ class Interface_Base():
     
     def _register(self, parent_router, entity_pool, args=None, kwargs=None):
         local_router = self._attach_local_router(self._create_local_router(),entity_pool,args,kwargs)
-        parent_router.include_router(local_router,prefix = getattr(self,'Router_Subpath', None))
+        parent_router.include_router(local_router,prefix = getattr(self,'Router_Subpath', ''))
         return parent_router
 
 REQ_KEY_MAPPING : dict[str,LambdaType] = {
@@ -338,7 +360,7 @@ class _Entity_Data_Foreign():
             setattr(self,v,request.header.get(k))
             #key inverse of publishing
 
-        for k,v in self._request_intake():
+        for k,v in self._request_intake.items():
             setattr(self,v,REQ_KEY_MAPPING[k](request))
             
 
@@ -359,7 +381,7 @@ class Entity_Data:
     '''
 
     _Foreign_Base = _Entity_Data_Foreign
-    _Foreign : _Entity_Data_Foreign
+    _Foreign      : _Entity_Data_Foreign
     
     def __init_subclass__(cls):
         cls._Foreign = cls._Foreign_Base.construct(cls) 
@@ -391,18 +413,18 @@ class Entity_Data:
         #Local : Foreign
     
 
-    def _compare_to_foreign_(self,request,foreign:_Entity_Data_Foreign)->bool:
+    def _compare_to_foreign_(self, request, foreign:_Entity_Data_Foreign)->bool:
         ''' Interpret foreign data corrisponds to local entity via self.Foreign_Match_Keys
         Local-Left for type comparison priority
         #TODO: Type casting right on foreign
         #TODO: Compare Unset Rules?
         '''
         
-        assert len(self.Foreign_Match_keys)
-
-        if isinstance(self.Foreign_Match_keys, FunctionType):
+        if callable(self.Foreign_Match_keys):
             return self.Foreign_Match_keys(foreign)
         
+        assert len(self.Foreign_Match_keys)
+
         for k,v in self.Foreign_Match_keys.items():
             local_val   = getattr(self,k,_UNSET)
             if local_val is _UNSET: return False
@@ -428,7 +450,6 @@ class Entity_Data:
                 f_val = getattr(foreign,v,_UNSET) 
 
             setattr(self,v,f_val)
-                    
         
 class Entity_Pool:
     ''' Container for entities deduplicated by matching foreign-local entity data '''
@@ -474,17 +495,21 @@ class Entity_Pool:
         cls.Int = Enum('Int',entity_dict)
         cls.Ext = Enum('Ext',entity_dict)
 
+    def __init__(self):
+        self.ext_pool = _def_dict_list()
+
     def _ensure_incoming_entity_(self,request):
         role = request.headers.get('Entity_Role', default = None)
-        if    role is None: entity_type = self.Default_Unsigned
+        if    role is None: 
+            entity_type = self.Default_Unsigned
         else: entity_type = self._Entities.get(role, default = self.Default_Malformed)
 
-        entity_data_type = entity_type.Entity_Data_Type
+        entity_data_type = entity_type.Entity_Data_Type._Foreign
         f_entity_data = entity_data_type()
         f_entity_data._populate_from_header_data_(request)
 
-        for entity in self.ext_pool[role]:
-            if entity.entity_data._compare_to_foreign_(f_entity_data):
+        for entity in self.ext_pool[entity_type.Entity_Role]:
+            if entity.entity_data._compare_to_foreign_(request,f_entity_data):
                 entity.entity_data._update_from_foreign_(f_entity_data)
                 return entity
         
@@ -505,7 +530,7 @@ class Entity(Interface_Base):
     Entity_Pool_Type : Entity_Pool = Entity_Pool
     entity_pool      : Entity_Pool
     
-    Entity_Data_Type : Entity_Data = Entity_Data
+    Entity_Data_Type : Entity_Data = type('Entity_Data',(Entity_Data,),{})
     entity_data      : Entity_Data
 
     _Root_Entity     = Self
@@ -549,24 +574,40 @@ if __name__ == '__main__':
     class Entity_Con_States(Enum):
         DEFAULT = 'DEFAULT_CON_STATE'
 
+    class _Entity_Data(Entity_Data):
+        ''' Short circuits to declared roles assumed true & singleton of each
+        NEVER DO IN PRODUCTION 
+        #TODO: Also add middleware that adds additional security keys/IDs to incoming entities.
+            # IE https_token, ip/port, jwt, decalred hardware specs  
+            # Then consider measures for responce of change of each (IE new entity, change state, ect) 
+        '''
+        Foreign_Match_keys = lambda *args: True
+
     class interface(Interface_Base):
-        Router_Subpath = '/cmds'
+        Router_Subpath = ''
         @OL_Container('/test')
         def test(self,this_entity,other_entity): 
             return f'TEST CALLED BY {other_entity}'
-
-        @test.Get_Deliver()
-        def _test(self,this_entity,req_entity) : 
-            raise NotImplementedError('TESTING')
+        
+        # @test.Get_Deliver()
+        @test.Get_Recieve()
+        def _test(self,this_entity, other_entity) : 
+            return f'{this_entity} {other_entity}'
+            # raise NotImplementedError('TESTING')
 
     class _UNSIGNED(Entity):
         Entity_Role = 'UNSIGNED'
+        Entity_Data_Type = _Entity_Data
+
     class _MALFORMED(Entity):
         Entity_Role = 'MALFORMED'
+        Entity_Data_Type = _Entity_Data
 
     class A(Entity):
-        cmds = interface
         Entity_Role = 'A'
+        Entity_Data_Type = _Entity_Data
+        
+        cmds = interface
 
     class _Entity_Pool(Entity_Pool):  
         Default_Unsigned    = _UNSIGNED
