@@ -1,16 +1,25 @@
 
-from functools import partial, wraps
-from enum      import Enum
-from inspect   import isclass, signature as _sig
-from typing    import Self
-from types     import FunctionType,LambdaType
+from functools   import partial, wraps
+from enum        import Enum
+from inspect     import isclass, signature as _sig
+from typing      import Self
+from types       import FunctionType,LambdaType
 from contextvars import ContextVar
+from fastapi     import FastAPI, APIRouter,Request
+
+from copy import copy
+import time 
 
 class _UNSET():...
 class PRIMARY():...
 class Entity_Int: ''' Internal for type Anno '''
 class Entity_Ext: ''' External for type Anno '''
 
+class _def_dict_list(dict):
+    def __missing__(self,key):
+        self[key] = res = []
+        return res
+    
 class Command(Enum):
     GET    = 'GET'
     POST   = 'POST'
@@ -86,12 +95,7 @@ class _ol_func_item_deliver(_ol_func_item):
         assert other_entity.Is_Int
         ... #TODO
 
-from copy import copy
 
-class _def_dict_list(dict):
-    def __missing__(self,key):
-        self[key] = res = []
-        return res
 
 class OL_Container():
     ''' OL func Container, ie a contextual router that contains _ol_func_items. 
@@ -215,7 +219,6 @@ class OL_Container():
         return _ol_func_item_deliver._wrapper(parent=self,mode=Command.DELETE,*args,**kwargs)
 
 
-from fastapi import FastAPI, APIRouter,Request
 
 class Interface_Base():
     Router_Subpath : str
@@ -263,8 +266,6 @@ class Interface_Base():
         local_router = self._attach_local_router(self._create_local_router(),entity_pool,args,kwargs)
         parent_router.add_api_route(local_router,getattr(self,'Router_Subpath',''))
         return parent_router
-
-import time
 
 REQ_KEY_MAPPING : dict[str,LambdaType] = {
     'url.path'    : lambda request: request.url.path    ,
@@ -346,7 +347,6 @@ class Entity_Data:
     def __init__(self,entity:'Entity'):
         self._entity = entity
 
-
     #Request -> Foreign[Incoming]
     Foreign_In_Req       : dict[str,LambdaType] = {}
     _Foreign_In_Req_Def  : dict[str,LambdaType] = {}
@@ -374,7 +374,6 @@ class Entity_Data:
         Local-Left for type comparison priority
         #TODO: Type casting right on foreign
         #TODO: Compare Unset Rules?
-        #TODO: False Assumption instead of Truth Assumption?
         '''
         
         assert len(self.Foreign_Match_keys)
@@ -409,24 +408,105 @@ class Entity_Data:
             setattr(self,v,f_val)
                     
         
-
 class Entity_Pool:
+    ''' Container for entities deduplicated by matching foreign-local entity data '''
+    Default_Unsigned  : 'Entity'
+    Default_Malformed : 'Entity'
+
+    Entities          : list['Entity']
+    Entity_Role_Dict  : dict[str,'Entity']
+
+    Int : Enum
+    Ext : Enum
+    class _Int():...
+    class _Ext():...
+
+    ext_pool : _def_dict_list[str,list['Entity']]
+    # int_pool : _def_dict_list[str,list['Entity']]
+
+    #Entity that is started as internal
+    Entity_Int_State  : Enum
+    Default_Int_State : str|Enum
+
+    #Entity that is started as external, observed information
+    Entity_Ext_State  : Enum
+    Default_Ext_State : str | Enum
+    Entity_Con_State  : Enum
+    Default_Con_State : str | Enum
+
+    def __init_subclass__(cls):
+        assert hasattr(cls , 'Entities'          )
+        assert hasattr(cls , 'Default_Int_State' )
+        assert hasattr(cls , 'Entity_Ext_State'  )
+        assert hasattr(cls , 'Default_Ext_State' )
+        assert hasattr(cls , 'Entity_Con_State'  )
+        assert hasattr(cls , 'Default_Con_State' )
+
+        cls.Entity_Role_Dict = {}
+
+        for x in cls.Entities: 
+            x.Entity_Pool_Type = cls
+
+        entity_dict = {e.Entity_Role:e for e in cls.Entities}
+
+        cls.Int = Enum(entity_dict)
+        cls.Ext = Enum(entity_dict)
+
+    def _ensure_incoming_entity_(self,request):
+        role = request.headers.get('Entity_Role', default = None)
+        if    role is None: entity_type = self.Default_Unsigned
+        else: entity_type = self._Entities.get(role, default = self.Default_Malformed)
+
+        entity_data_type = entity_type.Entity_Data_Type
+        f_entity_data = entity_data_type()
+        f_entity_data._populate_from_header_data_(request)
+
+        for entity in self.ext_pool[role]:
+            if entity.entity_data._compare_to_foreign_(f_entity_data):
+                entity.entity_data._update_from_foreign_(f_entity_data)
+                return entity
+        
+        new_entity = entity_type._init_from_foreign_(self,request,f_entity_data)
+        self.ext_pool[entity_type.Entity_Role].append(new_entity)
+        return new_entity
     
-    pool : list['Entity'] 
-    
-    ... #TODO
+
 
 class Entity(Interface_Base):
-    Entity_State          : Enum | _UNSET           = _UNSET
-    Connection_State      : Enum | _UNSET | PRIMARY = _UNSET
-    # Entity_Observed_Connection_State : dict[Enum]
-        # What each connection assigns state to self w/a
-        # Offset into connection?
+    ''' Combination Entity-Api-Interface '''
+    Is_Local_State   : Entity_Int | Entity_Ext 
+    Entity_State     : Enum | _UNSET           = _UNSET
+    Connection_State : Enum | _UNSET | PRIMARY = _UNSET
     
+    Entity_Pool_Type : Entity_Pool = Entity_Pool
+    entity_pool      : Entity_Pool
+    
+    Entity_Data_Type : Entity_Data = Entity_Data
+    entity_data      : Entity_Data
+
     def __init__(self):
         self._Root_Entity = self
+        self.entity_data  = self.Entity_Data_Type() 
 
-    @property
-    def Is_Internal(self,): ... #TODO
-    @property
-    def Is_External(self,): ... #TODO
+    @classmethod
+    def _init_from_foreign_(cls, entity_pool, request, f_entity_data):
+        new = cls()
+        new.Is_Local_State = Entity_Ext
+        new.entity_pool    = entity_pool
+        new.entity_data._update_from_foreign_(f_entity_data)
+        return new
+    
+    @classmethod
+    def _init_as_local_(cls, entity_pool):
+        new = cls()
+        new.Is_Local_State = Entity_Int
+        new.entity_pool    = entity_pool
+        return new
+    
+    def Create_App(self):
+        ''' Best recomended to start custom'''
+        assert self.Is_Local_State is Entity_Int
+        self._app = FastAPI()
+        self._register(self._app,self.entity_pool)
+        return self._app
+
