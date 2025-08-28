@@ -11,6 +11,8 @@ from contextvars import ContextVar
 global PRIMARY_ENTITY
 PRIMARY_ENTITY : 'Entity' = None
 
+import time
+
 class _unset():...
 
 class Mode(Enum):
@@ -63,7 +65,7 @@ class _Api_Item_Func():
     # def __get__(self, inst, inst_cls):
     #     #May or may not work correctly when stored in a list?
     #     if inst is None: return self
-    #     else: return partial(self,inst)
+    #     else: return return partial(self,inst)
 
     def __call__(self, 
                  api_item    :'_Api_Item'  , 
@@ -74,13 +76,17 @@ class _Api_Item_Func():
         return self.func(*args,**kwargs)
     
     def match(self,*args,**kwargs):
+        if self.mode is Mode.INTERNAL:
+            return self.match_internal(*args,*kwargs)
         ... #self.mode can be Mode.INTERNAL, which changes IO?
         ... #TODO: Filter based on context. Objects, Ie this.parent's.state
         # return self.filter(*args,**kwargs)
     
     def match_internal():
+        
         ...
-    def match_external():
+
+    def match_external(request,Root_Entity,Ext_Entity):
         ...
 
 class _Api_Item():
@@ -300,12 +306,22 @@ class Entity:
             if not isclass(v:=getattr(self,k)) and not k.startswith('_'):
                 if issubclass(v.__class__,Interface):
                     yield v
+
+    def __repr__(self):
+        if not isclass(self._entity_data): 
+            d = self._entity_data._post_header_data_()
+            rel = 'Int' if self.Is_Local else 'Ext'
+            return f'< Entity | {rel}.{self.Entity_Role} | {self.entity_state} | {self.conn_state} | {id(self)} : {d} >'
+        return super().__repr__()
+
+    
     @classmethod
     def As_Connection(cls,connection)->Self:
         #No entity-connection should be aware of it's entity_pool container.
         inst = cls()
         inst.connection = connection
         inst.conn_state = inst._entity_pool._default_con_state
+        inst.entity_state = inst._entity_pool._default_obj_state
         inst.Is_Local   = False
         inst.Start_App  = None
         return inst
@@ -315,8 +331,10 @@ class Entity:
         inst = cls()
         inst.connnection = None
         inst.conn_state  = inst._entity_pool._default_con_state
+        inst.entity_state = inst._entity_pool._default_obj_state
         
         inst._entity_data = entity_data
+        inst._entity_data.parent = inst
         assert not entity_data.Is_Local
         
         inst.Is_Local    = False
@@ -331,18 +349,23 @@ class Entity:
         inst = cls()
         inst.connection   = None
         inst._entity_data = entity_data
+        inst._entity_data.parent = inst
         assert not entity_data.Is_Local
         inst.conn_state   = inst._entity_pool._default_con_state
+        inst.entity_state = inst._entity_pool._default_obj_state
         inst.Is_Local     = False
         inst.Start_App    = None
         return inst
 
     def Setup_App(self,data=None):
         ''' App create & preperation (such as registeration)'''
+        self.entity_state = self._entity_pool._default_obj_state
+        self.conn_state   = 'LOCAL-PRIMARY-APP'
         assert self.Is_Local        
         self._data = data
         self.Prepare_Self(data)
         self._router = self.Get_Router(data)
+
         for x in self._iter_interfaces():
             x._register(self._router)
 
@@ -437,9 +460,8 @@ class Entity_Pool():
         
         for e in self.entities:
             if e._entity_data == u_entity_data:
-                e._entity_data._intake_foreign_contact_(u_entity_data)
+                e._entity_data._intake_foreign_contact_(request,u_entity_data)
                 return e
-
         if role is None:
             new_entity = entity_type.As_Undeclared_Connection(u_entity_data)
 
@@ -455,30 +477,67 @@ class Entity_Pool():
         return self.entities[key]
 
 class Entity_Data():
+    ''' Entity Data, includes what to post to the request header, 
+    as well as diffing declaration for merging entities 
+    TODO: Rewrite with basic security, or offload security and middleware in a more focused time 
+          PLUS simplify/split this class (as Local-Foreign entity data) 
+    '''
     Is_Local        : bool
-    Entity_Role     : str
+    Entity_Role     : Enum
     
+    # @property
+    # def Entity_Role(self,):
+    #     a = getattr(self,'Root_Entity',None)
+    #     if a:
+    #         return a.Entity_Role
+    #     else: return 'FLOATING_ENITY_DATA:Entity_Role'
     @property
     def Entity_State(self,):
-        getattr()
+        a = getattr(self,'Root_Entity',None)
+        if a: 
+            val = a.entity_state
+            return getattr(val,'value',val)
+        else: return 'FLOATING_ENITY_DATA'
+    @Entity_State.setter
+    def Entity_State(self,val):
+        a = getattr(self,'Root_Entity',None)
+        if a: 
+            a.entity_state = val
+        else: 
+            print('ERROR: NO ROOT ENTITY WAS FUND TO INTAKE TO')
+
+    @property
+    def Conn_State(self,):
+        a = getattr(self,'Root_Entity',None)
+        if a: 
+            val =  a.conn_state
+            return getattr(val,'value',val)
+        else: return 'FLOATING_ENITY_DATA'
+    @Entity_State.setter
+    def Conn_State(self,val):
+        raise Exception('Conn State should never be set by other party!')
 
     # Foreign_Attrs         : dict[str,str] = {} #Intake foreign as local?
-    Lift_From_Request           : dict[str,str] = {}  
-    _Lift_From_Request_Defaults : dict[str,str] = {
-    }  #Requests values to add to self. Ie IP
+    Intake_Req_Attrs            : dict[str,str] = {}  
+    _Intake_Req_Attrs_Defaults  : dict[str,str] = {
+        'url'  : 'Ext_Path',
+    }  #Requests values to add to self Ie IP
 
-    Intake_Attrs                : dict[str,str]  
+    Intake_Attrs                : dict[str,str] = {} 
     _Intake_Attrs_Defaults      : dict[str,str] = {
-        'Entity_State' : 'Noted_Entity_State'
-    }  #As foreign_key -> local_key
+        'Entity_State'                      : 'Entity_State',
+        'Other_Party_Declared_Conn_State'   : 'Conn_State',
+        'last_conn'                         : lambda self,request,foreign: time.time(), 
+    }  #As local_key <- foreign
 
-    Publish_Attrs               : dict[str,str]  #What Attrs to Publish about this instance
+    Publish_Attrs               : dict[str,str] = {} #What Attrs to Publish about this instance
     _Publish_Attrs_Defaults     : dict[str,str] = {
         'Entity_Role'  : 'Entity_Role' ,
         'Entity_State' : 'Entity_State',
+        'last_conn'    : 'last_conn',
     }  #As local -> foreign key
 
-    Identifying_Attrs           : dict[str,str]  #Merge when attrs are EQ or none are defined (Undefined as generic untrusted as a principle)
+    Identifying_Attrs           : dict[str,str] = {} #Merge when attrs are EQ or none are defined (Undefined as generic untrusted as a principle)
     _Identifying_Attrs_Defaults : dict[str,str] = {
         'Entity_Role'  : 'Entity_Role'
     }  #As local == foreign key
@@ -504,12 +563,26 @@ class Entity_Data():
 
     def __init__(self): ...
 
-    def _intake_foreign_contact_(self, foreign:Self):
+    def _intake_foreign_contact_(self, request, foreign:Self):
         assert not self.Is_Local
-        print('FOREIGN CONTACT INTAKE RUN')
+        assert not foreign.Is_Local
+        
+        for k,v in (self._Intake_Attrs_Defaults | self.Intake_Attrs).items():
+            if isinstance(v,str):
+                setattr(self,k,getattr(foreign,v,_unset))
+                continue
+            setattr(self,k,v(self,request,foreign))
+
+        for k,v in (self._Intake_Req_Attrs_Defaults | self.Intake_Req_Attrs).items(): 
+            setattr(self,v,getattr(requests,k,_unset))
 
     def _post_header_data_(self)->dict:
         print('HEADER DATA POST RUN')
+        res = {}
+        for k,v in (self._Publish_Attrs_Defaults|self.Publish_Attrs).items():
+            res[v] = getattr(self, k,'_UNSET')
+
+        return res
     
     def __eq__(self, other:Self):
         if len(self.Identifying_Attrs) == 0 : raise Exception('Mergeable Attrs must be defined!')
@@ -537,12 +610,16 @@ if __name__ == '__main__':
 
         @Api_Item('/ping/{msg}',)
         def ping(self, entity:Entity, msg:str)->str:
-            return f'Message {msg} from {entity}, role: {entity.Entity_Role}'
+            return f'Message "{msg}" from {entity} to {self.Root_Entity}'
 
         @ping.Get() # this_state = 'States.Trusted') #Sender
         def _ping(self,entity, msg:str):
             return self.Root_Entity.connection.get(self.ping.get_path(), msg)
-        
+
+        @ping.Get(this_role = 'Int' , requester_role = 'Ext.UNSIGNED') # this_state = 'States.Trusted') #Sender
+        def _ping(self,entity, msg:str):
+
+            return f'FROM UNSIGNED Message "{msg}" from {entity} to {self.Root_Entity}'
         # @ping.Internal_Primary()
         # def _ping(self,root_entity,msg):
         #     root_entity._entity_pool[0].cmds.ping(msg) 
@@ -554,10 +631,10 @@ if __name__ == '__main__':
         Identifying_Attrs ={'Entity_Role':'Entity_Role'}
 
     class Unsigned(Entity):
-        Entity_Role = 'Unsigned'
+        Entity_Role = 'UNSIGNED'
         _entity_data = common_entity_data
     class Malformed(Entity):
-        Entity_Role = 'Malformed'
+        Entity_Role = 'MALFORMED'
         _entity_data = common_entity_data
 
     class A(Entity):
@@ -582,7 +659,7 @@ if __name__ == '__main__':
             DEFAULT = 'DEFAULT'
 
         _default_con_state = Conn_States.DEFAULT
-        _default_ext_state = Entity_States.DEFAULT
+        _default_obj_state = Entity_States.DEFAULT
 
 
 
@@ -590,6 +667,7 @@ if __name__ == '__main__':
     import sys
     import subprocess
     parser = argparse.ArgumentParser()
+    parser.add_argument('-print',     action='store_true',default = False,required=False)
     parser.add_argument('-start_test',action='store_true',default = False,required=False)
     parser.add_argument('-inst',      type = str, required=False)
     parser.add_argument('-this_ip',   type = str, required=False)
@@ -600,9 +678,14 @@ if __name__ == '__main__':
     args, _u = parser.parse_known_args(sys.argv)
     print('GOT HERE')
     
+    a_data = {'name':'a', 'ip':'127.0.0.1', 'port':'4000'}
+    b_data = {'name':'b', 'ip':'127.0.0.1', 'port':'4001'}
+    if args.print:
+        cmd = f'python {__file__} -inst {a_data['name']} -this_host {a_data['ip']} -this_port {a_data['port']} -o_ip {b_data['ip']} -o_port {b_data['port']}'
+        print(cmd)
+        sys.exit()
+
     if args.start_test:
-        a_data = {'name':'a', 'ip':'127.0.0.1', 'port':'4000'}
-        b_data = {'name':'b', 'ip':'127.0.0.1', 'port':'4001'}
 
         cmd = f'python {__file__} -inst {a_data['name']} -this_host {a_data['ip']} -this_port {a_data['port']} -o_ip {b_data['ip']} -o_port {b_data['port']}'
         print(cmd)
@@ -628,26 +711,27 @@ if __name__ == '__main__':
             app = b.Setup_App()
             other_entity_cls = A
         case _:
-            raise Exception
+            raise Exception('')
 
 
     import asyncio
 
     def test_connection():
         global PRIMARY_ENTITY
-        print(PRIMARY_ENTITY._entity_pool[0].cmds.ping())
+        interface = PRIMARY_ENTITY._entity_pool[0].cmds 
+        print(interface.ping(interface, 'TestMessage'))
         
     async def run_tests():
         while True:
             asyncio.create_task(test_connection())
             await asyncio.sleep(3)
 
-    # @app.on_event('startup')
-    # async def app_startup():
-    #     global PRIMARY_ENTITY
-    #     PRIMARY_ENTITY._entity_pool.add_entity(other_entity_cls.As_Connection(Connection(args.o_ip, args.o_port)))
-    #     # add connection from scratch, add to enttity and load directly into the entity pool instance.
-    #     asyncio.create_task(run_tests())
+    @app.on_event('startup')
+    async def app_startup():
+        global PRIMARY_ENTITY
+        PRIMARY_ENTITY._entity_pool.add_entity(other_entity_cls.As_Connection(Connection(args.o_ip, args.o_port)))
+        # add connection from scratch, add to enttity and load directly into the entity pool instance.
+        asyncio.create_task(run_tests())
 
     @app.get("/url-list")
     def get_all_urls():
