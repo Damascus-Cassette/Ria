@@ -3,7 +3,7 @@ from functools import partial, wraps
 from enum      import Enum
 from inspect   import isclass, signature as _sig
 from typing    import Self
-from types     import FunctionType
+from types     import FunctionType,LambdaType
 from contextvars import ContextVar
 
 class _UNSET():...
@@ -264,6 +264,17 @@ class Interface_Base():
         parent_router.add_api_route(local_router,getattr(self,'Router_Subpath',''))
         return parent_router
 
+import time
+
+REQ_KEY_MAPPING : dict[str,LambdaType] = {
+    'url.path'    : lambda request: request.url.path    ,
+    'url.port'    : lambda request: request.url.port    ,
+    'url.scheme'  : lambda request: request.url.scheme  ,
+    'client.host' : lambda request: request.client.host ,
+    'client.port' : lambda request: request.client.port ,
+    'Intake_Time' : lambda request: time.time()         ,
+}
+#TODO: Cookies & verification
 
 
 class _Entity_Data_Foreign():
@@ -272,24 +283,58 @@ class _Entity_Data_Foreign():
     instanced from header data
     '''
 
+    _keys : dict
+
     @classmethod
     def construct(cls, other_cls:'Entity_Data'):
         ''' Intake what keys & attributes should be pulled onto this foreign rep '''
+        publish_dict    = other_cls._Foreign_Publish_Def | other_cls.Foreign_Publish
+        request_parsing = other_cls._Foreign_In_Req_Def  | other_cls.Foreign_In_Req 
+        
+        assert not any([x for x in publish_dict.values()    if x.startswith('_')])
+        assert not any([x for x in request_parsing.values() if x.startswith('_')])
+        assert not any([x for x in request_parsing.keys()   if not x in REQ_KEY_MAPPING.keys()])
+            #TODO: Logically could be much simpler, brain not working atm
+            #TODO: Also test to protect for certain header keys?
+
+        slots = tuple(publish_dict.values()) + tuple(request_parsing.values())
+
+        return type(f'{cls.__name__}.foreign_data',(cls,),{'_keys':publish_dict,'_request_intake':request_parsing, '__slot__':slots})
+    
+    def __init__(self):
         ...
     
-    def __init__():
-        ...
-    
-    def _populate_from_header_data_(request):
+    def _populate_from_enity_data_(self,entity_data:'Entity_Data'):
+        for k,v in self._keys:
+            setattr(self, k, getattr(entity_data,k,'_UNSET'))
+
+    def _populate_from_header_data_(self,request):
         ''' Inverse of Entity_Data._create_header_data_ that also gets some from info from the req '''
-        ...
+
+        for k,v in self._keys.items():
+            setattr(self,v,request.header.get(k))
+            #key inverse of publishing
+
+        for k,v in self._request_intake():
+            setattr(self,v,REQ_KEY_MAPPING[k](request))
+            
+
+    def _post_to_header_data_(self,source_entity,toward_entity)->dict:
+        ''' Create header data dictionary, Defeaults '''
+        res = {}
+
+        for k,v in self._keys:
+            res[v] = getattr(self,k,'_UNSET')
+            
+        return res
+        
 
 class Entity_Data:
     '''Contain local-data of entities from intaking _Entity_Data_Foreign items
-
     Constructs _Entity_Data_Foreign representation and compares self to it when identifying and merging
     Has protected keys that cannot be set, but can be published
     '''
+
     _Foreign_Base = _Entity_Data_Foreign
     _Foreign : _Entity_Data_Foreign
     
@@ -301,18 +346,69 @@ class Entity_Data:
     def __init__(self,entity:'Entity'):
         self._entity = entity
 
-    ### What attributes should be decalred to configre Foreign Data?
-    ### What about returned data.
-    # Consider both default and non-default
 
-    def _create_header_data_(self)->dict:
-        ...
+    #Request -> Foreign[Incoming]
+    Foreign_In_Req       : dict[str,LambdaType] = {}
+    _Foreign_In_Req_Def  : dict[str,LambdaType] = {}
+        #Local : Foreign
 
-    def _compare_to_foreign_(self,foreign:_Entity_Data_Foreign)->bool:
-        ...
+    #Local -> Foreign[Outgoing/Incoming] <- Request
+    Foreign_Publish      : dict[str,str]        = {}
+    _Foreign_Publish_Def : dict[str,str]        = {}
+        #_Entity_Data_Foreign from self, before converting that to headers
+        #TODO: future support for lambda & type casting
+        #Local : Foreign
+
+    #Determining (Local == Foreign) during Foreign[Incoming] -> ?Local
+    Foreign_Match_keys   : dict[str,str|LambdaType]|FunctionType
+        #Local : Foreign
+
+    #Foreign[Incoming] -> Local 
+    Foreign_Intake       : dict[str,str]|FunctionType   = {}
+    _Foreign_Intake_Def  : dict[str,str]                = {} 
+        #Local : Foreign
+    
+
+    def _compare_to_foreign_(self,request,foreign:_Entity_Data_Foreign)->bool:
+        ''' Interpret foreign data corrisponds to local entity via self.Foreign_Match_Keys
+        Local-Left for type comparison priority
+        #TODO: Type casting right on foreign
+        #TODO: Compare Unset Rules?
+        #TODO: False Assumption instead of Truth Assumption?
+        '''
+        
+        assert len(self.Foreign_Match_keys)
+
+        if isinstance(self.Foreign_Match_keys, FunctionType):
+            return self.Foreign_Match_keys(foreign)
+        
+        for k,v in self.Foreign_Match_keys.items():
+            local_val   = getattr(self,k,_UNSET)
+            if local_val is _UNSET: return False
+            if isinstance(v,(FunctionType,LambdaType)):
+                if not v(request, foreign, local_val): 
+                    return False
+            else:
+                foreign_val = getattr(foreign,v,_UNSET)
+                if foreign_val is _UNSET: return False
+                if not local_val == foreign_val:
+                    return False
+
+        return True    
+        
 
     def _update_from_foreign_(self,foreign:_Entity_Data_Foreign)->None:
-        ...
+        for k,v in (self._Foreign_Intake_Def | self.Foreign_Intake).keys():
+            assert not k.startswith('_')
+            
+            if isinstance(v,(FunctionType,LambdaType)):
+                f_val = v(foreign)
+            else:
+                f_val = getattr(foreign,v,_UNSET) 
+
+            setattr(self,v,f_val)
+                    
+        
 
 class Entity_Pool:
     
