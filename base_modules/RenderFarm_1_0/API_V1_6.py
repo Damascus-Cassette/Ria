@@ -52,27 +52,27 @@ class _ol_func_item():
         self.key           = key
         self.filter_kwargs = kwargs
         
-    def execute(self, container, this_entity:Entity, other_entity:Entity, *args,**kwargs):
+    def execute(self, container, this_entity:'Entity', other_entity:'Entity', *args,**kwargs):
         return self.func(container,this_entity, other_entity, *args,**kwargs)
 
-    def match(self,this_entity:Entity,other_entity:Entity):
+    def match(self,this_entity:'Entity',other_entity:'Entity'):
         raise Exception('Child class expected to handle this')
     
     @classmethod
-    def _wrapper(cls, parent, key=None, *args,**kwargs):
+    def _wrapper(cls, parent, mode, key=None, *args,**kwargs):
         ''' Wrapper to Intake info with resolve as:
             un-nest w/a
-            attach to parent (OL_Container)
+            attach to parent (_OL_Container)
             return a _method[original_function] '''
         def wrapper[F](func:F)->F:
 
             if isinstance(func,(_ol_func_item_deliver,_ol_func_item_recieve)):
                 func = func.func
-            elif isinstance(func,OL_Container):
+            elif isinstance(func,_OL_Container):
                 func = func._origin_func
             
             inst = cls(func,*args,**kwargs)
-            parent.add_func_container(inst)
+            parent.add_func_container(mode,inst)
             if key: parent.add_func_direct(key,inst)
             
             return _method(func)
@@ -97,7 +97,7 @@ class _ol_func_item_deliver(_ol_func_item):
 
 
 
-class OL_Container():
+class _OL_Container():
     ''' OL func Container, ie a contextual router that contains _ol_func_items. 
     Must have 'view' made when instancing parent
     Prob way more effecient & safe than forcing partial or setting a context va every access '''
@@ -112,6 +112,13 @@ class OL_Container():
         self._delivery_functions  :_def_dict_list[str,_ol_func_item_deliver] = _def_dict_list()
 
     @classmethod
+    def _wrapper(cls,*args,**kwargs):
+        def wrapper(func):
+            return cls(func,*args,**kwargs)
+        return wrapper
+    
+
+    @classmethod
     def _on_new(cls,inst):
         ''' Utility, Call on new item to setup 'views' (local shallow copies w/ one var change) '''
         for k in [x for x in dir(inst) if not x.startswith('_')]:
@@ -119,6 +126,16 @@ class OL_Container():
             if isinstance(v,cls):
                 if not (v._container is inst): 
                     setattr(inst,k,v._view(inst))
+
+    @staticmethod
+    def _iter_insts(inst):
+        ''' Intialize Interface Structure '''
+        for k in [x for x in dir(inst) if not x.startswith('_')]:
+            v = getattr(inst,k)
+            if isclass(v):
+                continue
+            if issubclass(v.__class__,_OL_Container) or (v.__class__ is _OL_Container):
+                yield v
 
     def _view(self,container):
         new = copy(self)
@@ -138,11 +155,11 @@ class OL_Container():
             func = self.find_delivering(this_entity,other_entity)
             return func(self._container, this_entity, other_entity, request, *args, **kwargs)
         
-    def add_func_container(self,func_item:_ol_func_item):
+    def add_func_container(self,mode,func_item:_ol_func_item):
         if   isinstance(func_item,_ol_func_item_deliver):
-            self._delivery_functions.append(func_item)
+            self._delivery_functions[mode].append(func_item)
         elif isinstance(func_item,_ol_func_item_recieve):
-            self._reciever_functions.append(func_item)
+            self._reciever_functions[mode].append(func_item)
 
     def add_func_direct(self,key,func):
         if hasattr(self,key):
@@ -151,8 +168,8 @@ class OL_Container():
 
     def _register(self, router, entity_pool, args=None, kwargs=None):
         ''' Registers reciever functions to contextual entity pool '''
-        
         for mode, func_list in self._reciever_functions.items():
+            raise Exception('GOT HERE')
             face_ol_item : _ol_func_item_recieve = func_list[0] #First func in list is used to define the interface.
             # _args,_kwargs = face_func._api_route_args(self._container._root_entity, self._container, self, router, *args, **kwargs)
             _args,_kwargs = self._api_router_args_(face_ol_item, entity_pool, mode, args, kwargs)
@@ -218,18 +235,23 @@ class OL_Container():
     def Delete_Deliver(self,*args,**kwargs):
         return _ol_func_item_deliver._wrapper(parent=self,mode=Command.DELETE,*args,**kwargs)
 
-
+OL_Container = _OL_Container._wrapper
 
 class Interface_Base():
     Router_Subpath : str
 
-    def __new__(self,):
-        OL_Container._on_new(self)
-        Interface_Base._on_new(self)
+    def __new__(cls,*args,**kwargs):
+        new = super().__new__(cls)
+        _OL_Container._on_new(new)
+        Interface_Base._on_new(new)
+        return new
     
-    def __init__(self, parent : 'Entity'|'Interface_Base'):
+    def __init__(self, parent ): # : 'Entity'|'Interface_Base'):
         self._parent = parent
-        self._Root_Entity = parent._Root_Entity
+        if getattr(parent,'_Root_Entity',None) is Self:
+            self._Root_Entity = parent
+        else:
+            self._Root_Entity = parent._Root_Entity
 
     @staticmethod
     def _on_new(inst):
@@ -255,7 +277,7 @@ class Interface_Base():
         return APIRouter()
     
     def _attach_local_router(self,local_router:APIRouter,entity_pool,args=None,kwargs=None):        
-        for ol_func in OL_Container._iter_insts(self):
+        for ol_func in _OL_Container._iter_insts(self):
             ol_func._register(local_router,entity_pool,args,kwargs)
         for subinterface in Interface_Base._iter_insts(self):
             subinterface : Self
@@ -264,7 +286,7 @@ class Interface_Base():
     
     def _register(self, parent_router, entity_pool, args=None, kwargs=None):
         local_router = self._attach_local_router(self._create_local_router(),entity_pool,args,kwargs)
-        parent_router.add_api_route(local_router,getattr(self,'Router_Subpath',''))
+        parent_router.include_router(local_router,prefix = getattr(self,'Router_Subpath', None))
         return parent_router
 
 REQ_KEY_MAPPING : dict[str,LambdaType] = {
@@ -429,17 +451,17 @@ class Entity_Pool:
     Default_Int_State : str|Enum
 
     #Entity that is started as external, observed information
-    Entity_Ext_State  : Enum
+    Entity_Ext_States  : Enum
     Default_Ext_State : str | Enum
-    Entity_Con_State  : Enum
+    Entity_Con_States  : Enum
     Default_Con_State : str | Enum
 
     def __init_subclass__(cls):
         assert hasattr(cls , 'Entities'          )
         assert hasattr(cls , 'Default_Int_State' )
-        assert hasattr(cls , 'Entity_Ext_State'  )
+        assert hasattr(cls , 'Entity_Ext_States'  )
         assert hasattr(cls , 'Default_Ext_State' )
-        assert hasattr(cls , 'Entity_Con_State'  )
+        assert hasattr(cls , 'Entity_Con_States'  )
         assert hasattr(cls , 'Default_Con_State' )
 
         cls.Entity_Role_Dict = {}
@@ -449,8 +471,8 @@ class Entity_Pool:
 
         entity_dict = {e.Entity_Role:e for e in cls.Entities}
 
-        cls.Int = Enum(entity_dict)
-        cls.Ext = Enum(entity_dict)
+        cls.Int = Enum('Int',entity_dict)
+        cls.Ext = Enum('Ext',entity_dict)
 
     def _ensure_incoming_entity_(self,request):
         role = request.headers.get('Entity_Role', default = None)
@@ -474,6 +496,8 @@ class Entity_Pool:
 
 class Entity(Interface_Base):
     ''' Combination Entity-Api-Interface '''
+    Entity_Role      : str | Enum
+
     Is_Local_State   : Entity_Int | Entity_Ext 
     Entity_State     : Enum | _UNSET           = _UNSET
     Connection_State : Enum | _UNSET | PRIMARY = _UNSET
@@ -484,9 +508,11 @@ class Entity(Interface_Base):
     Entity_Data_Type : Entity_Data = Entity_Data
     entity_data      : Entity_Data
 
+    _Root_Entity     = Self
+
     def __init__(self):
         self._Root_Entity = self
-        self.entity_data  = self.Entity_Data_Type() 
+        self.entity_data  = self.Entity_Data_Type(self) 
 
     @classmethod
     def _init_from_foreign_(cls, entity_pool, request, f_entity_data):
@@ -497,10 +523,13 @@ class Entity(Interface_Base):
         return new
     
     @classmethod
-    def _init_as_local_(cls, entity_pool):
+    def _init_as_local_(cls, entity_pool=None):
         new = cls()
         new.Is_Local_State = Entity_Int
-        new.entity_pool    = entity_pool
+        if entity_pool:
+            new.entity_pool    = entity_pool
+        else:
+            new.entity_pool    = new.Entity_Pool_Type()
         return new
     
     def Create_App(self):
@@ -509,4 +538,60 @@ class Entity(Interface_Base):
         self._app = FastAPI()
         self._register(self._app,self.entity_pool)
         return self._app
+
+
+if __name__ == '__main__':
+
+    class Entity_Int_States(Enum):
+        DEFAULT = 'DEFAULT_INT_STATE'
+    class Entity_Ext_States(Enum):
+        DEFAULT = 'DEFAULT_EXT_STATE'
+    class Entity_Con_States(Enum):
+        DEFAULT = 'DEFAULT_CON_STATE'
+
+    class interface(Interface_Base):
+        Router_Subpath = '/cmds'
+        @OL_Container('/test')
+        def test(self,this_entity,other_entity): 
+            return f'TEST CALLED BY {other_entity}'
+
+        @test.Get_Deliver()
+        def _test(self,this_entity,req_entity) : 
+            raise NotImplementedError('TESTING')
+
+    class _UNSIGNED(Entity):
+        Entity_Role = 'UNSIGNED'
+    class _MALFORMED(Entity):
+        Entity_Role = 'MALFORMED'
+
+    class A(Entity):
+        cmds = interface
+        Entity_Role = 'A'
+
+    class _Entity_Pool(Entity_Pool):  
+        Default_Unsigned    = _UNSIGNED
+        Default_Malformed   = _MALFORMED
+        
+        Entities = [A,]
+
+        Entity_Int_States = Entity_Int_States
+        Entity_Ext_States = Entity_Ext_States
+        Entity_Con_States = Entity_Con_States
+
+        Default_Int_State = Entity_Int_States.DEFAULT
+        Default_Ext_State = Entity_Ext_States.DEFAULT
+        Default_Con_State = Entity_Con_States.DEFAULT
+
+    SHARED_ENTITY_POOL = _Entity_Pool()
+
+    a = A._init_as_local_(SHARED_ENTITY_POOL)
+    app = a.Create_App()
+
+    @app.get("/url-list")
+    def get_all_urls():
+        url_list = [{"path": route.path, "name": route.name} for route in app.routes]
+        return url_list
+
+    import uvicorn
+    uvicorn.run(app, host = '127.0.0.1', port = '4000')
 
