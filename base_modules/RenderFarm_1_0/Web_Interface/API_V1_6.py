@@ -254,38 +254,49 @@ class _OL_Container():
     
 
     @wraps(_ol_func_item_recieve._wrapper)
-    def Get_Recieve(self,*args,**kwargs):
+    def Get_Endpoint(self,*args,**kwargs):
         return _ol_func_item_recieve._wrapper(parent=self,mode=Command.GET,*args,**kwargs)
 
     @wraps(_ol_func_item_recieve._wrapper)
-    def Post_Recieve(self,*args,**kwargs):
+    def Post_Endpoint(self,*args,**kwargs):
         return _ol_func_item_recieve._wrapper(parent=self,mode=Command.POST,*args,**kwargs)
 
     @wraps(_ol_func_item_recieve._wrapper)
-    def Patch_Recieve(self,*args,**kwargs):
+    def Patch_Endpoint(self,*args,**kwargs):
         return _ol_func_item_recieve._wrapper(parent=self,mode=Command.PATCH,*args,**kwargs)
 
     @wraps(_ol_func_item_recieve._wrapper)
-    def Delete_Recieve(self,*args,**kwargs):
+    def Delete_Endpoint(self,*args,**kwargs):
         return _ol_func_item_recieve._wrapper(parent=self,mode=Command.DELETE,*args,**kwargs)
 
 
     @wraps(_ol_func_item_deliver._wrapper)
-    def Get_Deliver(self,*args,**kwargs):
+    def Get_Send(self,*args,**kwargs):
         return _ol_func_item_deliver._wrapper(parent=self,mode=Command.GET,*args,**kwargs)
 
     @wraps(_ol_func_item_deliver._wrapper)
-    def Post_Deliver(self,*args,**kwargs):
+    def Post_Send(self,*args,**kwargs):
         return _ol_func_item_deliver._wrapper(parent=self,mode=Command.POST,*args,**kwargs)
 
     @wraps(_ol_func_item_deliver._wrapper)
-    def Patch_Deliver(self,*args,**kwargs):
+    def Patch_Send(self,*args,**kwargs):
         return _ol_func_item_deliver._wrapper(parent=self,mode=Command.PATCH,*args,**kwargs)
 
     @wraps(_ol_func_item_deliver._wrapper)
-    def Delete_Deliver(self,*args,**kwargs):
+    def Delete_Send(self,*args,**kwargs):
         return _ol_func_item_deliver._wrapper(parent=self,mode=Command.DELETE,*args,**kwargs)
 
+    # @wraps(_ol_func_item._wrapper)
+    # def Default(self, mode:Command, is_send = False, *args, **kwargs):
+    #     if isinstance(mode, str):
+    #         mode = Command(mode)
+    #     def wrapper(func):
+    #         if is_send:
+    #             _ol_func_item_deliver._wrapper(parent=self,mode=Command.DELETE,*args,**kwargs)(func)
+    #         else:
+    #             _ol_func_item_recieve._wrapper(parent=self,mode=Command.DELETE,*args,**kwargs)(func)
+    #         return self
+    #     return wrapper    
 
     def Send_Get(self,sending_entity,*args,**kwargs):
         return self(Command.GET, sending_entity, *args, **kwargs)

@@ -18,40 +18,40 @@ class _Entity_Data(Entity_Data):
 
 class interface(Interface_Base):
     Router_Subpath = ''
+
     @OL_Container('/test')
     def test(self,this_entity,other_entity): 
         raise Exception('SHOULD NOT HIT THIS')
     
-    # @test.Get_Deliver()
-    @test.Get_Recieve()
+    @test.Get_Endpoint()
     def _test(self,this_entity, other_entity) : 
         return f'{this_entity} {other_entity}'
 
-    @test.Get_Deliver()
+    @test.Get_Send()
     def _test(self, this_entity:'Entity', requesting_entity:'Entity', raw_path, *args,**kwargs): 
         return this_entity.entity_data.Connection.get(requesting_entity, raw_path, *args,**kwargs)
-        
+
+
     @OL_Container('/list_entities')
     def list_entities():...
 
-    @list_entities.Get_Recieve()
+    @list_entities.Get_Endpoint()
     def _list_entities(self, this_entity, other_entity):
         return self._Root_Entity.entity_pool.ext_pool._web_repr_()
     
     @OL_Container('/test_peers')
-    def test_peers(self, this_entity, other_entity):
-        ...
-        # raise Exception('SHOULD NOT HIT THIS')
+    def test_peers(self, this_entity, other_entity):...
 
-    @test_peers.Get_Recieve() #.default_get() which should return original class and add item to list?
+
+    @test_peers.Get_Endpoint() #.default_get() which should return original class and add item to list?
     def _test_peers(self, this_entity, other_entity):
         data = {}
         for k,e in self._Root_Entity.entity_pool.ext_pool._each_subitem_():                
             data[k] = ls = []
             if hasattr(e,'cmds'):
-                ls.append(e.cmds.test.Send_Get(this_entity,_raw_responce = True).content)
-
+                ls.append( e.cmds.test.Send_Get(this_entity) )
         return data
+
 
 class _UNSIGNED(Entity):
     Entity_Role = 'UNSIGNED'
