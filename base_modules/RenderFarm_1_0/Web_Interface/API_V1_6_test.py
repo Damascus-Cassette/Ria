@@ -1,6 +1,5 @@
 from .API_V1_6 import *
 
-
 class Entity_Int_States(Enum):
     DEFAULT = 'DEFAULT_INT_STATE'
 class Entity_Ext_States(Enum):
@@ -21,13 +20,38 @@ class interface(Interface_Base):
     Router_Subpath = ''
     @OL_Container('/test')
     def test(self,this_entity,other_entity): 
-        return f'TEST CALLED BY {other_entity}'
+        raise Exception('SHOULD NOT HIT THIS')
     
     # @test.Get_Deliver()
     @test.Get_Recieve()
     def _test(self,this_entity, other_entity) : 
         return f'{this_entity} {other_entity}'
-        # raise NotImplementedError('TESTING')
+
+    @test.Get_Deliver()
+    def _test(self, this_entity:'Entity', requesting_entity:'Entity', raw_path, *args,**kwargs): 
+        return this_entity.entity_data.Connection.get(requesting_entity, raw_path, *args,**kwargs)
+        
+    @OL_Container('/list_entities')
+    def list_entities():...
+
+    @list_entities.Get_Recieve()
+    def _list_entities(self, this_entity, other_entity):
+        return self._Root_Entity.entity_pool.ext_pool._web_repr_()
+    
+    @OL_Container('/test_peers')
+    def test_peers(self, this_entity, other_entity):
+        ...
+        # raise Exception('SHOULD NOT HIT THIS')
+
+    @test_peers.Get_Recieve() #.default_get() which should return original class and add item to list?
+    def _test_peers(self, this_entity, other_entity):
+        data = {}
+        for k,e in self._Root_Entity.entity_pool.ext_pool._each_subitem_():                
+            data[k] = ls = []
+            if hasattr(e,'cmds'):
+                ls.append(e.cmds.test.Send_Get(this_entity,_raw_responce = True).content)
+
+        return data
 
 class _UNSIGNED(Entity):
     Entity_Role = 'UNSIGNED'
@@ -39,6 +63,12 @@ class _MALFORMED(Entity):
 
 class A(Entity):
     Entity_Role = 'A'
+    Entity_Data_Type = _Entity_Data
+    
+    cmds = interface
+
+class B(Entity):
+    Entity_Role = 'B'
     Entity_Data_Type = _Entity_Data
     
     cmds = interface
@@ -57,13 +87,33 @@ class _Entity_Pool(Entity_Pool):
     Default_Ext_State = Entity_Ext_States.DEFAULT
     Default_Con_State = Entity_Con_States.DEFAULT
 
-SHARED_ENTITY_POOL = _Entity_Pool()
 
-a = A._init_as_local_(SHARED_ENTITY_POOL)
+app_a_entity_pool = _Entity_Pool()
+a = A._init_as_local_(app_a_entity_pool)
 app_a = a.Create_App()
+a.entity_pool.add_entity(B._init_from_connection_(app_a_entity_pool,host = '127.0.0.1', port = '4001'))
 
-a = A._init_as_local_(SHARED_ENTITY_POOL)
-app_b = a.Create_App()
+app_b_entity_pool = _Entity_Pool()
+b = B._init_as_local_(app_b_entity_pool)
+app_b = b.Create_App()
+b.entity_pool.add_entity(A._init_from_connection_(app_b_entity_pool,host = '127.0.0.1', port = '4000'))
+
+
+# def test_connection():
+#     global PRIMARY_ENTITY
+#     interface = PRIMARY_ENTITY._entity_pool[0].cmds 
+#     print(interface.ping(interface, 'TestMessage'))
+#     
+# async def run_tests():
+#     while True:
+#         asyncio.create_task(test_connection())
+#         await asyncio.sleep(3)
+#
+# @app_b.on_event('startup')
+# async def app_startup():
+#     global PRIMARY_ENTITY
+#     SHARED_ENTITY_POOL.add_entity()
+#     asyncio.create_task(run_tests())
 
 @app_a.get("/url-list")
 @app_b.get("/url-list")
@@ -74,3 +124,6 @@ def get_all_urls():
 # import uvicorn
 # uvicorn.run(app, host = '127.0.0.1', port = '4000')
 
+#cd base_modules/RenderFarm_1_0  
+#python -m uvicorn Web_Interface.API_V1_6_test:app_a --port 4000 --reload
+#python -m uvicorn Web_Interface.API_V1_6_test:app_b --port 4001 --reload
