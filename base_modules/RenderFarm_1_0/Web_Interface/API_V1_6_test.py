@@ -77,7 +77,7 @@ class _Entity_Pool(Entity_Pool):
     Default_Unsigned    = _UNSIGNED
     Default_Malformed   = _MALFORMED
     
-    Entities = [A,]
+    Entities = [A,B]
 
     Entity_Int_States = Entity_Int_States
     Entity_Ext_States = Entity_Ext_States

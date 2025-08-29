@@ -1,6 +1,6 @@
 from ..models.struct_module    import module, module_test
 from ..models.struct_hook_base import hook
-from ..models.base_node        import socket_group
+from ..models.base_node        import socket_group,node_set_base
 from .Execution_Types          import item,_mixin
 from .utils.print_debug        import debug_print_wrapper as debug_wraper, debug_print as dprint
 
@@ -59,9 +59,17 @@ class new_exec_node(item.exec_node):
         self.out_sockets[0].value = val
         return val
 
+
+class my_node_set(node_set_base):
+    class set_node_1(item.exec_node):
+        ...
+    class set_node_2(item.exec_node):
+        ...
+
 main._loader_items_.extend([
     new_socket,
     new_exec_node,
+    *my_node_set.Nodes_Types,
     ])
 
 

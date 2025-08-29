@@ -21,6 +21,8 @@ from inspect                 import isclass
 
 from contextlib              import contextmanager
 
+import string
+import random
 
 class node_archtype(defered_archtype):... 
 class socket_archtype(defered_archtype):...
@@ -359,6 +361,96 @@ class socket_collection(BaseModel,typed_collection_base,ConstrBase, Hookable):
         return self.context.root_graph.module_col.items_by_attr('_io_bin_name_','socket')
 
 
+class node_set_subcollection(context_prepped_typed_subcollection_base):
+    #TODO: How does this work with FildIO?
+    @property
+    def _data(self):
+        return self.parent.context.subgraph.nodes
+
+class node_set_base(BaseModel,ConstrBase, Hookable):
+    ''' Instanced node basetype to access node_set methods. Instanced into the node. Not stored.
+    Nodes have a loose relationship in each node_set via ID.
+    '''
+    _constr_bases_key_  = 'node_set'    
+    _constr_call_post_  = ['__io_setup__','__hooks_initialize__']
+    _constr_join_lists_ = ['_io_blacklist_','_io_whitelist_','_constr_call_post_']
+    _io_blacklist_      = ['Node_Types']
+    
+    Nodes_Types : list['node']
+
+
+    @staticmethod
+    def make_node_set_id():
+        '''Produce a random or semi-random set ID'''
+        return ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(10))
+
+    node_set_id : str
+
+    def __init_subclass__(cls):
+        Nodes_Types = []
+        
+        for k in dir(cls):
+            if k.startswith('_'): continue
+            v = getattr(cls,k)
+            if not isclass(v)   : continue
+            if issubclass(v,node):
+                Nodes_Types.append(node)
+        
+        cls.Nodes_Types = Nodes_Types
+
+        for node in cls.Nodes_Types:
+            node.Node_Set_Type = cls
+        
+        return cls
+
+    siblings : node_set_subcollection
+
+    context = context.construct(include=['meta_graph','root_graph','subgraph','node_coll','node'],as_name='node_set')
+    def _context_walk_(self): 
+        self.context.register()
+
+    def __init__(self, node_set_id:str):
+        self.node_set_id = node_set_id
+        self.Nodes_Types = []
+        self._context_walk_()
+        self.siblings = node_set_subcollection(self, lambda i,k,node : (a:=getattr(node.node_set,'node_set_id', None)) and (a == getattr(self,'node_set_id',None)) )
+
+    def __iter__(self):
+        for x in self.siblings:
+            yield x
+
+    def __getitem__(self,key):
+        return self.siblings[key]
+    
+    def __setitem__(self,key,item:'node'):
+        assert item.__class__ in self.Nodes_Types
+        item.node_set.node_set_id = self.node_set_id
+        #Uncertain in operation if self.context.node_collection will be fullfilled (as)
+        self.siblings[key] = item
+        return item
+    
+    def append(self,item):
+        assert item.__class__ in self.Nodes_Types
+        item.node_set.node_set_id = self.node_set_id
+        self.siblings.append(item)
+        return item
+
+
+    @classmethod
+    def new_set(cls)->tuple['node']:
+        ''' Create new set from types, returns as tuple. Lenght is based on Node_Set_Def in ea node '''
+        node_set_id = cls.make_node_set_id()
+        res = []
+        for nt in cls.Nodes_Types:
+            nt : node
+            for i in range(nt.Node_Set_Def):
+                new_node = nt(default_sockets = True, node_set_id = node_set_id)
+                res.append(new_node)
+        return tuple(res)
+    
+    #TODO: Consider more methods
+
+
 class node(item_base,BaseModel,ConstrBase, Hookable):
     ''' Base Node type, inherited into actionable forms '''
     _io_bin_name_       = 'g_node'
@@ -373,6 +465,20 @@ class node(item_base,BaseModel,ConstrBase, Hookable):
     out_sockets  : socket_collection #And inst as lowercase
     side_sockets : socket_collection
 
+    Node_Set_Type: node_set_base|None = None
+    Node_Set_Min : int = 1
+    Node_Set_Max : int = 1
+    Node_Set_Def : int = 1
+
+    Subgraph_Min : int = -1
+    Subgraph_Max : int = -1
+    Subgraph_Over_Handle  = 'Return_Existing'
+        #TODO: Figure out how this should work with monadish
+    Subgraph_Under_Handle = 'Nothing'
+        #TODO: Implement in subgraph.
+
+    node_set     : node_set_base = None
+
     def __init_subclass__(cls):
         cls.in_sockets   = socket_collection.construct_if_not('in_sockets',   Direction='in',   Groups=getattr(cls,'in_sockets',[]))
         cls.out_sockets  = socket_collection.construct_if_not('out_sockets',  Direction='out',  Groups=getattr(cls,'out_sockets',[]))
@@ -385,15 +491,25 @@ class node(item_base,BaseModel,ConstrBase, Hookable):
             self.in_sockets._context_walk_()
             self.out_sockets._context_walk_()
             self.side_sockets._context_walk_()
+            if self.node_set: 
+                self.node_set._context_walk_()
 
-    def __init__(self,/,*,default_sockets:bool = False):
+    def __init__(self,/,*, default_sockets:bool = False, node_set_id : str = None):
         self.context = self.context(self)
-        self.In_Sockets   = self.in_sockets   #Consider mandating this structure def as capital
-        self.Out_Sockets  = self.out_sockets  
-        self.Side_Sockets = self.side_sockets 
-        self.in_sockets   = self.in_sockets()
-        self.out_sockets  = self.out_sockets()
-        self.side_sockets = self.side_sockets()
+        self.In_Sockets    = self.in_sockets   
+        self.Out_Sockets   = self.out_sockets  
+        self.Side_Sockets  = self.side_sockets 
+            #Consider mandating these structure def as capital, access as lower.
+        self.in_sockets    = self.in_sockets()
+        self.out_sockets   = self.out_sockets()
+        self.side_sockets  = self.side_sockets()
+            #Consider allowing multiple node sets in the future through an intermediatry structure.
+
+        if self.Node_Set_Type:
+            self.node_set = self.Node_Set_Type()
+        if node_set_id:
+            self.node_set.node_set_id = node_set_id 
+
         if default_sockets:
             self.default_sockets()
         self._context_walk_()
