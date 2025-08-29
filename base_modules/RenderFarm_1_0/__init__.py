@@ -1,11 +1,11 @@
 from ...models.struct_module    import module, module_test
 from ...models.base_node        import socket_group, node_set_base
 from ..Execution_Types          import _mixin, item
-from ...models.struct_hook_base import hook, hook_trigger
+from ...models.struct_hook_base import hook, hook_trigger,_unset
 from ..utils.print_debug import (debug_print_wrapper as dp_wrap, 
                                  _debug_print        as dprint ,
                                  debug_level                   , 
-                                 debug_targets                 ) 
+                                 debug_targets                 )
 
 class main(module):
     ''' Execution engine re-write for shared items between distributed & local use 
@@ -37,12 +37,20 @@ class main(module):
 
 class graph_mixin(_mixin.graph):
     ''' Contain job datastructure & session context/allowences '''
+    jobs           : None
+    tasks          : None
+    exec_subgraphs : None
 
 class socket_mixin(_mixin.socket):
-    ''' '''
 
-class node_mixin(_mixin.node):
-    ''' Declaring Execution_Caching Setting for later use '''
+    Deterministic      : bool|None = None
+    Mem_Cachable       : bool|None = None
+    Disc_Cachable      : bool|None = None
+    Cache_Check_Server : bool|None = None
+
+
+class meta_node_mixin(_mixin.node):
+    '''  '''
 
     Deterministic      : bool
     Mem_Cachable       : bool
@@ -50,10 +58,53 @@ class node_mixin(_mixin.node):
 
     Cache_Check_Server : bool
 
+    uuid : str|FunctionType
+        # UUID for this node, cross-graph & global.
+        # Maybe just (Graph.name + Subgraph.name + Node.name)
+
+
+    @hook_trigger('compile') #Takes care of caching, state mgmt
+    def compile():
+        ...
+
+    @hook(event='compile', mode='cache', key='_compile_cache_')
+    def _compile_cache_(self,*args,**kwargs)->Any|_unset:
+        ''' Check cache w/a and h/a here '''
+        return _unset
+
+
+class exec_node_mixin(_mixin.node):
+    '''  '''
+
+    Deterministic      : bool
+    Mem_Cachable       : bool
+    Disc_Cachable      : bool
+
+    Cache_Check_Server : bool
+
+    UUID_Sources : list[str] 
+        #Sources for this node, deduplicated by context key walk
+
+    cache_id_context : str #Upstream-Node context hash
+    cache_id_value   : str #Incoming socket - value hash
+
+
+    @hook_trigger('execute')
+    def execute():
+        ...
+
+    @hook(event='execute', mode='cache', key='_compile_cache_')
+    def _execute_cache_(self,*args,**kwargs)->Any|_unset:
+        ''' Check cache w/a and h/a here '''
+        return _unset
+
+
 main._loader_mixins_ = [
-    graph_mixin  ,
-    node_mixin   ,
-    socket_mixin ,
+    graph_mixin     ,
+    meta_node_mixin ,
+    exec_node_mixin ,
+    socket_mixin    ,
+    exec_node_mixin ,
 ]
 
 #endregion
@@ -176,7 +227,13 @@ main._loader_items_ = [
 #region
 
 def test_exec(graph,subgraph):
-    ...
+    with graph.Monadish_Env(auto_join_target = subgraph) as _sg:
+        (n1:=node_meta_example.M()) >> (n2:=node_meta_example.M())
+    exec_graph = graph.exec_subgraphs.new()
+    subgraph.compile(exec_graph, n2, context = None)
+    res = exec_graph.execute(n2.find_children(exec_graph)[0])
+    assert res == 3
+    
 
 def test_compile(graph,subgraph):
     ...
@@ -193,7 +250,11 @@ def test_placeholder_creation(graph,subgraph):
 def test_placeholder_execution(graph,subgraph):
     ...
 
-# def test_task():
+# def test_task_discovery():
+#     ...
+# def test_task_depedency():
+#     ...
+# def test_task_():
 #     ...
 
 main._module_tests_.append(
