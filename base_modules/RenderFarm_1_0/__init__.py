@@ -7,6 +7,9 @@ from ..utils.print_debug import (debug_print_wrapper as dp_wrap,
                                  debug_level                   , 
                                  debug_targets                 )
 
+from types  import FunctionType
+from typing import Any
+
 class main(module):
     ''' Execution engine re-write for shared items between distributed & local use 
     This adds 
@@ -30,7 +33,14 @@ class main(module):
         ('Monadish','=1.2')
     ]
 
+######## ERRORS ########
+# region
 
+class ContextMissing(Exception):
+    '''Forward resolution of keys was not consumed properly by a zone end, or otherwise context for context was not met. If unconstrained forward context is OK, have default be declared as a different unset flag.'''
+
+
+#endregion
 
 ######## MIXINS ########
 # region
@@ -49,7 +59,7 @@ class socket_mixin(_mixin.socket):
     Cache_Check_Server : bool|None = None
 
 
-class meta_node_mixin(_mixin.node):
+class meta_node_mixin(_mixin.meta_node):
     '''  '''
 
     Deterministic      : bool
@@ -58,22 +68,162 @@ class meta_node_mixin(_mixin.node):
 
     Cache_Check_Server : bool
 
+
     uuid : str|FunctionType
         # UUID for this node, cross-graph & global.
         # Maybe just (Graph.name + Subgraph.name + Node.name)
 
+    #cache keys
+    backwards_context_deps : tuple[str] = tuple()
+        #Pre-walk-sum contextual keys
+        #Consider also allowing lambda's for flexability
+
+    cache_structural_key  :str
+        #State of node structure leading to this node
+    cache_contextual_keys :tuple[str]
+        #post-walk-sum contextual keys
+        #Abstract two above to contextVars that the graph can reset, or dependant otherwise graph dependant values
+
+    def value_key(self)->str:
+        ''' Local state of node apart from sockets.
+        Use minimally in meta-nodes. Must always be defined in sockets'''
+        return ''
+    
+    def generate_context_components(self)->tuple[str, tuple[str]]:
+        ''' Walks tree and returns 
+        - structural_key from uidsum(value & structural_key)
+        - backwards dependency keys
+        This implimentation is socket order-dependant, 
+            sum and similar nodes would not have to be (sort inputs to prevent)
+        '''
+        
+        #Requires local-cache dependant on context.graph value to optimize
+
+        deps = tuple()
+        key  = self.value_key() 
+
+        for socket in (*self.in_sockets.sockets, *self.out_sockets.sockets):
+            _key, _deps = socket.generate_context_components()
+            key =+ _key
+            deps =+ _deps
+        
+        deps = sorted(list(set[deps]))
+            #Dep keys must be deduped and sorted pre-evaluation have proper result.
+
+        return uuid.sum(key), deps
+    
+    def context_state(self, structural_key, contextual_keys, backwards_context):
+        ''' Resolve structural_key, contextual_deps and backwards_context to forward hash to check cache for value'''
+        k = tuple
+
+        for attr in contextual_keys:
+            if backwards_context[attr] is _unset:
+                raise ContextMissing(self,attr,backwards_context)
+            k =+ tuple(uuid.from_value(backwards_context[attr]))
+
+        k =+ (structural_key,)
+
+        return uuid.sum(k) 
+    
+    
+    @hook(event='compile', mode='pre', key='_ensure_context_state_', passthrough=True)
+    def _ensure_context_state_(self, exec_graph, backwards_context)->Any|_unset:
+        ''' Add context_state to arguments '''
+        if (self.cache_contextual_keys.get() is _unset) or (self.cache_structural_key.get() is _unset):
+            struct_key, context_keys = self.generate_context_components
+            self.cache_structural_key .set(struct_key)
+            self.cache_contextual_keys.set(context_keys)
+        
+        return exec_graph, backwards_context, self.context_state(self.cache_structural_key, self.cache_contextual_keys, backwards_context)
+
+    @hook(event='compile', mode='context', key='compile_enter_context', see_args=True)
+    def _ensure_context_state_(self, exec_graph, backwards_context, context_state)->Any|_unset:
+        ''' Set context in backwards_context item '''
+        with backwards_context.checkin(self):
+            t =  backwards_context.context.set(context_state)
+            yield
+            backwards_context.context.reset(t)
+
 
     @hook_trigger('compile') #Takes care of caching, state mgmt
-    def compile():
+    def compile(self, exec_graph, backwards_context, context_state):
+        raise NotImplementedError(f'Compile not implimented in node {self.UID}!')
+    
+    @hook_trigger('compile') #Takes care of caching, state mgmt
+    def _compile_example__shared_(self, exec_graph, backwards_context, context_state):
+        ''' For when a node can both execute or return a promise, based on input values 
+        Node shape is sum(in_[n]) -> out_1
+        Node is assumed to have an equivilent exec node stored in self.Exec_Variant
+            - Based on current structure, this is required to be a different class (as exec and meta nodes have different bases)
+        '''
+
+        backwards_context.checkin(backwards_context)
+            #backwards_context add self to chain of custody
+
+        execute_in_compile = True
+        vals = []
+        for socket in (*self.in_sockets.sockets, *self.out_sockets.sockets):
+            val = socket.compile(exec_graph, backwards_context)
+                #sets compile_value in context and returns.
+            if is_promise(val): # meaning val.context.subgraph is an exec_graph, or node is an exec node
+                execute_in_compile = False
+            vals.append(val)
+        
+        if execute_in_compile:
+            res = self.execute_in_compile(vals)
+            self.out_sockets.sockets[0].compile_value = context_state
+        
+        else:
+            with exec_graph.Monadish_Env(key = context_state):
+                vals >> (res_node:=self.Exec_Variant(default_sockets = True))
+
+            self.out_sockets.sockets[0].compile_value = res_node.out_sockets.sockets[0]
+
+    @hook_trigger('compile') #Takes care of caching, state mgmt
+    def _compile_example__multi_zone_end_(self, exec_graph, backwards_context, context_state):
+        ''' For a multi-zone, called on the end node,
+        Local resulting node is assumed to have shape of (in_[n] -> out_[n]:list)
+        '''
+        start_node = self.node_set['start']
+        start_node.compile_upstream(exec_graph, backwards_context)
+        
+        if start_node.check_require_placeholder():
+            placeholder = compile_placeholder.create(callbacks = ((self,'compile'),) , backwards_context = backwards_context, context_state = context_state )
+            for p_socket, s_socket in zip(placeholder.out_sockets.sockets, self.out_sockets.sockets):
+                s_socket.compile_value = p_socket
+            exec_graph[context_state] = placeholder
+            return
+        
+        with exec_graph.Monadish_Env(key = context_state):
+            for i in range(start_node.sockets['range'].compile_value):
+                res=self.Exec_Variant()
+                with backwards_context.set({self.uuid : i}):
+                    for x in self.in_sockets.sockets:
+                        x.compile(exec_graph,backwards_context) >> res
+            exec_graph.merge_in(res)
+
+        for r_socket, s_socket in zip(res.out_sockets.sockets, self.out_sockets.sockets):
+            s_socket.compile_value = r_socket
+        
+        return
+        
+    @hook_trigger('compile') #Takes care of caching, state mgmt
+    def _compile_example__repeat_zone_end_(self, exec_graph, backwards_context, context_state):
+        ''' For a repeat zone, as each step forward can become a placeholder this can be somewhat complicated. 
+        1. step initial is or is not a placeholder.
+        if so:
+            2a. Make placeholder call self with context(start)
+        if not:
+            2a. check start node with context for each index, set each as placeholder as requred. 
+                - Output of previous step becomes input of current
+                - if not placeholder, call from back to compile upstream (left)
+                - Create start-end nodes for each anyway (as just a passthrough)
+        ''' #I think
+        
         ...
 
-    @hook(event='compile', mode='cache', key='_compile_cache_')
-    def _compile_cache_(self,*args,**kwargs)->Any|_unset:
-        ''' Check cache w/a and h/a here '''
-        return _unset
 
-
-class exec_node_mixin(_mixin.node):
+class exec_node_mixin(_mixin.exec_node):
     '''  '''
 
     Deterministic      : bool
