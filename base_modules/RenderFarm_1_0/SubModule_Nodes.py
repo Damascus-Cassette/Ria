@@ -58,13 +58,12 @@ class socket_mixin(_mixin.socket):
     @hook(event ='execute',mode='wrap', key = '_execute_caching_')
     def _execute_caching_(self,func):
 
-        address = self.address
-        memo    = active_job.get().memo
-        if address+'.value' in memo.keys():
-            return memo[address+'.value']
+        # address = self.address
+        # memo    = active_job.get().memo
+        # if address+'.value' in memo.keys():
+        #     return memo[address+'.value']
 
-        state_key = self.get_state_key(self.subgraph.state)
-            #Use same method for lazy invalidation?
+        state_key = self.get_structure_key({})
 
         if self._has_executed and (self._last_execute_with is state_key):
             return self.exec_value
@@ -105,10 +104,10 @@ class socket_mixin(_mixin.socket):
     @hook(event ='compile',mode='wrap', key = '_compile_caching_')
     def _compile_caching_(self,func, exec_sugraph, backwards_context):
         
-        address = self.address
-        memo    = active_job.get().memo
-        if address+'.value' in memo.keys():
-            return memo[address+'.value']
+        # address = self.address
+        # memo    = active_job.get().memo
+        # if address+'.value' in memo.keys():
+        #     return memo[address+'.value']
 
         state_key = self.get_state_key(backwards_context)
 
@@ -117,7 +116,9 @@ class socket_mixin(_mixin.socket):
 
         with backwards_context.checkin(self.memo_address):
             res = func(exec_sugraph, backwards_context, state_key)
-        self.value[state_key] = res
+            
+        return self.value
+        # self.value[state_key] = res
 
     @hook_trigger('compile')
     def compile(self, exec_sugraph, backwards_context):
@@ -174,6 +175,7 @@ class exec_node_mixin(_mixin.exec_node):
 
     @hook_trigger(event='execute')
     def execute(self,):
+        ''' Execution & Compilation as Self-Cahnging values '''
         raise NotImplementedError(f'Execute was not set on {self.UID}!') 
 
 
