@@ -1,7 +1,7 @@
 
 from functools   import partial, wraps
 from enum        import Enum
-from inspect     import isclass, signature as _sig
+from inspect     import isclass, signature as _sig, iscoroutinefunction
 from typing      import Self
 from types       import FunctionType,LambdaType
 from contextvars import ContextVar
@@ -240,10 +240,17 @@ class _OL_Container():
         func = face_ol_item.func
         sig = _sig(func)
         
-        def wrapped(request:Request,*args,**kwargs):
-            ext_entity = entity_pool._ensure_incoming_entity_(request)
-            return self(mode, ext_entity, request, *args,**kwargs)
+        if not iscoroutinefunction(func):
+            def wrapped(request:Request,*args,**kwargs):
+                ext_entity = entity_pool._ensure_incoming_entity_(request)
+                return self(mode, ext_entity, request, *args,**kwargs)
+        else:
+            async def wrapped(request:Request,*args,**kwargs):
+                ext_entity = entity_pool._ensure_incoming_entity_(request)
+                return await self(mode, ext_entity, request, *args,**kwargs)
         
+        #Strongly need to consider moving _ensure_incoming_entity_ to middleware to avoid multiple entities spawning from the different 'threads'
+
         wrapped.__name__      = func.__name__
         wrapped.__signature__ = sig.replace(
             parameters        = [_sig(wrapped).parameters['request'], *list(sig.parameters.values())[3:]], 
