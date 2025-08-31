@@ -5,7 +5,7 @@ from inspect     import isclass, signature as _sig, iscoroutinefunction
 from typing      import Self
 from types       import FunctionType,LambdaType
 from contextvars import ContextVar
-from fastapi     import FastAPI, APIRouter,Request
+from fastapi     import FastAPI, APIRouter,Request, Depends
 from starlette.responses import Response
 
 from copy import copy
@@ -241,19 +241,20 @@ class _OL_Container():
         sig = _sig(func)
         
         if not iscoroutinefunction(func):
-            def wrapped(request:Request,*args,**kwargs):
-                ext_entity = entity_pool._ensure_incoming_entity_(request)
-                return self(mode, ext_entity, request, *args,**kwargs)
+            # def wrapped(request:Request,*args,**kwargs):
+            async def wrapped(request:Request, _ext_entity : 'Entity'=Depends(entity_pool._async_ensure_incoming_entity_),*args,**kwargs):
+                # _ext_entity = entity_pool._ensure_incoming_entity_(request)
+                return self(mode, _ext_entity, request, *args,**kwargs)
         else:
-            async def wrapped(request:Request,*args,**kwargs):
-                ext_entity = entity_pool._ensure_incoming_entity_(request)
-                return await self(mode, ext_entity, request, *args,**kwargs)
-        
-        #Strongly need to consider moving _ensure_incoming_entity_ to middleware to avoid multiple entities spawning from the different 'threads'
+            async def wrapped(request:Request, _ext_entity : 'Entity'=Depends(entity_pool._async_ensure_incoming_entity_),*args,**kwargs):
+                # _ext_entity = entity_pool._ensure_incoming_entity_(request)
+                return await self(mode, _ext_entity, request, *args,**kwargs)
+        #Depends(_async_...) as a bind to primary thread, trying to ensure syncronous execution
+        #UNTESTED. Rn trying to do execution.
 
         wrapped.__name__      = func.__name__
         wrapped.__signature__ = sig.replace(
-            parameters        = [_sig(wrapped).parameters['request'], *list(sig.parameters.values())[3:]], 
+            parameters        = [_sig(wrapped).parameters['request'], _sig(wrapped).parameters['_ext_entity'], *list(sig.parameters.values())[3:]], 
             return_annotation = sig.return_annotation
             )
         #Spoof signature to that of wrapped_request + original for fastapi introspection
@@ -672,6 +673,9 @@ class Entity_Pool:
         self.ext_pool[entity_type.Entity_Role].append(new_entity)
         return new_entity
     
+    async def _async_ensure_incoming_entity_(self,request:Request):
+        ''' Dependency in wrapper, async to bind to single thread and ensure entities remain syncronous '''
+        return await self._ensure_incoming_entity_(request)
 
     def add_entity(self,entity:'Entity'):
         assert entity.Is_Local_State is Entity_Ext
