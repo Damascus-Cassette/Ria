@@ -6,7 +6,7 @@ Graph Execution logic in a module constructed onto this set
 from .struct_file_io         import BaseModel, defered_archtype,flat_bin,flat_col,flat_ref 
 from .struct_context         import context
 from .struct_construction    import ConstrBase, Bases, Constructed
-from .struct_hook_base       import Hookable
+from .struct_hook_base       import Hookable,hook_trigger
 from .struct_collection_base import (item_base,
                                      collection_base,
                                      typed_collection_base,
@@ -525,8 +525,6 @@ class node_collection(BaseModel, typed_collection_base, ConstrBase, Hookable):
     _io_dict_like_ = True
     _io_blacklist_ = ['data']
 
-    _hook_debug_temp_loud_ = True
-
     _constr_bases_key_  = 'node_collection'
     _constr_call_post_  = ['__io_setup__','__hooks_initialize__']
     _constr_join_lists_ = ['_io_blacklist_','_io_whitelist_','_constr_call_post_']
@@ -558,11 +556,15 @@ class subgraph(item_base, BaseModel, ConstrBase, Hookable):
     _constr_call_post_  = ['__io_setup__','__hooks_initialize__']
     _constr_join_lists_ = ['_io_blacklist_','_io_whitelist_','_constr_call_post_']
 
+
+    _Struct_Nodes_Type_ = node_collection
+    _Struct_Links_Type_ = link_collection
+        #For inheritance ease. (No I dont like it all that much either)
+
     nodes : flat_col[node_collection]
     links : typed_collection_base[link]
         #Retroactivly Populated via subcollection[link] on sockets
         # In memory only
-
 
     context = context.construct(include=['meta_graph','root_graph','subgraph_col'],as_name = 'subgraph')
     def _context_walk_(self):
@@ -572,8 +574,8 @@ class subgraph(item_base, BaseModel, ConstrBase, Hookable):
     def __init__(self,):
         self.context = self.context(self)
         with self.context.register():
-            self.links   = link_collection()
-            self.nodes   = node_collection()
+            self.links   = self._Struct_Nodes_Type_()
+            self.nodes   = self._Struct_Links_Type_()
         self._collection_item_auto_add_('subgraph_col','auto_add_subgraphs')
 
     @contextmanager
@@ -638,6 +640,7 @@ class graph(item_base, BaseModel, ConstrBase,  Hookable):
         with self.context.register():
             self.subgraphs._context_walk_()
 
+    @hook_trigger('__init__')
     def __init__(self,module_iten:dict=None):
         self.context    = self.context(self)
         self.module_col = local_module_collection(module_iten=module_iten)

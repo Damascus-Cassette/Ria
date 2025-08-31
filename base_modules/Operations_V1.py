@@ -3,11 +3,17 @@
 from ..models.struct_module import module, module_test
 from ..models.base_node     import socket_group
 from .Execution_Types       import _mixin, item
+from ..statics              import _unset
 # from .Execution_Types       import socket_shapes as st
 
 from typing                 import Any, Self, TypeAlias,AnyStr,Type
 from types                  import FunctionType, LambdaType
 from inspect                import isclass
+
+class _def_dict_list(dict):
+    def __missing__(self,key):
+        self[key] = inst = []
+        return inst
 
 class main(module):
     ''' Module for adding copy (and eventually more) functionality that respects structure contextually.
@@ -34,7 +40,7 @@ class main(module):
                 links.extend([l for l in sg.links if ((l.from_node in nodes) and (l.to_node in nodes)) ])
             return links
 
-        def copy_in_nodes(self, nodes,links=None, keep_links=True,return_memo=True,memo=None,filter=None)->tuple[item.node]:
+        def copy_in_nodes(self, nodes, links=None, keep_links=True,return_memo=True,memo=None,filter=None)->tuple[item.node]:
             '''copy in nodes from any subgraph, uses self.nodes.copy_in_multi with local_copy as true 
             Allows 'blind' nodes w/out context having been walked
             Initilizes context structure after copying in.
@@ -79,7 +85,64 @@ class main(module):
                 links.extend(_ls)
             return self.copy_in_nodes(nodes=nodes, links=links, keep_links=True, return_memo=return_memo, memo=memo)
 
+        def merge_nodes_by_attr(self, targets, sources, match_attr, localize_missing: bool = True, free_source:bool = False, keep_links:bool=True, return_extras:bool=False):
+            ''' Just copy-in what isnt local and graft the links via their struct key asc. When multiple keys exist in targets, merge into all. '''
+            mapping_targets = _def_dict_list()
+            mapping_sources = _def_dict_list()
+
+            for node in targets:
+                key = getattr(node,match_attr,_unset)
+                assert not (key is _unset)
+                mapping_targets[key].append
+
+            for node in sources:
+                key = getattr(node,match_attr,_unset)
+                assert not (key is _unset)
+                mapping_sources[key].append
+
+            res_mapping = ()
+            for k,sources in mapping_sources.items():
+                for source in sources:
+                    found_target = False
+                    for target in mapping_targets[k]:
+                        res_mapping.append((source, target))
+                        found_target = True
+                    if not found_target:
+                        res_mapping.append((source, None))
+
+            return self.merge_nodes_by_dict(res_mapping, keep_links=keep_links, localize_missing = localize_missing,  free_source=free_source, return_extras=return_extras)
+        
+        def merge_nodes_by_mapping(self, mapping : tuple[item.node,item.node|None], keep_links:bool=True, localize_missing : bool = True, free_source:bool = False, return_extras:bool = False):
+            ''' conv dict of {source -> target} 
+            Blindspot of any absolute references. Rely on idnv implimentation through overridable function.
+            '''
+            res_mapping = []
+            new_nodes   = []
+            new_links   = []
+
+            for source, target in mapping:
+                if target is None and localize_missing:
+                    target = self.nodes.copy_in(source, local_copy=True,)
+                    res_mapping = (source,  target)
+                    new_nodes.append(target)
+
+                elif target is None:
+                    continue
+                else:
+                    target.merge_in(source)
+
+            if keep_links:
+                links = self.find_links_in_node_pool((src for src,_ in res_mapping))
+                memo = {id(k):id(v) for k,v in res_mapping.items()}
+                new_links = self.links.copy_in_multi(links, local_copy=True, return_memo=False, memo=memo)
+            
+            return res_mapping, tuple(new_nodes), tuple(new_links)
+
     class node_mixin(_mixin.node):
+        def merge_in(self, other_node, memo:dict , transfer_links = True):
+            ''' if link.other not in memo, ignore '''
+            ...
+
         def walk(self,
                  direction       :str|tuple  = ('in','side','out'),
                  chain           :list       = None  ,
