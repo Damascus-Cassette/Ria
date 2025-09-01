@@ -79,7 +79,7 @@ class link(item_base,BaseModel,ConstrBase, Hookable):
         self.in_socket_dir  = socket.context.socket_coll.Direction
         self.in_socket_id   = socket.id
 
-    context = context.construct(include=['meta_graph','root_graph','subgraph','link_coll','node','socket_coll','socket_group','socket'])
+    context = context.construct(include=['meta_graph','root_graph','subgraph','node','socket_coll','socket_group','socket'])
     def _context_walk_(self):...
 
 class link_collection[SocketType = link](BaseModel,collection_base,ConstrBase, Hookable):
@@ -96,9 +96,7 @@ class link_collection[SocketType = link](BaseModel,collection_base,ConstrBase, H
 
     context = context.construct(include=['meta_graph','root_graph','subgraph'], as_name='link_coll')
     def _context_walk_(self):
-        with self.context.register():
-            for sg in self.groups.values():
-                sg._context_walk_()
+        self.context.register()
     
     Base = link
 
@@ -290,6 +288,8 @@ class socket_group_collection(collection_base,ConstrBase, Hookable):
     ''' Shoudl be non-writable. Reconstructed on load. Accessor like an ordered dict '''
     Base = socket_group
     context = context.construct(include=['meta_graph','root_graph','subgraph','node','socket_coll'],as_name='socket_group_coll')
+    def _context_walk_(self):
+        return super()._context_walk_()
 
 class socket_collection(BaseModel,typed_collection_base,ConstrBase, Hookable):
     ''' Accessor of sockets and socket_groups '''
@@ -346,9 +346,11 @@ class socket_collection(BaseModel,typed_collection_base,ConstrBase, Hookable):
         #TODO: CONVERT TO COLLECTION
 
     def __init__(self):
-        self.context = self.context(self)
         self._data   = OrderedDict()
+        self.context = self.context(self)
         self.groups  = socket_group_collection()
+        self._context_walk_()
+            #Looks to not be reaching the depth
         for v in self.Groups:
             self.groups[v.Group_ID] = v(self)
 
@@ -398,8 +400,8 @@ class node_set_base(BaseModel,ConstrBase, Hookable):
         
         cls.Nodes_Types = Nodes_Types
 
-        for node in cls.Nodes_Types:
-            node.Node_Set_Type = cls
+        for node_type in cls.Nodes_Types:
+            node_type.Node_Set_Type = cls  
         
         return cls
 
@@ -409,9 +411,10 @@ class node_set_base(BaseModel,ConstrBase, Hookable):
     def _context_walk_(self): 
         self.context.register()
 
-    def __init__(self, node_set_id:str):
+    def __init__(self, node_set_id:str=None):
         self.node_set_id = node_set_id
         self.Nodes_Types = []
+        self.context = self.context(self)
         self._context_walk_()
         self.siblings = node_set_subcollection(self, lambda i,k,node : (a:=getattr(node.node_set,'node_set_id', None)) and (a == getattr(self,'node_set_id',None)) )
 
@@ -500,9 +503,9 @@ class node(item_base,BaseModel,ConstrBase, Hookable):
         self.Out_Sockets   = self.out_sockets  
         self.Side_Sockets  = self.side_sockets 
             #Consider mandating these structure def as capital, access as lower.
-        self.in_sockets    = self.in_sockets()
-        self.out_sockets   = self.out_sockets()
-        self.side_sockets  = self.side_sockets()
+        self.in_sockets    = self.In_Sockets  ()
+        self.out_sockets   = self.Out_Sockets ()
+        self.side_sockets  = self.Side_Sockets()
             #Consider allowing multiple node sets in the future through an intermediatry structure.
 
         if self.Node_Set_Type:
@@ -510,9 +513,9 @@ class node(item_base,BaseModel,ConstrBase, Hookable):
         if node_set_id:
             self.node_set.node_set_id = node_set_id 
 
+        self._context_walk_()
         if default_sockets:
             self.default_sockets()
-        self._context_walk_()
         self._collection_item_auto_add_('node_coll','auto_add_nodes')
 
     def default_sockets(self):

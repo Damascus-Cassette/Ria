@@ -128,7 +128,8 @@ def adv_exec_test(graph,subgraph):
 
 def assert_hook_working(graph,subgraph):
     test_var.set(False) 
-    subgraph.nodes.new(new_exec_node.UID, key = 'test')
+    # subgraph.nodes.new(new_exec_node.UID, label = 'test')
+    new_exec_node(default_sockets=True)
     assert test_var.get() 
 
 main._module_tests_.append(module_test('TestA',

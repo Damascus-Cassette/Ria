@@ -219,7 +219,44 @@ class socket_collection_mixin(_mixin.socket_collection):
 #### Adding dunder methods mixins ####
 class sg_mixin(_op_elem_mixin,_mixin.socket_group):...
 class socket_mixin(_op_elem_mixin,_mixin.socket):...
-class node_mixin(_op_elem_mixin,_mixin.node):...
+class node_mixin(_op_elem_mixin,_mixin.node):
+    
+    @classmethod
+    def Intake_Monadish_Sockets(cls, *args,**kwargs):
+        ''' Default implamentation is intaking values in cls.value, 
+        creating sockets as links
+        to not have a socket as a link, use a tuple(socket,)
+        '''
+        inst = cls(default_sockets = True)
+        for x in args:
+            for socket in inst.in_sockets.sockets:
+                if issubclass(x.__class__, socket):
+                    socket.links.new(x)
+                    continue
+                socket.intake_value(x)
+
+        sockets = dict(inst.in_sockets.sockets.items())
+        for k,v in kwargs.items():
+            if k in sockets.keys():
+                sockets[k].intake_value(v)
+
+        return inst
+                
+    @classmethod
+    def Intake_Monadish_SocketGroups(cls,*args,**kwargs):
+        raise NotImplementedError('')
+
+    @classmethod
+    def M(cls,*args,_on_groups:bool=False,**kwargs):
+        ''' Short-Name port of Intake_Monadish_Sockets & Intake_Monadish_SocketGroups'''
+        if _on_groups:
+            return cls.Intake_Monadish_SocketGroups(*args,**kwargs)
+        return cls.Intake_Monadish_Sockets(*args,**kwargs)
+
+
+
+
+    ...
 
 
 main._loader_mixins_ = [

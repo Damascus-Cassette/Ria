@@ -164,7 +164,8 @@ class item(_item):
             
             assert getattr(cls,'Value_In_Types', _unset) is not _unset
             assert getattr(cls,'Value_Out_Type', _unset) is not _unset
-            assert getattr(cls,'Value_Default',  _unset) is not _unset
+            # assert getattr(cls,'Value_Default',  _unset) is not _unset
+                #Temp Allow exec as default for some testing, may desire it for fallback chain.
 
             if isclass((ty:=getattr(cls,'Value_In_Types'))):
                 if issubclass(ty,(socket_shapes.mutable)):

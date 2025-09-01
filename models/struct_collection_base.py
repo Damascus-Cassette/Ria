@@ -304,12 +304,14 @@ class typed_collection_base[T](collection_base):
     Bases : dict[str,Type]
 
     def item_verify_compatable(self, item:str|Type):
-        Bases = getattr(self,'Bases',{})
+        Bases = self.Bases
 
         if isinstance(item,str):
-            return item in Bases.keys()
+            res = item in Bases.keys()
         else:
-            return item.__class__ in Bases.values()
+            res = item.__class__ in Bases.values()
+
+        return res
         
     @hook_trigger(event = 'new_item')
     def new(self, type:str|Type, key, label=None, *args,**kwargs):

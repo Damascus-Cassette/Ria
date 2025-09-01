@@ -14,24 +14,24 @@ class main(module):
             - Deps
             - Abstract repr
         - Memo
-            - For true random output and externally declared values
-        - User inputs
+            - True random output, single time execution 
+            - Externally declared values
+            - User inputs (Cache-intercept)
         - Checkpoints & Breakpoints
             - Branching and diffing
     '''
+
     UID     = 'Distributed_Execution'
     Version = '1.0'
     Dependencies = [
         ('Monadish','=1.2')
     ]
 
-from .SubModule_Nodes import (_loader_mixins_       as Exec_Loader_Mixins , 
-                                   _loader_items_        as Exec_Loader_Items  , 
-                                   _new_structure_items_ as Exec_Loader_Structs,
-                                   _module_tests_        as Exec_Tests)
-for x in Exec_Loader_Items:
-    x.Module = main
-main._loader_mixins_.extend(Exec_Loader_Mixins)
-main._loader_items_ .extend(Exec_Loader_Items)
-main._module_tests_ .extend(Exec_Tests)
+from .Submodule_ExecFlow import _exec_flow_mixins_, _exec_flow_items_, _execflow_test_
+for x in _exec_flow_items_: x.Module = main
+_execflow_test_.module               = main
+
+main._loader_mixins_.extend(_exec_flow_mixins_)
+main._loader_items_ .extend(_exec_flow_items_ )
+main._module_tests_ .append(_execflow_test_   )
     #A Submodule loader would be a nice little util to clean this up
