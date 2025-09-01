@@ -96,7 +96,7 @@ class link_collection[SocketType = link](BaseModel,collection_base,ConstrBase, H
 
     context = context.construct(include=['meta_graph','root_graph','subgraph'], as_name='link_coll')
     def _context_walk_(self):
-        self.context.register()
+        with self.context.register():...
     
     Base = link
 
@@ -105,7 +105,6 @@ class link_subcollection(context_prepped_subcollection_base):
     @property
     def _data(self):
         return self.parent.context.subgraph.links
-    
 
 class socket(item_base,BaseModel,ConstrBase, Hookable):
     ''' 
@@ -144,6 +143,7 @@ class socket(item_base,BaseModel,ConstrBase, Hookable):
     context = context.construct(include=['meta_graph','root_graph','subgraph','node','socket_coll','socket_group_coll','socket_group'],as_name='socket')
     def _context_walk_(self):
         with self.context.register():        
+            print(self.context.subgraph.links)
             for sl in self.links:
                 sl.context._Get()
 
@@ -151,7 +151,7 @@ class socket(item_base,BaseModel,ConstrBase, Hookable):
 
     def __init__(self):
         self.context = self.context(self)
-        self.links           = link_subcollection(self, lambda i,k,link : link.out_socket == self or link.in_socket == self)
+        self.links           = link_subcollection(self, lambda i,k,link :  link.out_socket == self or link.in_socket == self)
         # self.outgoing_links  = link_subcollection(self, lambda i,k,link :  link.out_socket == self)
         self.incoming_links  = link_subcollection(self, lambda i,k,link :  link.in_socket  == self)
             #This socket stores/'owns' abvove links in the file format for portability
@@ -288,8 +288,6 @@ class socket_group_collection(collection_base,ConstrBase, Hookable):
     ''' Shoudl be non-writable. Reconstructed on load. Accessor like an ordered dict '''
     Base = socket_group
     context = context.construct(include=['meta_graph','root_graph','subgraph','node','socket_coll'],as_name='socket_group_coll')
-    def _context_walk_(self):
-        return super()._context_walk_()
 
 class socket_collection(BaseModel,typed_collection_base,ConstrBase, Hookable):
     ''' Accessor of sockets and socket_groups '''
@@ -409,7 +407,7 @@ class node_set_base(BaseModel,ConstrBase, Hookable):
 
     context = context.construct(include=['meta_graph','root_graph','subgraph','node_coll','node'],as_name='node_set')
     def _context_walk_(self): 
-        self.context.register()
+        with self.context.register():...
 
     def __init__(self, node_set_id:str=None):
         self.node_set_id = node_set_id
@@ -577,8 +575,8 @@ class subgraph(item_base, BaseModel, ConstrBase, Hookable):
     def __init__(self,):
         self.context = self.context(self)
         with self.context.register():
-            self.links   = self._Struct_Nodes_Type_()
-            self.nodes   = self._Struct_Links_Type_()
+            self.nodes   = self._Struct_Nodes_Type_()
+            self.links   = self._Struct_Links_Type_()
         self._collection_item_auto_add_('subgraph_col','auto_add_subgraphs')
 
     @contextmanager

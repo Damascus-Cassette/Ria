@@ -63,13 +63,14 @@ class new_exec_node(item.exec_node):
 class my_node_set(node_set_base):
     class set_node_1(item.exec_node):
         ...
+        
     class set_node_2(item.exec_node):
         ...
 
 main._loader_items_.extend([
     new_socket,
     new_exec_node,
-    *my_node_set.Nodes_Types,
+    # *my_node_set.Nodes_Types,
     ])
 
 
@@ -129,8 +130,9 @@ def adv_exec_test(graph,subgraph):
 def assert_hook_working(graph,subgraph):
     test_var.set(False) 
     # subgraph.nodes.new(new_exec_node.UID, label = 'test')
-    new_exec_node(default_sockets=True)
-    assert test_var.get() 
+    with subgraph.As_Env(auto_add_nodes = True, auto_add_links = True):
+        new_exec_node(default_sockets=True)
+        assert test_var.get() 
 
 main._module_tests_.append(module_test('TestA',
                 module      = main,

@@ -239,6 +239,7 @@ class local_module_collection(global_module_collection):
         ret = {}
         for x in self.items:
             if getattr(x,attr,_unset) == value:
+                if not hasattr(x,'UID'): raise Exception(f'ITEM DOES NOT HAVE UID: {value}: {x.__module__}.{x.__name__} {x.__bases__}')
                 ret[x.UID] = x
         return ret
 
