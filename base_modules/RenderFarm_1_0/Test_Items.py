@@ -81,8 +81,11 @@ class meta_test_add_node(item.meta_node):
         
         # with exec_graph.As_Env(auto_add_nodes = True, auto_add_links = True):
         with exec_graph.As_Env(auto_add_nodes = True, auto_add_links = True):
+            length= len(exec_graph.nodes)
             val = exec_test_add_node.M(i1,i2)
+            assert len(exec_graph.nodes) == length + 1  
             #Looks to be spawning extra nodes??
+        assert len(exec_graph.nodes) == length + 1  
         return val
 
 _test_items_ = [

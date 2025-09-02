@@ -105,14 +105,14 @@ class context():
         if self._Include[-1] is key_limiter:
             return f'({key_limiter})'
 
-        if (pparent := getattr(self,self._Include[-1], None)) is not None:
+        if (parent := getattr(self,self._Include[-1], False)) is not False:
             if (val:=getattr(self._parent,'_context_item_keyrep_',None)) is not None:
-                return pparent.context.Repr(chain=chain,key_limiter=key_limiter) + val
+                return parent.context.Repr(chain=chain,key_limiter=key_limiter) + val
             
-            reversed_attr = {v:k for k,v in vars(pparent).items() if v is self._parent}
+            reversed_attr = {v:k for k,v in vars(parent).items() if v is self._parent}
                 #TODO: FUGLY FIX
             if self._parent in reversed_attr.keys(): 
-                return pparent.context.Repr(chain=chain,key_limiter=key_limiter) + '.' + reversed_attr[self._parent]
+                return parent.context.Repr(chain=chain,key_limiter=key_limiter) + '.' + reversed_attr[self._parent]
             
             print('IN CONTEXT REPR:',getattr(self._parent,'_context_item_keyrep_',None))
                 

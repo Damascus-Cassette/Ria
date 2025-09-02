@@ -360,10 +360,10 @@ class socket_collection(BaseModel,typed_collection_base,ConstrBase, Hookable):
         self._data   = OrderedDict()
         self.context = self.context(self)
         self.groups  = socket_group_collection()
-        self._context_walk_()
             #Looks to not be reaching the depth
         for v in self.Groups:
             self.groups[v.Group_ID] = v(self)
+        self._context_walk_()
 
     def default_sockets(self):
         for k,v in self.groups.items():
@@ -525,10 +525,10 @@ class node(item_base,BaseModel,ConstrBase, Hookable):
         if node_set_id:
             self.node_set.node_set_id = node_set_id 
 
-        self._context_walk_()
-        self._collection_item_auto_add_('node_coll','auto_add_nodes')
         if default_sockets:
             self.default_sockets()
+        self._context_walk_()
+        self._collection_item_auto_add_('node_coll','auto_add_nodes')
 
     def default_sockets(self):
         self.in_sockets.default_sockets()

@@ -23,9 +23,10 @@ class item_base(Hookable):
         return f"['{self.key}']"
     def _collection_item_auto_add_(self,add_to:str,flag:str|bool):
         ''' Auto append to context[add_to] if context_flags[flag] '''
-        if not (p_col:=_context[add_to].get()) is False:
-            if self not in p_col.values() and ((flag is True) or context_flags[flag].get()):
-                p_col[getattr(self,'Label',getattr(self,'UID',self.__class__.__name__))] = self
+        parent_coll =_context[add_to].get()
+        if not (parent_coll is False) and not _context['HALT_AUTO_ADD'].get():
+            if (self not in parent_coll.values()) and ((flag is True) or (context_flags[flag].get())):
+                parent_coll[getattr(self,'Label',getattr(self,'UID',self.__class__.__name__))] = self
 
 class collection_base[T=item_base]():
     ''' OrdereDict wrapper that allows typing via bases prop or func '''
@@ -88,7 +89,10 @@ class collection_base[T=item_base]():
     def new(self,key,label=None,*args,**kwargs):
         key = self.ensure_unique_key(key)
         if label is None: label = key
+        
+        t = _context['HALT_AUTO_ADD'].set(True)
         inst       = self.Base(*args,**kwargs)
+        _context['HALT_AUTO_ADD'].reset(t)
         
         inst.label = label
         inst.key   = key

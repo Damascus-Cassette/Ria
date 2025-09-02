@@ -266,7 +266,7 @@ class meta_node_mixin(_mixin.meta_node):
     @property
     def address(self)->str:
         c = self.context
-        return '.'.join([c.root_graph.key , c.subgraph , self.key])
+        return '.'.join([c.root_graph.key , c.subgraph.label , self.key])
 
     @hook(event='__init__', mode = 'pre', see_args=True,passthrough=False)
     def _init_(self, *args,**kwargs):
@@ -314,8 +314,6 @@ class subgraph_mixin(_mixin.subgraph):
         return target.execute()
         #Task Discovery Error handling, Diff & upload to manager in another module
 
-
-
     @hook_trigger('compile')
     @debug_print_wrapper(0)
     def compile(self,target, exec_subgraph, backwards_context=None):
@@ -323,6 +321,7 @@ class subgraph_mixin(_mixin.subgraph):
             backwards_context = Backwards_Context()
         target.compile(exec_subgraph,backwards_context)
         #Task Discovery Error handling, Diff & upload to manager in another module
+
 
 _exec_flow_mixins_ = [
     socket_mixin,
@@ -358,13 +357,21 @@ def test_execute(graph,subgraph):
 def test_compile(graph,subgraph):
     with subgraph.As_Env(auto_add_nodes = True, auto_add_links = True):
         a = meta_test_add_node.M(1,1)
-        b = meta_test_add_node.M(1,1) 
-        new_link = a.out_sockets[0].links.new(b.in_sockets[0])
+        b = meta_test_add_node.M(a.out_sockets[0],1) 
+        #   #BUG: 2 links are being created as I'm adding directly to the subcollection?
+            #BUG: A link is beiing created for each side??
 
-        # b = meta_test_add_node.M(a.out_sockets[0],1) 
-        #   #BUG Where new node is being added when using a socket reference like so??? 
+        # b = meta_test_add_node.M(1,1) 
+        # new_link = a.out_sockets[0].links.new(b.in_sockets[0])
 
-    print (*(subgraph.nodes.values()))
+    print ('META NODES:',*(subgraph.nodes.values()))
+    print ('META LINKS:',*(subgraph.links.values()))
+    for x in subgraph.links:
+        print(' LINK: ', x.key, hash(x))
+        print('     OUT', x.out_socket.context.Repr())
+        print('     IN ', x.in_socket.context.Repr())
+    assert len(subgraph.nodes) == 2
+    assert len(subgraph.links) == 1
 
     #Atm with this particular node's logic, it should always produce a exec_node.
     #Future cases are to allow the compile to result in a value instead of an promise (execution-node) in certain use cases
