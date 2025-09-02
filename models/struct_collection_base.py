@@ -5,7 +5,7 @@ Subtypes should be able to Merge left when Mergable_Base = True
 
 # from .struct_merge_tools import merge_wrapper
 from .struct_context   import context,_context, context_flags
-from .struct_hook_base import hook_trigger, Hookable
+from .struct_hook_base import hook_trigger, Hookable, hook
 
 from collections         import OrderedDict
 from typing              import Self,Type,Any
@@ -14,7 +14,7 @@ from copy                import deepcopy,copy
 
 
 
-class item_base():
+class item_base(Hookable):
     key   : str
     label : str
 
@@ -269,6 +269,7 @@ class subcollection_base[T](collection_base):
     _order     : FunctionType    = lambda s,ikv: ikv[0]
 
     def __init__(self, parent:collection_base, _filter:FunctionType=None):
+        self.context = self.context(self)
         self._data   = parent
         self._filter = _filter
     
@@ -278,13 +279,14 @@ class subcollection_base[T](collection_base):
         values = sorted([(i,k,v) for i,(k,v) in enumerate(self._data.items()) if self._filter(i,k,v)],key = self._order)
         res    = OrderedDict({k:v for i,k,v in values})
         return res
-    @hook_trigger(event = 'new_item')
-    def new(self, *args, suppress_filter_check = False,**kwargs,)->T:
+    @hook_trigger(event = 'subcol_new_item')
+    def new(self, *args,**kwargs,)->T:
         '''In a subcollection an item'''
         inst = super().new(*args,**kwargs)
     
-        if not suppress_filter_check:
-            assert self._filter(inst)
+        # if not suppress_filter_check:
+        #     assert self._filter(inst)
+            #Bring back another way to validate
         return inst
 
     # @merge_wrapper
@@ -344,6 +346,7 @@ class typed_subcollection_base[T](typed_collection_base):
     _order     : FunctionType    = lambda s,ikv: ikv[0]
 
     def __init__(self, parent:collection_base, _filter:FunctionType=None):
+        self.context = self.context(self)
         self._data   = parent
         self._filter = _filter
     
@@ -354,12 +357,12 @@ class typed_subcollection_base[T](typed_collection_base):
         res    = OrderedDict({k:v for i,k,v in values})
         return res
     @hook_trigger(event = 'new_item')
-    def new(self, *args, suppress_filter_check = False,**kwargs,):
+    def new(self, *args,**kwargs,):
         '''In a subcollection an item'''
         inst = super().new(*args,**kwargs)
     
-        if not suppress_filter_check:
-            assert self._filter(inst)
+        # if not suppress_filter_check:
+        #     assert self._filter(inst)
         return inst
 
     def __or__(self,other:Self):
@@ -378,6 +381,7 @@ class context_prepped_subcollection_base(subcollection_base):
     _data  : property
 
     def __init__(self,parent,filter):
+        self.context = self.context(self)
         self.parent = parent
         if filter:
             self._filter = filter
@@ -388,6 +392,7 @@ class context_prepped_typed_subcollection_base(typed_subcollection_base):
     _data  : property
 
     def __init__(self, parent:Any, filter:FunctionType=None):
+        self.context = self.context(self)
         self.parent   = parent
         if filter:
             self._filter = filter

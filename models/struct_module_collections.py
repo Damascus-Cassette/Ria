@@ -20,6 +20,8 @@ class global_module_collection():
     def load(self):
         from .loader import load
         load()
+        for x in self.modules:
+            x._module_validate_()
 
     def __getitem__(self,key:str|tuple[str,str|ver_expr])->tuple[module]|module:
         if not self.modules:

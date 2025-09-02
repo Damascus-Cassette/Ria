@@ -229,16 +229,16 @@ class node_mixin(_op_elem_mixin,_mixin.node):
         '''
         inst = cls(default_sockets = True)
         for x in args:
-            for socket in inst.in_sockets.sockets:
-                if issubclass(x.__class__, socket):
+            for socket in inst.in_sockets.values():
+                if issubclass(x.__class__, item.socket):
                     socket.links.new(x)
                     continue
-                socket.intake_value(x)
+                socket.Default_Value = x
 
-        sockets = dict(inst.in_sockets.sockets.items())
+        sockets = dict(inst.in_sockets.items())
         for k,v in kwargs.items():
             if k in sockets.keys():
-                sockets[k].intake_value(v)
+                sockets[k].Default_Value = v
 
         return inst
                 

@@ -8,8 +8,8 @@ modules = [
            TestModule_V2          ,
            Execution_V2           ,
            Operations_V1          ,
-           Monadish_Interface_1_2 ,
            RenderFarm_V1_0        ,
+           Monadish_Interface_1_2 ,
            ]
     #All module versions allowed to load
 

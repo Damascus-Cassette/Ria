@@ -2,7 +2,7 @@ from packaging.version import Version as VersionType
 from inspect import isclass
 from typing import Any,Callable, ForwardRef
 # from collections import defaultdict
-from .struct_hook_base import Hookable
+from .struct_hook_base import Hookable, hook,hook_trigger
 
 class _mixin_base(Hookable):
     ''' Mixes into all specified's base class 
@@ -15,12 +15,17 @@ class _mixin_base(Hookable):
     Deps         : list[tuple[str,str,str,str]] 
     Module       : Any
 
+    @classmethod
+    def _module_validate_mixin_(cls):
+        ...
+
 class _item_base(Hookable):
     ''' Is a new node class, for execution and hooks 
         Note: inherits all node_mixins from all enabled modules'''
-    _loader_item_ = True
-    _constr_bases_key_ = None #Esures I dont construct onto the item unless specified.
+    _loader_item_      = True
+    _constr_bases_key_ = None #Esures I dont construct onto this item unless specified.
     _constr_reversed_  = True
+    
     ID           : str
     Version      : str
     Label        : str
@@ -29,18 +34,18 @@ class _item_base(Hookable):
         #use this node if x modules IDs and version are enabled
 
     def __init_subclass__(cls):
-        if getattr(cls,'_module_verify_',False):
-            assert getattr(cls, 'UID'    , None) is not None
-            assert getattr(cls, 'Version', None) is not None
-            cls.label = getattr(cls, 'Label' , cls.UID)
-            cls.label = getattr(cls, 'Desc'  , cls.__doc__)
-
-            cls._Version  = VersionType(cls.Version)
         super().__init_subclass__()
-        # cls.Version_R = cls._Version.release
-        # cls.Version   = cls._Version.release
 
-class module_test():
+    @classmethod
+    def _module_validate_item_(cls):
+        assert      getattr(cls, 'UID'     , None) is not None
+        assert      getattr(cls, 'Version' , None) is not None
+        cls.Label = getattr(cls, 'Label'   , cls.UID)
+        cls.Desc  = getattr(cls, 'Desc'    , cls.__doc__)
+        cls._Version  = VersionType(cls.Version)
+        
+
+class module_test(Hookable):
     ''' Consolidated test object, can allow implicit setup and loading of modules not directly defined. '''
     
     module : 'module' = None
@@ -75,7 +80,7 @@ class module_test():
             x(graph,subgraph)
 
     
-class module():
+class module(Hookable):
     ''' Inherit onto base '''
 
     ID           : str
@@ -90,14 +95,10 @@ class module():
     _module_tests_  : list[module_test]
 
     def __init_subclass__(cls):
-        assert getattr(cls,'UID',None)     is not None
-        assert getattr(cls,'Version',None) is not None
-
-        cls._module_tests_  = getattr(cls,'_module_tests_',[])
-        
-        cls.Label = getattr(cls,'Label',f'({cls.UID}:{cls.Version})')
-        cls.Desc  = getattr(cls,'Desc',cls.__doc__)
-
+        assert         getattr(cls,'UID'    ,None) is not None
+        assert         getattr(cls,'Version',None) is not None
+        cls.Label    = getattr(cls,'Label',f'({cls.UID}:{cls.Version})')
+        cls.Desc     = getattr(cls,'Desc',cls.__doc__)
         cls._Version = VersionType(cls.Version)
 
         _mixins = cls.__module_set_components__(_mixin_base, '_loader_mixins_' )
@@ -106,8 +107,10 @@ class module():
         for x in _items:
             x.Module = cls
 
+        cls._module_tests_  = getattr(cls,'_module_tests_',[])
         for x in getattr(cls,'_module_tests_',[]):
             x.intake_module(cls)
+
         super.__init_subclass__()
 
     @classmethod
@@ -124,9 +127,17 @@ class module():
     
     @classmethod
     def _run_tests(cls,m_graph):
+        cls._module_validate_()
         for test_obj in getattr(cls,'_module_tests_',[]):
             test_obj.run_tests(m_graph)
-            
+
+    @classmethod
+    @hook_trigger('_module_validate_')
+    def _module_validate_(cls):
+        for x in cls._loader_items_:
+            x._module_validate_item_()
+        for x in cls._loader_mixins_:
+            x._module_validate_mixin_()
 
 class ver_expr():
     ''' Version compatability expression, such as '<5.3,>4.2,!4.41a,=4.2' 

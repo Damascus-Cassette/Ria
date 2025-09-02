@@ -176,6 +176,7 @@ class item(_item):
                 cls.Value_In_Types = (cls.Value_In_Types,)
             
             super().__init_subclass__()
+        
 
     class exec_node(_item.node):
         ''' Execution node base. '''

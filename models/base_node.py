@@ -100,11 +100,17 @@ class link_collection[SocketType = link](BaseModel,collection_base,ConstrBase, H
     
     Base = link
 
-class link_subcollection(context_prepped_subcollection_base):
+class link_subcollection(BaseModel,context_prepped_subcollection_base,ConstrBase, Hookable):
     #TODO: How does this work with FildIO?
     @property
     def _data(self):
         return self.parent.context.subgraph.links
+
+    def new(self, out_socket:'socket'):
+        return super().new(key = 'link', in_socket = self.parent, out_socket = out_socket)
+
+    Base = link
+
 
 class socket(item_base,BaseModel,ConstrBase, Hookable):
     ''' 
@@ -137,25 +143,27 @@ class socket(item_base,BaseModel,ConstrBase, Hookable):
         #IDs for socket_group container & subset
 
     links  : context_prepped_subcollection_base #[link]
-    # out_links  : subcollection_base[link]
-    # in_links   : subcollection_base[link]
+    incoming_links  : context_prepped_subcollection_base #[link]
+    outgoing_links  : context_prepped_subcollection_base #[link]
+
 
     context = context.construct(include=['meta_graph','root_graph','subgraph','node','socket_coll','socket_group_coll','socket_group'],as_name='socket')
     def _context_walk_(self):
-        with self.context.register():        
-            print(self.context.subgraph.links)
-            for sl in self.links:
-                sl.context._Get()
+        with self.context.register():
+            self.links._context_walk_()        
+            self.incoming_links._context_walk_()
+            self.outgoing_links._context_walk_()
 
     #### Internal Methods ####
 
+    @hook_trigger('__init__')
     def __init__(self):
         self.context = self.context(self)
         self.links           = link_subcollection(self, lambda i,k,link :  link.out_socket == self or link.in_socket == self)
-        # self.outgoing_links  = link_subcollection(self, lambda i,k,link :  link.out_socket == self)
+        self.outgoing_links  = link_subcollection(self, lambda i,k,link :  link.out_socket == self)
         self.incoming_links  = link_subcollection(self, lambda i,k,link :  link.in_socket  == self)
             #This socket stores/'owns' abvove links in the file format for portability
-        
+        self._context_walk_()
 
 
     @property
@@ -219,7 +227,8 @@ class socket_group[SocketType=socket](item_base,ConstrBase, Hookable):
 
 
     #### Instance Methods ###
-    
+
+    @hook_trigger(event='__init__')
     def __init__(self,parent_col):
         self.context = self.context(self)
         self.parent_col = parent_col
@@ -413,8 +422,8 @@ class node_set_base(BaseModel,ConstrBase, Hookable):
         self.node_set_id = node_set_id
         self.Nodes_Types = []
         self.context = self.context(self)
-        self._context_walk_()
         self.siblings = node_set_subcollection(self, lambda i,k,node : (a:=getattr(node.node_set,'node_set_id', None)) and (a == getattr(self,'node_set_id',None)) )
+        self._context_walk_()
 
     def __iter__(self):
         for x in self.siblings:
@@ -511,9 +520,9 @@ class node(item_base,BaseModel,ConstrBase, Hookable):
         if node_set_id:
             self.node_set.node_set_id = node_set_id 
 
-        self._context_walk_()
         if default_sockets:
             self.default_sockets()
+        self._context_walk_()
         self._collection_item_auto_add_('node_coll','auto_add_nodes')
 
     def default_sockets(self):

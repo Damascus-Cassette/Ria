@@ -2,7 +2,7 @@ from .Data_Structures           import Backwards_Context
 from ..Execution_Types          import item, _mixin, socket_shapes
 from ..utils.print_debug        import debug_print_wrapper
 from ...statics                 import _unset
-from ...models.struct_hook_base import hook, hook_trigger
+from ...models.struct_hook_base import hook, hook_trigger,Hookable
 from ...models.struct_module    import module_test
 from ...models.base_node        import (subgraph            as _subgraph_base,
                                         node_collection     as _node_collection_base,
@@ -12,8 +12,8 @@ from ...models.base_node        import (subgraph            as _subgraph_base,
 from contextvars import ContextVar
 from contextlib  import contextmanager
 from typing      import Any, Self
+from types       import FunctionType
 from enum        import Enum
-
 
 class _socket_cache(dict):
     def __missing__(self, key):
@@ -39,21 +39,26 @@ class socket_mixin(_mixin.socket):
     Socket_Shape : socket_shape = socket_shape.MUTABLE
 
     @property
+    def address(self)->str:
+        c = self.context
+        return '.'.join((c.node.address, self.dir, self.label)) 
+
+    @property
     def _Socket_Shape_Is_Single(self)->bool:
         raise NotImplementedError('')
         return True
 
-    @hook(event='__init__', mode = 'pre', see_args = False)
-    def _init_(self):
+    @hook(event='__init__', mode = 'pre', see_args=True,passthrough=False)
+    def _init_(self, *args,**kwargs):
         self._value = _socket_cache()
-        self.current_context_state_key(self.address+'.state_key', default = _unset)
-            #in an exec, short circuit and have single value. 
+        self.current_context_state_key = ContextVar(f'{hash(self)}.state_key', default = _unset)
+            #Address is not garunteed to be known at this time 
 
     @contextmanager
     def state_key_as(self,val):
         t = self.current_context_state_key.set(val)
         yield
-        self.current_context_state_key.resset(t)
+        self.current_context_state_key.reset(t)
 
     @property
     def value(self):
@@ -65,24 +70,30 @@ class socket_mixin(_mixin.socket):
         assert not (key:=self.current_context_state_key.get()) is _unset
         self._value[key] = value
 
+    @property
+    def exec_value(self):
+        return self._value['EXECUTE']
 
     @hook(event = 'execute', mode = 'wrap')
-    def _execute_wrapper_(self,execute_func, exec_sg,backwards_context:dict,_return_state_token = False, *args, **kwargs)->tuple[Any,str]:
+    def _execute_wrapper_(self,execute_func)->tuple[Any,str]:
         # state_key = self.get_state_key(backwards_context)
-        state_key = 'EXECUTE'
+        
+        def wrapper(self,_return_state_token = False, *args, **kwargs):
+            state_key = 'EXECUTE'
 
-        direction = self.Direction
+            direction = self.dir
 
-        with self.state_key_as(state_key):
-            if (val:=self.value) is _unset:
-                val =  execute_func(direction,*args,**kwargs)
+            with self.state_key_as(state_key):
+                if (val:=self.value) is _unset:
+                    val =  execute_func(self, direction,*args,**kwargs)
 
-                if not self.direction.upper() is 'OUT':
-                    ... #TODO: Make store upstream value references
-            if _return_state_token:
-                return val, state_key
-            return val
-            #This ensures that the value can be accessed again outside of inline compile_call 
+                    if direction.upper() != 'OUT':
+                        ... #TODO: Make store upstream value references
+                if _return_state_token:
+                    return val, state_key
+                return val
+                #This ensures that the value can be accessed again outside of inline compile_call 
+        return wrapper
 
     @hook_trigger('execute')
     def execute(self,direction):
@@ -93,11 +104,11 @@ class socket_mixin(_mixin.socket):
         '''
         
         if direction.upper() != 'OUT':
-            res =  self.execute_in_socket()
+            res =  self.execute_in()
             if res is _unset:
                 res = self.execute_in_fallback()
         else:
-            res = self.execute_out_socket()
+            res = self.execute_out()
             if res is _unset:
                 res = self.execute_out_fallback()
         if res is _unset:
@@ -136,8 +147,8 @@ class socket_mixin(_mixin.socket):
 
 
 
-    execute_in_fallback_chain  : tuple[str|_unset] = tuple()
-    execute_out_fallback_chain : tuple[str|_unset] = tuple()
+    execute_in_fallback_chain  : tuple[str|_unset] = ('Default_Value',)
+    execute_out_fallback_chain : tuple[str|_unset] = ('Default_Value',)
         #Fallback attributes to quiry/return if execute call upstream does not set a value on this socket
         #In all cases, execute should (even if the value is another _unset-like)
         #Keeping as it keeps inline with compile
@@ -147,13 +158,13 @@ class socket_mixin(_mixin.socket):
     def _compile_wrapper_(self,compile_func, exec_sg,backwards_context:dict,_return_state_token = False, *args, **kwargs)->tuple[Any,str]:
         state_key = self.get_state_key(backwards_context)
 
-        direction = self.Direction
+        direction = self.dir
 
         with self.state_key_as(state_key):
             if (val:=self.value) is _unset:
                 val =  compile_func(direction,*args,**kwargs)
 
-                if not self.direction.upper() is 'OUT':
+                if direction.upper() != 'OUT':
                     ... #TODO: Make store upstream value references
             if _return_state_token:
                 return val, state_key
@@ -169,13 +180,13 @@ class socket_mixin(_mixin.socket):
         '''
         
         if direction.upper() != 'OUT':
-            res =  self.compile_in_socket(*args,**kwargs)
+            res =  self.compile_in(*args,**kwargs)
             if res is _unset:
                 res = self.compile_in_fallback(*args,**kwargs)
             if self._Socket_Shape_Is_Single():
                 for x in res: assert x is not _unset
         else:
-            res = self.compile_out_socket()
+            res = self.compile_out()
             if res is _unset:
                 res = self.compile_out_fallback(*args,**kwargs)
         assert res is not _unset
@@ -210,8 +221,8 @@ class socket_mixin(_mixin.socket):
         ''' Compile returned None on Socket[Out] '''
         return self.generic_fallback(self.compile_out_fallback_chain,args,kwargs)
         
-    compile_in_fallback_chain  : tuple[str|Any] = tuple()
-    compile_out_fallback_chain : tuple[str|Any] = tuple()
+    compile_in_fallback_chain  : tuple[str|Any] = ('Default_Value',)
+    compile_out_fallback_chain : tuple[str|Any] = ('Default_Value',)
         #Fallback attributes or values to return if compile call upstream does not produce
 
 
@@ -221,8 +232,8 @@ class socket_mixin(_mixin.socket):
             if isinstance(attr,FunctionType):
                 res = attr(*args,**kwargs)
             else:
-                item = getattr(self,item)
-                res = getattr(self,attr)
+                # item = getattr(self,attr)
+                res = getattr(self ,attr)
             
             if not (res is _unset):
                 return res
@@ -230,7 +241,7 @@ class socket_mixin(_mixin.socket):
         return _unset
 
 
-class execute_node(_mixin.exec_node):
+class execute_node_mixin(_mixin.exec_node):
     ''' Statefull function container, socket.value is single context '''
 
     @hook_trigger('Execute')
@@ -239,9 +250,19 @@ class execute_node(_mixin.exec_node):
         ''' Execute using in_socket values via in_socket.execute()'''
         #Outputs should corrispond to sockets
 
+    @property
+    def address(self)->str:
+        c = self.context
+        return '.'.join([c.root_graph.key , 'EXEC' , self.key])
+
     
-class meta_node(_mixin.meta_node):
+class meta_node_mixin(_mixin.meta_node):
     ''' Stateful function container that 'compiles' to am exec graph '''
+
+    @property
+    def address(self)->str:
+        c = self.context
+        return '.'.join([c.root_graph.key , c.subgraph , self.key])
 
     @hook_trigger('Compile')
     # @hook_trigger('Auto_Populate_Sockets', from_dict = True) #Could be usefull
@@ -250,14 +271,14 @@ class meta_node(_mixin.meta_node):
         Cross-Nodes will have any inputs promised to a copy of self.Exec_Variant  
         ''' #Automatic construction?
     
-class subgraph(_mixin.subgraph):
+class subgraph_mixin(_mixin.subgraph):
     ''' Add flow '''
 
     @hook_trigger('execute')
     @debug_print_wrapper(0)
-    def execute(self, target):
-        if backwards_context is None:
-            backwards_context = Backwards_Context()
+    def execute(self, target, backwards_context=None):
+        # if backwards_context is None:
+        #     backwards_context = Backwards_Context()
         return target.execute()
         #Task Discovery Error handling, Diff & upload to manager in another module
 
@@ -271,9 +292,9 @@ class subgraph(_mixin.subgraph):
 
 _exec_flow_mixins_ = [
     socket_mixin,
-    execute_node,
-    meta_node,
-    subgraph,
+    execute_node_mixin,
+    meta_node_mixin,
+    subgraph_mixin,
 ]
 
 _exec_flow_items_ = [
@@ -286,14 +307,16 @@ from .Test_Items import (exec_test_int_socket,
                          exec_test_add_node  )
 
 @debug_print_wrapper(0)
-def test_execute(graph,submodule):
-    with submodule.Special_Env(auto_add_nodes = True, auto_add_links = True):
+def test_execute(graph,subgraph):
+    with subgraph.As_Env(auto_add_nodes = True, auto_add_links = True):
         # header = exec_test_add_node.M(1,1) >> exec_test_add_node.M(1,1) 
         a = exec_test_add_node.M(1,1)
         b = exec_test_add_node.M(1,1)
-        a.out_socket.sockets[0].links.new(b.in_sockets.sockets[0])
-    subgraph.execute(a.out_sockets.sockets[0])
-    assert a.out_sockets.sockets[0] == 3
+        a.out_sockets[0].links.new(b.in_sockets[0])
+    subgraph.execute(b.out_sockets[0])
+    print ('RES VALUE:',b.out_sockets[0].exec_value)
+    assert a.out_sockets[0].exec_value == 2
+    assert b.out_sockets[0].exec_value == 3
 
 _execflow_test_ = module_test('Exec_Node_Tests',
     module      = None,
@@ -303,5 +326,5 @@ _execflow_test_ = module_test('Exec_Node_Tests',
     ],
     module_iten = { 
         'Distributed_Execution' : '1.0',
-        'Monadish'              : '1.2'}, 
+        'Monadish_Interface'    : '1.2'}, 
     )
