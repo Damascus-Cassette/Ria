@@ -146,7 +146,7 @@ class socket_mixin(_mixin.socket):
         ''' get context componetns '''
         for link in self.links:
             other_node = link.other(self)
-            other_node.
+            other_node
 #endregion
 
 

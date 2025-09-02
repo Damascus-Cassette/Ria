@@ -52,7 +52,8 @@ _operation_chain = ContextVar('hook_op_chain', default=tuple())
 @contextmanager
 def _validate_op_chain(item,hook_event_key):
     tp = _operation_chain.get()
-    if (item,hook_event_key) in tp:
+    if (item, hook_event_key) in tp:
+        print(tp)
         raise RecursionError(f'HOOK SYSTEM: Recursion caught: {(item, hook_event_key)}')
     tp += ((item,hook_event_key),)
     t = _operation_chain.set(tp)
@@ -386,7 +387,7 @@ class hook_group():
             
             func = hooked_inst.func
             for x in wrap:
-                func = x.run(container, func,*args,*kwargs)
+                func = x.run(container, func, *args,*kwargs)
                 assert isinstance(func,FunctionType)
             
             res = func(container,*args,**kwargs)

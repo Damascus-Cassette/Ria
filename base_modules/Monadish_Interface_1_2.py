@@ -238,6 +238,9 @@ class node_mixin(_op_elem_mixin,_mixin.node):
         sockets = dict(inst.in_sockets.items())
         for k,v in kwargs.items():
             if k in sockets.keys():
+                if issubclass(x.__class__, item.socket):
+                    socket.links.new(x)
+                    continue
                 sockets[k].Default_Value = v
 
         return inst

@@ -27,16 +27,22 @@ class main(module):
         ('Monadish_Interface','=1.2')
     ]
 
-from .Submodule_ExecFlow import _exec_flow_mixins_, _exec_flow_items_, _execflow_test_
-from .Test_Items         import _test_items_
+from .Submodule_ExecFlow  import _exec_flow_mixins_, _exec_flow_items_, _exec_flow_tests_
+# from .SubModule_Structure import _structure_mixins_ , _structure_items_, _structure_tests_
+from .Test_Items          import _test_items_
+
 
 for x in _exec_flow_items_: x.Module = main
-_execflow_test_.module               = main
+for x in _exec_flow_tests_: x.module = main
 
 
 main._loader_mixins_.extend(_exec_flow_mixins_)
 main._loader_items_ .extend(_exec_flow_items_ )
-main._module_tests_ .append(_execflow_test_   )
-    #A Submodule loader would be a nice little util to clean this up
+main._module_tests_ .extend(_exec_flow_tests_ )
+
+# main._loader_mixins_.extend(_structure_mixins_)
+# main._loader_items_ .extend(_structure_items_ )
+# main._module_tests_ .extend(_structure_tests_ )
 
 main._loader_items_ .extend(_test_items_)
+    #A Submodule loader would be a nice little util to clean this up

@@ -57,7 +57,7 @@ class link(item_base,BaseModel,ConstrBase, Hookable):
         self.context = self.context(self)
         self.out_socket = out_socket
         self.in_socket   = in_socket
-        self._collection_item_auto_add_('link_coll','auto_add_sockets')
+        self._collection_item_auto_add_('link_coll','auto_add_links')
     
     @property
     def out_socket(self):
@@ -106,9 +106,13 @@ class link_subcollection(BaseModel,context_prepped_subcollection_base,ConstrBase
     def _data(self):
         return self.parent.context.subgraph.links
 
-    def new(self, out_socket:'socket'):
-        return super().new(key = 'link', in_socket = self.parent, out_socket = out_socket)
-
+    def new(self, other_socket:'socket'):
+        
+        assert other_socket.dir != self.parent.dir
+        if self.parent.dir.upper() != 'OUT':
+            return super().new(key = 'link', in_socket = self.parent, out_socket = other_socket)
+        return super().new(key = 'link', in_socket = other_socket, out_socket = self.parent)
+        
     Base = link
 
 
@@ -504,6 +508,7 @@ class node(item_base,BaseModel,ConstrBase, Hookable):
             if self.node_set: 
                 self.node_set._context_walk_()
 
+    @hook_trigger(event='__init__')
     def __init__(self,/,*, default_sockets:bool = False, node_set_id : str = None):
         self.context = self.context(self)
         self.In_Sockets    = self.in_sockets   
@@ -520,10 +525,10 @@ class node(item_base,BaseModel,ConstrBase, Hookable):
         if node_set_id:
             self.node_set.node_set_id = node_set_id 
 
-        if default_sockets:
-            self.default_sockets()
         self._context_walk_()
         self._collection_item_auto_add_('node_coll','auto_add_nodes')
+        if default_sockets:
+            self.default_sockets()
 
     def default_sockets(self):
         self.in_sockets.default_sockets()
@@ -541,7 +546,8 @@ class node_collection(BaseModel, typed_collection_base, ConstrBase, Hookable):
 
     @property
     def Bases(self)->dict[str,Any]:
-        return self.context.root_graph.module_col.items_by_attr('_io_bin_name_','g_node')
+        res = self.context.root_graph.module_col.items_by_attr('_io_bin_name_','g_node')
+        return res
 
     data : list[node_archtype]
 

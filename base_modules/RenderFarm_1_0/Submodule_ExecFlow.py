@@ -4,9 +4,6 @@ from ..utils.print_debug        import debug_print_wrapper
 from ...statics                 import _unset
 from ...models.struct_hook_base import hook, hook_trigger,Hookable
 from ...models.struct_module    import module_test
-from ...models.base_node        import (subgraph            as _subgraph_base,
-                                        node_collection     as _node_collection_base,
-                                        subgraph_collection as _subgraph_collection_base,)
 
 
 from contextvars import ContextVar
@@ -45,6 +42,7 @@ class socket_mixin(_mixin.socket):
 
     @property
     def _Socket_Shape_Is_Single(self)->bool:
+        return True
         raise NotImplementedError('')
         return True
 
@@ -123,7 +121,8 @@ class socket_mixin(_mixin.socket):
 
         res = []            
         for link in links:
-            socket = link.other(self)
+            socket = link.out_socket
+            assert socket is not self
             res.append(socket.execute())
         
         if self._Socket_Shape_Is_Single:
@@ -153,23 +152,28 @@ class socket_mixin(_mixin.socket):
         #In all cases, execute should (even if the value is another _unset-like)
         #Keeping as it keeps inline with compile
 
+    def get_state_key(self,backwards_context:Backwards_Context):
+        return 'Test'
 
-    @hook(event = 'compile', mode = 'wrap')
-    def _compile_wrapper_(self,compile_func, exec_sg,backwards_context:dict,_return_state_token = False, *args, **kwargs)->tuple[Any,str]:
+    @hook(event = 'compile', mode = 'wrap',see_args=True)
+    def _compile_wrapper_(self,compile_func, exec_sg, backwards_context:dict, _return_state_token = False, *args, **kwargs)->tuple[Any,str]:
+
         state_key = self.get_state_key(backwards_context)
-
         direction = self.dir
 
-        with self.state_key_as(state_key):
-            if (val:=self.value) is _unset:
-                val =  compile_func(direction,*args,**kwargs)
+        def wrapper(self,*args,**kwargs):
+            with self.state_key_as(state_key):
+                if (val:=self.value) is _unset:
+                    
+                    val =  compile_func(self,direction,*args,**kwargs)
 
-                if direction.upper() != 'OUT':
-                    ... #TODO: Make store upstream value references
-            if _return_state_token:
-                return val, state_key
-            return val
-            #This ensures that the value can be accessed again outside of inline compile_call 
+                    if direction.upper() != 'OUT':
+                        ... #TODO: Make store upstream value references
+                if _return_state_token:
+                    return val, state_key
+                return val
+                #This ensures that the value can be accessed again outside of inline compile_call 
+        return wrapper
 
     @hook_trigger('compile')
     def compile(self,direction,*args,**kwargs):
@@ -183,10 +187,10 @@ class socket_mixin(_mixin.socket):
             res =  self.compile_in(*args,**kwargs)
             if res is _unset:
                 res = self.compile_in_fallback(*args,**kwargs)
-            if self._Socket_Shape_Is_Single():
+            if not self._Socket_Shape_Is_Single:
                 for x in res: assert x is not _unset
         else:
-            res = self.compile_out()
+            res = self.compile_out(*args,**kwargs)
             if res is _unset:
                 res = self.compile_out_fallback(*args,**kwargs)
         assert res is not _unset
@@ -200,7 +204,7 @@ class socket_mixin(_mixin.socket):
 
         res = []            
         for link in links:
-            socket = link.other(self)
+            socket = link.out_socket
             res.append(socket.compile(*args,**kwargs))
         
         if self._Socket_Shape_Is_Single:
@@ -264,6 +268,33 @@ class meta_node_mixin(_mixin.meta_node):
         c = self.context
         return '.'.join([c.root_graph.key , c.subgraph , self.key])
 
+    @hook(event='__init__', mode = 'pre', see_args=True,passthrough=False)
+    def _init_(self, *args,**kwargs):
+        self._value = _socket_cache()
+        self.current_context_state_key = ContextVar(f'{hash(self)}.state_key', default = _unset)
+            #Address is not garunteed to be known at this time 
+
+    @contextmanager
+    def state_key_as(self,val):
+        t = self.current_context_state_key.set(val)
+        yield
+        self.current_context_state_key.reset(t)
+
+    def get_state_key(self,backwards_context:Backwards_Context):
+        return 'Test'
+
+    @hook(event = 'compile', mode = 'wrap',see_args=True)
+    def _compile_wrapper_(self, compile_func, exec_sg, backwards_context:dict, _return_state_token = False, *args, **kwargs)->tuple[Any,str]:
+        def wrapper(self, exec_sg, backwards_context, *args,**kwargs):
+            state_key = self.get_state_key(backwards_context)
+            with self.state_key_as(state_key):
+                val =  compile_func(self,exec_sg, backwards_context,state_key,*args,**kwargs)
+                if _return_state_token:
+                    return val,state_key
+                return val
+                
+        return wrapper
+
     @hook_trigger('Compile')
     # @hook_trigger('Auto_Populate_Sockets', from_dict = True) #Could be usefull
     def compile(self, exec_subgraph, backwards_context,): # structure_key, state_key, job, task): #Add to wrapper as Declarative fulllfillment
@@ -271,6 +302,7 @@ class meta_node_mixin(_mixin.meta_node):
         Cross-Nodes will have any inputs promised to a copy of self.Exec_Variant  
         ''' #Automatic construction?
     
+
 class subgraph_mixin(_mixin.subgraph):
     ''' Add flow '''
 
@@ -281,6 +313,8 @@ class subgraph_mixin(_mixin.subgraph):
         #     backwards_context = Backwards_Context()
         return target.execute()
         #Task Discovery Error handling, Diff & upload to manager in another module
+
+
 
     @hook_trigger('compile')
     @debug_print_wrapper(0)
@@ -303,8 +337,10 @@ _exec_flow_items_ = [
 
 #### TESTS ####
 
-from .Test_Items import (exec_test_int_socket, 
-                         exec_test_add_node  )
+from .Test_Items import (exec_test_int_socket , 
+                         exec_test_add_node   ,
+                         meta_test_socket     ,
+                         meta_test_add_node   )
 
 @debug_print_wrapper(0)
 def test_execute(graph,subgraph):
@@ -312,19 +348,48 @@ def test_execute(graph,subgraph):
         # header = exec_test_add_node.M(1,1) >> exec_test_add_node.M(1,1) 
         a = exec_test_add_node.M(1,1)
         b = exec_test_add_node.M(1,1)
-        a.out_sockets[0].links.new(b.in_sockets[0])
+        new_link = a.out_sockets[0].links.new(b.in_sockets[0])
+    assert new_link.out_socket is a.out_sockets[0]
+
     subgraph.execute(b.out_sockets[0])
-    print ('RES VALUE:',b.out_sockets[0].exec_value)
     assert a.out_sockets[0].exec_value == 2
     assert b.out_sockets[0].exec_value == 3
 
-_execflow_test_ = module_test('Exec_Node_Tests',
-    module      = None,
-    funcs       = [
-        test_execute,
+def test_compile(graph,subgraph):
+    with subgraph.As_Env(auto_add_nodes = True, auto_add_links = True):
+        a = meta_test_add_node.M(1,1)
+        b = meta_test_add_node.M(1,1) 
+        new_link = a.out_sockets[0].links.new(b.in_sockets[0])
 
-    ],
-    module_iten = { 
-        'Distributed_Execution' : '1.0',
-        'Monadish_Interface'    : '1.2'}, 
-    )
+        # b = meta_test_add_node.M(a.out_sockets[0],1) 
+        #   #BUG Where new node is being added when using a socket reference like so??? 
+
+    print (*(subgraph.nodes.values()))
+
+    #Atm with this particular node's logic, it should always produce a exec_node.
+    #Future cases are to allow the compile to result in a value instead of an promise (execution-node) in certain use cases
+
+    exec_graph = graph.subgraphs.new(f'{subgraph.key}.EXECUTE')
+    res_node = subgraph.compile(b,exec_graph)
+
+    print('nodes:',*(exec_graph.nodes.values()))
+    print('links:',*(exec_graph.links.values()))
+    
+    assert len(list(exec_graph.nodes.values())) == 2
+    assert len(list(exec_graph.links.values())) == 1
+    
+    assert exec_graph.execute(res_node.out_sockets[0]) == 3
+
+    
+_exec_flow_tests_ = [        
+    module_test('Exec_Node_Tests',
+        module      = None,
+        funcs       = [
+            test_execute,
+            test_compile,
+        ],
+        module_iten = { 
+            'Distributed_Execution' : '1.0',
+            'Monadish_Interface'    : '1.2'}, 
+        )
+]

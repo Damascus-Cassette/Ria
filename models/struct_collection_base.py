@@ -66,11 +66,11 @@ class collection_base[T=item_base]():
     def make_unique_key(self,key)->str:
         key_base = key
         i = 0
-        while key in self._data.keys():
+        keys = self._data.keys()
+        while key in keys :
             if i > 999: raise Exception('WHAT ARE YOU DOING???')
-            i   =+ 1
+            i = i + 1
             key = key_base + '.' + str(i).zfill(3)
-        # print (f'MAKING KEY UNIQUE {key_base} TO {key}')
         return key
 
     @property
