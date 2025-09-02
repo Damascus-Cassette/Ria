@@ -97,7 +97,7 @@ class collection_base[T=item_base]():
         inst.label = label
         inst.key   = key
             #FUGLY, see note below
-
+        assert inst not in self._data.values()
         self._data[key] = inst
         self._context_new_item_(inst)
         return inst
@@ -119,7 +119,18 @@ class collection_base[T=item_base]():
             #FUGLY AND NOT IDEAL AT ALL
             #May tie back collection -> child via child.in_collections 
             # or similar reflection, require key as a get and have repr choose the first collection.
-
+        # assert item not in self._data.values()
+        # if item in self._data.values():
+        #     self._data.remove()
+        to_del = []
+        for k,v in self._data.items():
+            if v is item and k != key:
+                to_del.append(k)
+                break
+        for k in to_del:
+            del self._data[k]
+        
+        assert item not in self._data.values()
         self._data[key] = item
         self._context_new_item_(item)
 
@@ -330,7 +341,9 @@ class typed_collection_base[T](collection_base):
             type : Type = Bases[type]
 
         with self.context.Cached():
+            t = _context['HALT_AUTO_ADD'].set(True)
             inst = type(*args,**kwargs)
+            _context['HALT_AUTO_ADD'].reset(t)
         
         inst.label = label
         inst.key   = key

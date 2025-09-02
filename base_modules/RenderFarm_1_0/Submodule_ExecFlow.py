@@ -50,7 +50,6 @@ class socket_mixin(_mixin.socket):
     def _init_(self, *args,**kwargs):
         self._value = _socket_cache()
         self.current_context_state_key = ContextVar(f'{hash(self)}.state_key', default = _unset)
-            #Address is not garunteed to be known at this time 
 
     @contextmanager
     def state_key_as(self,val):
@@ -65,7 +64,8 @@ class socket_mixin(_mixin.socket):
     
     @value.setter
     def value(self,value):
-        assert not (key:=self.current_context_state_key.get()) is _unset
+        if (key:=self.current_context_state_key.get()) is _unset:
+            key = self.context.node.get_state_key()
         self._value[key] = value
 
     @property
@@ -74,22 +74,20 @@ class socket_mixin(_mixin.socket):
 
     @hook(event = 'execute', mode = 'wrap')
     def _execute_wrapper_(self,execute_func)->tuple[Any,str]:
-        # state_key = self.get_state_key(backwards_context)
         
         def wrapper(self,_return_state_token = False, *args, **kwargs):
-            state_key = 'EXECUTE'
 
             direction = self.dir
 
-            with self.state_key_as(state_key):
-                if (val:=self.value) is _unset:
-                    val =  execute_func(self, direction,*args,**kwargs)
+            if (val:=self.value) is _unset:
+                val =  execute_func(self, direction,*args,**kwargs)
 
-                    if direction.upper() != 'OUT':
-                        ... #TODO: Make store upstream value references
-                if _return_state_token:
-                    return val, state_key
-                return val
+                if direction.upper() != 'OUT':
+                    ... #TODO: Make store upstream value references
+
+            if _return_state_token:
+                return val, state_key
+            return val
                 #This ensures that the value can be accessed again outside of inline compile_call 
         return wrapper
 
@@ -153,7 +151,7 @@ class socket_mixin(_mixin.socket):
         #Keeping as it keeps inline with compile
 
     def get_state_key(self,backwards_context:Backwards_Context):
-        return 'Test'
+        return self.context.node.get_state_key(backwards_context)
 
     @hook(event = 'compile', mode = 'wrap',see_args=True)
     def _compile_wrapper_(self,compile_func, exec_sg, backwards_context:dict, _return_state_token = False, *args, **kwargs)->tuple[Any,str]:
@@ -283,7 +281,7 @@ class meta_node_mixin(_mixin.meta_node):
     def get_state_key(self,backwards_context:Backwards_Context):
         return 'Test'
 
-    @hook(event = 'compile', mode = 'wrap',see_args=True)
+    @hook(event = 'compile', mode = 'wrap', see_args=True)
     def _compile_wrapper_(self, compile_func, exec_sg, backwards_context:dict, _return_state_token = False, *args, **kwargs)->tuple[Any,str]:
         def wrapper(self, exec_sg, backwards_context, *args,**kwargs):
             state_key = self.get_state_key(backwards_context)
@@ -295,7 +293,7 @@ class meta_node_mixin(_mixin.meta_node):
                 
         return wrapper
 
-    @hook_trigger('Compile')
+    @hook_trigger('compile')
     # @hook_trigger('Auto_Populate_Sockets', from_dict = True) #Could be usefull
     def compile(self, exec_subgraph, backwards_context,): # structure_key, state_key, job, task): #Add to wrapper as Declarative fulllfillment
         ''' Execute using in_socket values via in_socket.compile()
@@ -360,9 +358,12 @@ def test_compile(graph,subgraph):
         b = meta_test_add_node.M(a.out_sockets[0],1) 
         #   #BUG: 2 links are being created as I'm adding directly to the subcollection?
             #BUG: A link is beiing created for each side??
-
+    
         # b = meta_test_add_node.M(1,1) 
         # new_link = a.out_sockets[0].links.new(b.in_sockets[0])
+
+    print(*a.in_sockets)
+    print(*b.in_sockets)
 
     print ('META NODES:',*(subgraph.nodes.values()))
     print ('META LINKS:',*(subgraph.links.values()))

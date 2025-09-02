@@ -11,7 +11,7 @@ from .utils.print_debug import (debug_print_wrapper as dp_wrap,
                                 debug_level                   , 
                                 debug_targets                 ) 
 
-from types       import LambdaType,GeneratorType,FunctionType
+from types       import LambdaType,GeneratorType,FunctionType, EllipsisType
 from contextlib  import contextmanager
 from inspect     import isgenerator
 from contextvars import ContextVar
@@ -20,7 +20,7 @@ from functools   import partial
 from copy        import copy
 
 _ORDER   = [] #For verifying that (project returns downwards on at least one item) and (preprocess doesnt move things upwards) 
-
+    
 _ALL_OPS = ('add', 'sub', 'mul', 'truediv', 'mod', 'floordiv', 'pow', 'matmul', 'and', 'or', 'xor', 'rshift', 'lshift','radd', 'rsub', 'rmul', 'rtruediv', 'rmod', 'rfloordiv', 'rpow', 'rmatmul', 'rand', 'ror', 'rxor', 'rrshift', 'rlshift','iadd', 'isub', 'imul', 'itruediv', 'imod', 'ifloordiv', 'ipow', 'imatmul', 'iand', 'ior', 'ixor', 'irshift', 'ilshift','iradd', 'irsub', 'irmul', 'irtruediv', 'irmod', 'irfloordiv', 'irpow', 'irmatmul', 'irand', 'iror', 'irxor', 'irrshift', 'irlshift',)
     #Not ugly at all...
 
@@ -228,12 +228,17 @@ class node_mixin(_op_elem_mixin,_mixin.node):
         to not have a socket as a link, use a tuple(socket,)
         '''
         inst = cls(default_sockets = True)
-        for x in args:
-            for socket in inst.in_sockets.values():
-                if issubclass(x.__class__, item.socket):
-                    socket.links.new(x)
-                    continue
-                socket.Default_Value = x
+        socket_len = len(inst.in_sockets)
+        assert len(args) <= socket_len
+        for i, x in enumerate(args):
+            if isinstance(x, EllipsisType):
+                continue
+            socket = inst.in_sockets[i]
+            # print('ADDING TO SOCKET', socket.context.Repr())
+            if issubclass(x.__class__, item.socket):
+                socket.links.new(x)
+                continue
+            socket.Default_Value = x
 
         sockets = dict(inst.in_sockets.items())
         for k,v in kwargs.items():

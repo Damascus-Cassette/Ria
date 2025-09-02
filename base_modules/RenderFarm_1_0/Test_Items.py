@@ -1,6 +1,6 @@
 from .Data_Structures           import Backwards_Context
 from ..Execution_Types          import item, _mixin, socket_shapes
-from ..utils.print_debug        import debug_print_wrapper
+from ..utils.print_debug        import debug_print_wrapper, debug_print as dprint
 from ...statics                 import _unset
 from ...models.struct_hook_base import hook, hook_trigger
 from ...models.struct_module    import module_test
@@ -71,6 +71,7 @@ class meta_test_add_node(item.meta_node):
     @hook_trigger('compile')        #REQUIRED
     @debug_print_wrapper(0)
     def compile(self, exec_graph, backwards_context, state_key)->None:
+        print ('STATE KEY:',self.current_context_state_key.get())
 
         i1 = self.in_sockets[0].compile(exec_graph, backwards_context)
         i2 = self.in_sockets[1].compile(exec_graph, backwards_context)
@@ -83,9 +84,13 @@ class meta_test_add_node(item.meta_node):
         with exec_graph.As_Env(auto_add_nodes = True, auto_add_links = True):
             length= len(exec_graph.nodes)
             val = exec_test_add_node.M(i1,i2)
-            assert len(exec_graph.nodes) == length + 1  
+            dprint(i1,i2, threshold=0)
+            assert len(exec_graph.nodes) == length + 1
             #Looks to be spawning extra nodes??
+        self.out_sockets[0].value = val.out_sockets[0]
+
         assert len(exec_graph.nodes) == length + 1  
+
         return val
 
 _test_items_ = [
