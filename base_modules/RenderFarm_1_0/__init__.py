@@ -27,19 +27,17 @@ class main(module):
         ('Monadish_Interface','=1.2')
     ]
 
+
+
 from .Submodule_ExecFlow  import _exec_flow_mixins_, _exec_flow_items_, _exec_flow_tests_
-from .Submodule_Cache     import _cache_mixins_    , _cache_items_    , _cache_tests_
-from .Test_Items          import _test_items_
-
-
 for x in _exec_flow_items_: x.Module = main
 for x in _exec_flow_tests_: x.module = main
-
 
 main._loader_mixins_.extend(_exec_flow_mixins_)
 main._loader_items_ .extend(_exec_flow_items_ )
 main._module_tests_ .extend(_exec_flow_tests_ )
 
+from .Submodule_Cache     import _cache_mixins_    , _cache_items_    , _cache_tests_
 for x in _cache_items_: x.Module = main
 for x in _cache_tests_: x.module = main
 
@@ -47,5 +45,16 @@ main._loader_mixins_.extend(_cache_mixins_)
 main._loader_items_ .extend(_cache_items_ )
 main._module_tests_ .extend(_cache_tests_ )
 
+from .Submodule_StateKey  import _statekey_mixins_    , _statekey_items_    , _statekey_tests_
+for x in _statekey_items_: x.Module = main
+for x in _statekey_tests_: x.module = main
+
+main._loader_mixins_.extend(_cache_mixins_)
+main._loader_items_ .extend(_cache_items_ )
+main._module_tests_ .extend(_cache_tests_ )
+
+from .Test_Items          import _test_items_
 main._loader_items_ .extend(_test_items_)
+
+
     #A Submodule loader would be a nice little util to clean this up

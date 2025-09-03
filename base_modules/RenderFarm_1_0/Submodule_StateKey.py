@@ -1,7 +1,9 @@
-Backwards_Context()
+from ..Execution_Types    import _mixin, _item
+from ..utils.statics      import get_data_uuid
+from .Env_Variables       import Backwards_Context
+from ...statics           import _unset
 
 from typing import TypeAlias
-
 
 dep_keys   : TypeAlias = tuple
 struct_key : TypeAlias = str
@@ -11,7 +13,7 @@ local_state_key      : TypeAlias = str
 contextual_state_key : TypeAlias = str
 
 
-class socket():
+class socket(_mixin):
 
     _struct_key   : struct_key
     _context_deps : dep_keys
@@ -25,14 +27,14 @@ class socket():
         Does not include links (part of structural), 
         But local data can change in relation to links' presence (ie unused Default_Value)
             - This is the default implamentation assumption 
-        Best way to think about this is uuid_hash(all used values)
+        Best way to think about this is get_data_uuid(all used values)
         '''
         
         if self.direction.upper != 'OUT':
             if len(self.links):
                 return 'UPSTREAM' 
                 #As noted, by default link_values flatten local_state.
-            return uuid_from_value(self.Default_Value) 
+            return get_data_uuid(self.Default_Value) 
                 #May want to use resolution chain
         
         return self.label
@@ -52,7 +54,7 @@ class socket():
         struct_key = struct_key + self.local_state_key() + self.direction
         
         deps = tuple(sorted(list(set(deps))))
-        struct_key = uuid_hash(struct_key)
+        struct_key = get_data_uuid(struct_key)
 
         self._struct_key = struct_key
         self._context_deps = deps
@@ -70,7 +72,7 @@ class socket():
         deps =+ _deps
 
         deps = tuple(sorted(list(set(deps))))
-        struct_key = uuid_hash(struct_key)
+        struct_key = get_data_uuid(struct_key)
 
         self._struct_key = struct_key
         self._context_deps = deps
@@ -78,7 +80,7 @@ class socket():
         return struct_key, deps
 
 
-class socket_collection():
+class socket_collection(_mixin.socket_collection):
 
     # def local_state_key(self)->local_state_key:
     #     ''' called on out_sockets only '''
@@ -87,7 +89,7 @@ class socket_collection():
     #     for socket in self:
     #         local_state_key =+ socket.local_state_key
 
-    #     return uuid_hash(local_state_key)
+    #     return get_data_uuid(local_state_key)
 
     def init_state_components(self)->tuple[struct_key,dep_keys]:
         assert self.direction.upper() != 'OUT'
@@ -100,7 +102,7 @@ class socket_collection():
             deps =+ _deps
 
         deps = tuple(sorted(list(set(deps))))
-        struct_key = uuid_hash(struct_key)
+        struct_key = get_data_uuid(struct_key)
 
         # self.struct_key = struct_key
         # self.deps = deps
@@ -108,7 +110,7 @@ class socket_collection():
         return struct_key, deps
 
 
-class node():
+class node_mixin(_mixin.node):
     _struct_key   : struct_key = _unset
     _context_deps : dep_keys   = _unset
 
@@ -120,19 +122,19 @@ class node():
         state_key = self._struct_key
             #seeding state_key
         
-        c_keys = [*Backwards_Context.keys()]
+        c_keys = [*Backwards_Context.get().keys()]
         for key in self._context_deps:
             if key not in c_keys  :
                 raise Exception(f'Unconstrained Context Error with key: {key}, node: {self.context.Repr()}', )
 
-            val = Backwards_Context[key].get()
+            val = Backwards_Context.get()[key].get()
 
             if val is _unset:
                 raise Exception(f'Unset Context Error with key: {key}, node: {self.context.Repr()}', )
 
-            state_key =+ uuid_from_value(val)
+            state_key =+ get_data_uuid(val)
 
-        return uuid_hash(state_key)
+        return get_data_uuid(state_key)
 
     def local_state_key(self)->local_state_key:
         ''' Get this node's local state key, local untracked values that affect execution into a hashable format.
@@ -163,7 +165,7 @@ class node():
         # # deps =+ _deps
 
         deps = self.change_context_dep_keys(tuple(sorted(list(set(deps)))))
-        struct_key = uuid_hash(struct_key)
+        struct_key = get_data_uuid(struct_key)
 
         self._struct_key   = struct_key
         self._context_deps = deps
@@ -178,3 +180,8 @@ class node():
             - Compilation is where the Backwards_Context is actuallly changed (as state_key is accessed in compilation & execution)
         '''
         return deps
+    
+
+_statekey_mixins_ = []    
+_statekey_items_  = []   
+_statekey_tests_  = []

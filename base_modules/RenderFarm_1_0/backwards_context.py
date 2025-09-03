@@ -4,7 +4,8 @@ from contextlib  import contextmanager
 from contextvars import ContextVar
 from typing      import Any
 
-class Backwards_Context(dict):    
+
+class BackwardsContextType(dict):    
     ''' May convert to a collection to allow better export & typed import via regular fileio '''
 
     def _export_(self,)->dict:

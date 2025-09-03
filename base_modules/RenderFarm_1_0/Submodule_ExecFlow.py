@@ -1,9 +1,10 @@
-from .Data_Structures           import Backwards_Context
+from .Env_Variables             import Backwards_Context
 from ..Execution_Types          import item, _mixin, socket_shapes
 from ..utils.print_debug        import debug_print_wrapper
 from ...statics                 import _unset
 from ...models.struct_hook_base import hook, hook_trigger,Hookable
 from ...models.struct_module    import module_test
+from .backwards_context import BackwardsContextType
 
 
 from contextvars import ContextVar
@@ -65,31 +66,31 @@ class socket_mixin(_mixin.socket):
     @value.setter
     def value(self,value):
         if (key:=self.current_context_state_key.get()) is _unset:
-            key = self.context.node.get_state_key()
+            key = self.context.node.state_key
         self._value[key] = value
 
     @property
     def exec_value(self):
         return self._value['EXECUTE']
 
-    @hook(event = 'execute', mode = 'wrap')
-    def _execute_wrapper_(self,execute_func)->tuple[Any,str]:
+    # @hook(event = 'execute', mode = 'wrap')
+    # def _execute_wrapper_(self,execute_func)->tuple[Any,str]:
         
-        def wrapper(self,_return_state_token = False, *args, **kwargs):
+    #     def wrapper(self,_return_state_token = False, *args, **kwargs):
 
-            direction = self.dir
+    #         direction = self.dir
 
-            if (val:=self.value) is _unset:
-                val =  execute_func(self, direction,*args,**kwargs)
+    #         if (val:=self.value) is _unset:
+    #             val =  execute_func(self, direction,*args,**kwargs)
 
-                if direction.upper() != 'OUT':
-                    ... #TODO: Make store upstream value references
+    #             if direction.upper() != 'OUT':
+    #                 ... #TODO: Make store upstream value references
 
-            if _return_state_token:
-                return val, state_key
-            return val
-                #This ensures that the value can be accessed again outside of inline compile_call 
-        return wrapper
+    #         if _return_state_token:
+    #             return val, state_key
+    #         return val
+    #             #This ensures that the value can be accessed again outside of inline compile_call 
+    #     return wrapper
 
     @hook_trigger('execute')
     def execute(self,direction):
@@ -150,28 +151,26 @@ class socket_mixin(_mixin.socket):
         #In all cases, execute should (even if the value is another _unset-like)
         #Keeping as it keeps inline with compile
 
-    def get_state_key(self,backwards_context:Backwards_Context):
-        return self.context.node.get_state_key(backwards_context)
 
-    @hook(event = 'compile', mode = 'wrap',see_args=True)
-    def _compile_wrapper_(self,compile_func, exec_sg, backwards_context:dict, _return_state_token = False, *args, **kwargs)->tuple[Any,str]:
+    # @hook(event = 'compile', mode = 'wrap',see_args=True)
+    # def _compile_wrapper_(self,compile_func, exec_sg, backwards_context:dict, _return_state_token = False, *args, **kwargs)->tuple[Any,str]:
 
-        state_key = self.get_state_key(backwards_context)
-        direction = self.dir
+    #     state_key = self.get_state_key(backwards_context)
+    #     direction = self.dir
 
-        def wrapper(self,*args,**kwargs):
-            with self.state_key_as(state_key):
-                if (val:=self.value) is _unset:
+    #     def wrapper(self,*args,**kwargs):
+    #         with self.state_key_as(state_key):
+    #             if (val:=self.value) is _unset:
                     
-                    val =  compile_func(self,direction,*args,**kwargs)
+    #                 val =  compile_func(self,direction,*args,**kwargs)
 
-                    if direction.upper() != 'OUT':
-                        ... #TODO: Make store upstream value references
-                if _return_state_token:
-                    return val, state_key
-                return val
-                #This ensures that the value can be accessed again outside of inline compile_call 
-        return wrapper
+    #                 if direction.upper() != 'OUT':
+    #                     ... #TODO: Make store upstream value references
+    #             if _return_state_token:
+    #                 return val, state_key
+    #             return val
+    #             #This ensures that the value can be accessed again outside of inline compile_call 
+    #     return wrapper
 
     @hook_trigger('compile')
     def compile(self,direction,*args,**kwargs):
@@ -278,13 +277,10 @@ class meta_node_mixin(_mixin.meta_node):
         yield
         self.current_context_state_key.reset(t)
 
-    def get_state_key(self,backwards_context:Backwards_Context):
-        return 'Test'
-
     @hook(event = 'compile', mode = 'wrap', see_args=True)
     def _compile_wrapper_(self, compile_func, exec_sg, backwards_context:dict, _return_state_token = False, *args, **kwargs)->tuple[Any,str]:
         def wrapper(self, exec_sg, backwards_context, *args,**kwargs):
-            state_key = self.get_state_key(backwards_context)
+            state_key = self.state_key
             with self.state_key_as(state_key):
                 val =  compile_func(self,exec_sg, backwards_context,state_key,*args,**kwargs)
                 if _return_state_token:
