@@ -321,16 +321,7 @@ class subgraph_mixin(_mixin.subgraph):
         #Task Discovery Error handling, Diff & upload to manager in another module
 
 
-_exec_flow_mixins_ = [
-    socket_mixin,
-    execute_node_mixin,
-    meta_node_mixin,
-    subgraph_mixin,
-]
 
-_exec_flow_items_ = [
-
-]
 
 #### TESTS ####
 
@@ -389,6 +380,17 @@ def test_compile(graph,subgraph):
     assert exec_graph.execute(res_node.out_sockets[0]) == 3
 
     
+_exec_flow_mixins_ = [
+    socket_mixin,
+    execute_node_mixin,
+    meta_node_mixin,
+    subgraph_mixin,
+]
+
+_exec_flow_items_ = [
+
+]
+
 _exec_flow_tests_ = [        
     module_test('Exec_Node_Tests',
         module      = None,
