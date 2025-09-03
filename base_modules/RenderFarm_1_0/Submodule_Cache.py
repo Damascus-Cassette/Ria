@@ -1,6 +1,12 @@
-from pydantic import BaseModel as pydantic_Basemodel
-from enum import Enum
-from inspect import isgeneratorfunction
+from ...models.struct_file_io import BaseModel
+from ...statics               import _unset
+
+from pydantic    import BaseModel as pydantic_Basemodel
+from inspect     import isgeneratorfunction
+from contextvars import ContextVar
+from typing      import Any
+from enum        import Enum
+
 class cache_item_location_state(Enum):
     LOCAL_MEM   = 'LOCAL_MEM'  
     LOCAL_DISC  = 'LOCAL_DISC' 
@@ -34,7 +40,7 @@ class Cache_Itenerary[Cache_Item_Reference](dict):
     ''' May make this a synced datastructure '''
 
 
-class Cache_Item(BaseClass):
+class Cache_Item(BaseModel):
     ''' Loaded from disc, mem or manager->mem. 
     Contains data to apply to a node on cache retrieval. Allows extra data as a generic.
     `extra_data` best used for controlled validation inside a func before yielding/returning or handled inside of yield & post
@@ -59,11 +65,14 @@ class Cache_Item(BaseClass):
 
     # def references(self,Cache):...
 
-current_cache           = ContextVar('CurrentCache', default = None) 
+current_cache           = ContextVar('current_cache', default = None) 
 cache_future_asc_public = ContextVar('cache_future_asc_public', default = None)
 cache_future_asc_local  = ContextVar('cache_future_asc_local', default = None)
+
 class Cache():
-    ''' Shallow container for all cache_items, handles cache retrieval w/a '''
+    ''' Shallow container for all cache_items, handles cache retrieval w/a
+    Synced with manager. Has a search func.
+    '''
 
     itenerary : Cache_Itenerary
     data      : dict[Cache_Item]
@@ -193,8 +202,18 @@ class Cache_IO():
 
     def intake_cache():
         ...
+
     def add_cache():
         ...
+
     def asscociate_key(self,key:str):
         ''' Ascociates key with potential future cache '''
         ...
+
+class node_mixin(Cache_IO,_mixin.node): ...
+
+_cache_mixins_ = [
+    node_mixin
+]
+_cache_items_  = []
+_cache_tests_  = []
