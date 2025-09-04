@@ -91,7 +91,7 @@ class Cache_Env():
     def inlink(self, *paths, root_from=None, root_to='.', unlock:bool = True):
         ''' Link input paths (dir or fp). Keeps empty folders'''
         for from_path, to_path in self.find_relative_cmds(*paths, root_from=root_from, root_to=root_to):
-            self.link(from_path, to_path,unlock=unlock)
+            self.link(from_path, to_path, keep_empty_folders=True, unlock=unlock)
 
     def incopy(self, *paths, root_from=None, root_to='.', unlock:bool = True):
         ''' Copy input paths (dir or fp). Keeps empty folders'''
