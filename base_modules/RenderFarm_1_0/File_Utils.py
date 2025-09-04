@@ -98,7 +98,7 @@ class Cache_Env():
         for from_path, to_path in self.find_relative_cmds(*paths, root_from=root_from, root_to=root_to):
             self.copy(from_path, to_path,unlock=unlock)
 
-    def find_relative_cmds(*paths, root_from=None, root_to='.'):
+    def find_relative_cmds(self, *paths, root_from=None, root_to='.'):
         '''
         :paths: argument paths, can be from anywhere
         :root_from: Root to truncate paths's root. If None, it is assumed that the `root_from = os.path.split[-2]`. Error pre-link if every item doesn't have `root_from` Must be Absolute path.
