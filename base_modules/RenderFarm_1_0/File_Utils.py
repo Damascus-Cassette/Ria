@@ -8,7 +8,8 @@ from types import FunctionType
 
 
 class Cache_Env():
-    ''' Folder-Env to enter and work on. Typically created with Env Varaibles. Creates folder if it doesnt exist. '''
+    ''' Folder-Env to enter and work on. Typically created with Env Varaibles. Creates folder if it doesnt exist. 
+    Creates and unlocks when enters, locks when exits. Meant to enforce non-editability of cached files.'''
     
     def __init__(self, dp:str):
         os.makedirs(dp,exist_ok=True)
@@ -42,7 +43,7 @@ class Cache_Env():
             
             # root_rel = '.' + (Path(root) - Path(from_path))
             root_rel = Path(from_path).relative_to(root)
-            raise NotImplementedError('HAVNT TESTED') 
+            # raise NotImplementedError('HAVNT TESTED') 
                 #Create root relative to original path.
 
             if yield_files:
@@ -56,7 +57,7 @@ class Cache_Env():
                     yield(opath,Path(root).absolute(), root_rel, _dir)
                 
 
-    def link(self,from_path, to_path, keep_empty_folders = False):
+    def link(self,from_path, to_path, keep_empty_folders = False, unlock: bool = True):
         '''Copies folders and links contents. Input can be dir or fp. Does not hold onto empty folders by default.'''
         if Path(from_path).is_dir():
             for opath, root, rel, file in self._walk(from_path, yield_files=True, yield_dirs=False):
@@ -76,23 +77,26 @@ class Cache_Env():
         else:
             Path(to_path).symlink_to(from_path) 
             #Docs Said was reversed? Test
+        if unlock:
+            os.chmod(from_path,777)
 
-
-    def copy(self, from_path, to_path):
+    def copy(self, from_path, to_path, unlock:bool=True):
         if Path(from_path).is_dir():
             shutil.copytree(from_path, to_path, symlinks=False)
         else:
             shutil.copy2(from_path, to_path, follow_symlinks=True)
+        if unlock:
+            os.chmod(from_path,777)
 
-    def inlink(self, *paths, root_from=None, root_to='.'):
+    def inlink(self, *paths, root_from=None, root_to='.', unlock:bool = True):
         ''' Link input paths (dir or fp). Keeps empty folders'''
         for from_path, to_path in self.find_relative_cmds(*paths, root_from=root_from, root_to=root_to):
-            self.link(from_path, to_path)
+            self.link(from_path, to_path,unlock=unlock)
 
-    def incopy(self, *paths, root_from=None, root_to='.'):
+    def incopy(self, *paths, root_from=None, root_to='.', unlock:bool = True):
         ''' Copy input paths (dir or fp). Keeps empty folders'''
         for from_path, to_path in self.find_relative_cmds(*paths, root_from=root_from, root_to=root_to):
-            self.copy(from_path, to_path)
+            self.copy(from_path, to_path,unlock=unlock)
 
     def find_relative_cmds(*paths, root_from=None, root_to='.'):
         '''
