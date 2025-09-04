@@ -116,3 +116,19 @@ class Cache_Env():
             local_path = Path(os.path.join(local_root,relative_path)).resolve()
             cmds.append(from_path, local_path)
         return cmds
+
+
+from contextlib import contextmanager
+from .Env_Variables import local_cache_dir, local_temp_dir
+
+@contextmanager
+def cache_folder(state_key, *args, **kwargs):
+    prefix_path = local_cache_dir.get()
+    with Cache_Env(os.path.join(prefix_path,state_key), *args, **kwargs) as cwd:
+        yield cwd 
+
+@contextmanager
+def temp_folder(state_key, *args, **kwargs):
+    prefix_path = local_temp_dir.get()
+    with Cache_Env(os.path.join(prefix_path,state_key), *args, **kwargs) as cwd:
+        yield cwd 
