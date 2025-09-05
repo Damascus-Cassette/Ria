@@ -5,7 +5,8 @@ from ...statics                 import _unset
 from ...models.struct_hook_base import hook, hook_trigger,Hookable
 from ...models.struct_module    import module_test
 from .backwards_context         import BackwardsContextType
-
+from .Submodule_Cache import Cache
+from .Env_Variables   import CACHE
 
 from contextvars import ContextVar
 from contextlib  import contextmanager
@@ -337,8 +338,10 @@ from .Test_Items import (exec_test_int_socket ,
                          meta_test_socket     ,
                          meta_test_add_node   )
 
+
 @debug_print_wrapper(0)
 def test_execute(graph,subgraph):
+    CACHE.set(Cache())
     with subgraph.As_Env(auto_add_nodes = True, auto_add_links = True):
         # header = exec_test_add_node.M(1,1) >> exec_test_add_node.M(1,1) 
         a = exec_test_add_node.M(1,1)
@@ -346,6 +349,7 @@ def test_execute(graph,subgraph):
         new_link = a.out_sockets[0].links.new(b.in_sockets[0])
     assert new_link.out_socket is a.out_sockets[0]
 
+    CACHE.set(Cache())
     subgraph.execute(b.out_sockets[0])
     print(a.out_sockets[0]._value)
 
@@ -353,6 +357,7 @@ def test_execute(graph,subgraph):
     assert b.out_sockets[0].exec_value == 3
 
 def test_compile(graph,subgraph):
+    CACHE.set(Cache())
     with subgraph.As_Env(auto_add_nodes = True, auto_add_links = True):
         a = meta_test_add_node.M(1,1)
         b = meta_test_add_node.M(a.out_sockets[0],1) 
@@ -363,12 +368,12 @@ def test_compile(graph,subgraph):
     print(*a.in_sockets)
     print(*b.in_sockets)
 
-    print ('META NODES:',*(subgraph.nodes.values()))
-    print ('META LINKS:',*(subgraph.links.values()))
-    for x in subgraph.links:
-        print(' LINK: ', x.key, hash(x))
-        print('     OUT', x.out_socket.context.Repr())
-        print('     IN ', x.in_socket.context.Repr())
+    # print ('META NODES:',*(subgraph.nodes.values()))
+    # print ('META LINKS:',*(subgraph.links.values()))
+    # for x in subgraph.links:
+        # print(' LINK: ', x.key, hash(x))
+        # print('     OUT', x.out_socket.context.Repr())
+        # print('     IN ', x.in_socket.context.Repr())
     assert len(subgraph.nodes) == 2
     assert len(subgraph.links) == 1
 
@@ -378,8 +383,8 @@ def test_compile(graph,subgraph):
     exec_graph = graph.subgraphs.new(f'{subgraph.key}.EXECUTE')
     res_node = subgraph.compile(b,exec_graph)
 
-    print('nodes:',*(exec_graph.nodes.values()))
-    print('links:',*(exec_graph.links.values()))
+    # print('nodes:',*(exec_graph.nodes.values()))
+    # print('links:',*(exec_graph.links.values()))
     
     assert len(list(exec_graph.nodes.values())) == 2
     assert len(list(exec_graph.links.values())) == 1
@@ -387,6 +392,7 @@ def test_compile(graph,subgraph):
     assert exec_graph.execute(res_node.out_sockets[0]) == 3
 
 def test_cache_disc(graph,subgraph):
+    CACHE.set(Cache())
     with subgraph.As_Env(auto_add_nodes = True, auto_add_links = True):
         ...
         # a = meta_test_add_node.M(1,1)

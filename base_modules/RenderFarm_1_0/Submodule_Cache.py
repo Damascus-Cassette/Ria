@@ -142,7 +142,7 @@ class Cache():
         def wrapper(self,*args,**kwargs):
             
             state_key = self.state_key
-            if self.still_need_to_execute_or_cache(state_key):
+            if not self.comp_or_exec_allow(state_key):
                 return None
             
             t1 = cache_future_asc_public.set([])
@@ -153,7 +153,7 @@ class Cache():
 
             self.asscociate_key(state_key)
 
-            if (res:=self.find_cache(state_key)) is _unset:
+            if (res:=self.cache_search_key(state_key)) is _unset:
                 #execute if not in cache            
                 res = func(*args,**kwargs)
 
@@ -195,7 +195,7 @@ class Cache():
         def wrapper(self,*args,**kwargs):
             
             state_key = self.state_key
-            if self.still_need_to_execute_or_cache(state_key):
+            if not self.comp_or_exec_allow(state_key):
                 return None
 
             t1 = self.cache_future_asc_public.set([])
@@ -204,7 +204,7 @@ class Cache():
             t3 = cache_cache_folders.set([])
             t4 = cache_temp_folders .set([])
 
-            if (res:=self.find_cache(state_key)) is not _unset:
+            if (res:=self.cache_search_key(state_key)) is not _unset:
                 self.intake_cache(res)
             else:
                 #execute if not in cache            
@@ -329,6 +329,13 @@ class node_mixin(Cache_IO,_mixin.node):
         cache_item = Cache_Item()
         cache_item.out_sockets = self.out_sockets.export_cache_data()
         return cache_item
+    
+    def comp_or_exec_allow(self,state_key):
+        ''' Allow cached execution/compilation to occur, 
+        if nodes state already houses result of state key/similar this should return False '''
+        return not (state_key in self.out_sockets[0]._value.keys())
+        # return True
+        ...
     
 
 _cache_mixins_ = [
