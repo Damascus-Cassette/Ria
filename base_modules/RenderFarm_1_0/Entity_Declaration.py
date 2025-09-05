@@ -2,6 +2,8 @@
 
 from .Web_Interface.API_V1_6 import Entity,Entity_Data,Entity_Pool,Interface_Base,OL_Container
 from ...models.struct_file_io import BaseModel
+from .Entity_Settings    import Manager_Settings, Worker_Settings, Database_Settings
+
 from enum import Enum
 
 class Entity_Con_States(Enum):
@@ -26,28 +28,9 @@ class _MALFORMED(Entity):
     Entity_Role      = '_MALFORMED'
     Entity_Data_Type = _DEFAULT_DATA
 
-class Worker_Settings(BaseModel):
-    ...
-class Worker_Data(Entity_Data):
-    ...
-# class Worker_Interface(Interface_Base):
-#     ...
-class Worker(Entity):
-    ''' App Entity, processes files/graphs, submits new tasks and cached results to manager (w/a) '''
-
-    ######## ENTITY STRUCTURE ########
-    Entity_Role = 'Worker'
-    Entity_Data_Type = Worker_Data
-    Settings_Handler = Worker_Settings
-
-    # interface = Worker_Interface
-
-
-class Database_Settings(BaseModel):
-    ...
 class Database_Data(Entity_Data):
     ...
-class database(Interface_Base): #Entity
+class Database(Interface_Base): #Entity
     ''' Only an interface for the moment, 
     planning on distributed db app-entities eventually. (on worker, or as a caching db) 
         Will require comminication via manager to file being uploaded & where + movment of requested files.
@@ -57,14 +40,17 @@ class database(Interface_Base): #Entity
     Entity_Role      = 'Database'
     Entity_Data_Type = Database_Data
     Settings_Handler = Database_Settings
-    
+        #Incoming dict settings applied as these objects
+
     ######## INTERFACE STRUCTURE ########
     Router_Subpath   = '/db'
 
-class Manager_Settings(BaseModel):
-    ...
+    ######## Inst Data ########
+    settings  : Database_Settings
+
+
 class Manager_Data(Entity_Data):
-    ... #TODO
+    ...
 class Manager(Entity):
     ''' App-Entity, handles files, job intake, task resolution, and endpoint exposure.
     Records signed unqiue connections' entity_data to db (w/ state and all that)
@@ -75,13 +61,30 @@ class Manager(Entity):
     Entity_Role      = 'Manager'
     Entity_Data_Type = Manager_Data
     Settings_Handler = Manager_Settings
+        #Incoming dict settings applied as these objects
 
     ######## SERVICES ########
-    database         = database
+    database         = Database
+    
+    ######## Inst Data ########
+    settings  : Manager_Settings
 
+class Worker_Data(Entity_Data):
+    ...
+class Worker(Entity):
+    ''' App Entity, processes files/graphs, submits new tasks and cached results to manager (w/a) '''
+
+    ######## ENTITY STRUCTURE ########
+    Entity_Role = 'Worker'
+    Entity_Data_Type = Worker_Data
+    Settings_Handler = Worker_Settings
+        #Incoming dict settings applied as these objects
+
+    ######## Inst Data ########
+    settings  : Worker_Settings
 
 class Client_Data(Entity_Data):
-    ... #TODO
+    ...
 class Client(Entity):
     ''' Non-App entity, Container for connection to manager(s) and ubiquitus contextual callbacks 
     Env stores settings & interacts with this datastructure, which is not kept cross-session.
@@ -93,7 +96,7 @@ class Client(Entity):
     Entity_Data_Type = Client_Data
     
     ######## SERVICES ########
-    database         = database
+    database         = Database
 
 
 class _Entity_Pool(Entity_Pool):
