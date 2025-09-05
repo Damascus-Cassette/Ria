@@ -13,7 +13,7 @@ local_state_key      : TypeAlias = str
 contextual_state_key : TypeAlias = str
 
 
-class socket(_mixin):
+class socket_mixin(_mixin.socket):
 
     _struct_key   : struct_key
     _context_deps : dep_keys
@@ -30,7 +30,7 @@ class socket(_mixin):
         Best way to think about this is get_data_uuid(all used values)
         '''
         
-        if self.direction.upper != 'OUT':
+        if self.dir.upper != 'OUT':
             if len(self.links):
                 return 'UPSTREAM' 
                 #As noted, by default link_values flatten local_state.
@@ -49,9 +49,9 @@ class socket(_mixin):
                     - ie when a node's outputs affect each socket's execution
                     - In situations like above, the output's affects should be factored into the **node's** local_state_key 
         '''
-        assert self.direction.upper() == 'OUT'
+        assert self.dir.upper() == 'OUT'
         struct_key, deps =  self.context.node.init_state_components()
-        struct_key = struct_key + self.local_state_key() + self.direction
+        struct_key = struct_key + self.local_state_key() + self.dir
         
         deps = tuple(sorted(list(set(deps))))
         struct_key = get_data_uuid(struct_key)
@@ -64,12 +64,16 @@ class socket(_mixin):
 
     def init_state_components_insockets(self)->tuple[struct_key,dep_keys]:
         ''' Called on in/side sockets, gets local socket and passing along quiry  '''
-        assert self.direction.upper() != 'OUT'
+        assert self.dir.upper() != 'OUT'
+
+        deps = tuple()
+        struct_key = ''
+
         for x in self.links:
             _struct_key, _deps = x.link.out_socket.init_state_components_outsockets()
         
-        struct_key =+ _struct_key
-        deps =+ _deps
+            struct_key =+ _struct_key
+            deps =+ _deps
 
         deps = tuple(sorted(list(set(deps))))
         struct_key = get_data_uuid(struct_key)
@@ -80,7 +84,7 @@ class socket(_mixin):
         return struct_key, deps
 
 
-class socket_collection(_mixin.socket_collection):
+class socket_collection_mixin(_mixin.socket_collection):
 
     # def local_state_key(self)->local_state_key:
     #     ''' called on out_sockets only '''
@@ -92,7 +96,7 @@ class socket_collection(_mixin.socket_collection):
     #     return get_data_uuid(local_state_key)
 
     def init_state_components(self)->tuple[struct_key,dep_keys]:
-        assert self.direction.upper() != 'OUT'
+        assert self.Direction.upper() != 'OUT'
         
         struct_key = ''
         deps = tuple()
@@ -182,6 +186,10 @@ class node_mixin(_mixin.node):
         return deps
     
 
-_statekey_mixins_ = []    
+_statekey_mixins_ = [
+    socket_mixin,
+    socket_collection_mixin,
+    node_mixin,
+]    
 _statekey_items_  = []   
 _statekey_tests_  = []

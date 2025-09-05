@@ -60,7 +60,6 @@ class ConstrBase():
                 
                 other_bases = Bases.get()[k]
 
-
                 temp = type('temp', tuple(other_bases), {})
                 other_bases = list(temp.__bases__) 
                 other_bases = [x for x in other_bases if not getattr(x,'_constr_asbase_discard_',False)]

@@ -4,7 +4,7 @@ from ..utils.print_debug        import debug_print_wrapper
 from ...statics                 import _unset
 from ...models.struct_hook_base import hook, hook_trigger,Hookable
 from ...models.struct_module    import module_test
-from .backwards_context import BackwardsContextType
+from .backwards_context         import BackwardsContextType
 
 
 from contextvars import ContextVar
@@ -93,14 +93,14 @@ class socket_mixin(_mixin.socket):
     #     return wrapper
 
     @hook_trigger('execute')
-    def execute(self,direction):
+    def execute(self):
         ''' Router & Fallback function 
         Typical behavior reminder: in_sockets treat regular value as a default
         Incorperate declared fallback chain.
         TODO : Should also check source/type of socket eventuallly. 
         '''
         
-        if direction.upper() != 'OUT':
+        if self.dir.upper() != 'OUT':
             res =  self.execute_in()
             if res is _unset:
                 res = self.execute_in_fallback()
@@ -173,14 +173,14 @@ class socket_mixin(_mixin.socket):
     #     return wrapper
 
     @hook_trigger('compile')
-    def compile(self,direction,*args,**kwargs):
+    def compile(self,*args,**kwargs):
         ''' Router & Fallback function 
         Typical behavior reminder: in_sockets treat regular value as a default
         Incorperate declared fallback chain.
         TODO : Should also check source/type of socket eventuallly. 
         '''
         
-        if direction.upper() != 'OUT':
+        if self.dir.upper() != 'OUT':
             res =  self.compile_in(*args,**kwargs)
             if res is _unset:
                 res = self.compile_in_fallback(*args,**kwargs)
@@ -312,8 +312,12 @@ class subgraph_mixin(_mixin.subgraph):
     @debug_print_wrapper(0)
     def compile(self,target, exec_subgraph, backwards_context=None):
         if backwards_context is None:
-            backwards_context = Backwards_Context()
-        target.compile(exec_subgraph,backwards_context)
+            backwards_context = BackwardsContextType
+
+        t = Backwards_Context.set(backwards_context)
+        target.compile(exec_subgraph,)
+        Backwards_Context.reset(t)
+
         #Task Discovery Error handling, Diff & upload to manager in another module
 
 
@@ -343,9 +347,7 @@ def test_compile(graph,subgraph):
     with subgraph.As_Env(auto_add_nodes = True, auto_add_links = True):
         a = meta_test_add_node.M(1,1)
         b = meta_test_add_node.M(a.out_sockets[0],1) 
-        #   #BUG: 2 links are being created as I'm adding directly to the subcollection?
-            #BUG: A link is beiing created for each side??
-    
+
         # b = meta_test_add_node.M(1,1) 
         # new_link = a.out_sockets[0].links.new(b.in_sockets[0])
 
@@ -375,6 +377,14 @@ def test_compile(graph,subgraph):
     
     assert exec_graph.execute(res_node.out_sockets[0]) == 3
 
+def test_cache_disc(graph,subgraph):
+    with subgraph.As_Env(auto_add_nodes = True, auto_add_links = True):
+        ...
+        # a = meta_test_add_node.M(1,1)
+        # b = meta_test_add_node.M(a.out_sockets[0],1) 
+        # ...
+    
+
     
 _exec_flow_mixins_ = [
     socket_mixin,
@@ -393,6 +403,7 @@ _exec_flow_tests_ = [
         funcs       = [
             test_execute,
             test_compile,
+            test_cache_disc,
         ],
         module_iten = { 
             'Distributed_Execution' : '1.0',
