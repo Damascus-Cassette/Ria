@@ -118,6 +118,8 @@ class Cache():
     # def sync_item():
     #     ''' sync item from the manager class '''
 
+    def create_cache_asc(self):
+        raise NotImplementedError('')
 
     @classmethod
     def create_wrapper(self,func):
@@ -146,8 +148,6 @@ class Cache():
 
             t3 = cache_cache_folders.set([])
             t4 = cache_temp_folders .set([])
-
-
 
             self.asscociate_key(state_key)
 

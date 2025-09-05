@@ -9,3 +9,4 @@ local_temp_dir    = ContextVar('local_temp_dir', default = None)
 
 CACHE = ContextVar('GLOBAL_CACHE',default=None)
     #Current operating cache, independant of datastruct.
+    #Currently operating as a env scoped 'singleton' re-created after every task.
