@@ -21,6 +21,13 @@ class socket_mixin(_mixin.socket):
     @property
     def state_key(self):
         return self.context.node.state_key
+    
+    @property
+    def local_system_key(self)->str:
+        ''' Not as important for sockets, should be enabled when it is.'''
+        if self.context.node.Cache_Use_Socket_System_Key:
+            return get_data_uuid(str(self.UID) + str(self.Version))
+        return ''
 
     def local_state_key(self)->local_state_key:
         ''' Local state of this socket in a hashable form. 
@@ -60,6 +67,8 @@ class socket_mixin(_mixin.socket):
         
         deps = tuple(sorted(list(set(deps))))
         struct_key = get_data_uuid(struct_key)
+
+        struct_key = struct_key + self.local_system_key
 
         self._struct_key = struct_key
         self._context_deps = deps
@@ -123,6 +132,13 @@ class node_mixin(_mixin.node):
     _struct_key   : struct_key = _unset
     _context_deps : dep_keys   = _unset
 
+    Cache_Use_Socket_System_Key = False
+        #If the sockets' system state (UID + Ver) should be used. This change will invalidate ascociated caches.
+
+    @property
+    def local_system_key(self)->str:
+        return get_data_uuid(str(self.UID) + str(self.Version))
+
     @property
     def state_key(self):
         if self._struct_key is _unset:
@@ -169,6 +185,7 @@ class node_mixin(_mixin.node):
         struct_key = struct_key + _struct_key
         deps = deps + _deps
 
+        struct_key = struct_key + self.local_system_key
         # _struct_key = self.out_sockets.local_state_key()
         # struct_key =+ _struct_key
         # # deps = deps + _deps
