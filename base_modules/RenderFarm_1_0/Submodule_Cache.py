@@ -1,8 +1,10 @@
-from ...models.struct_file_io import BaseModel
-from ...statics               import _unset
-from ..utils.statics import get_data_uuid
-from .File_Utils import cache_folder, temp_folder
+from ...models.struct_file_io        import BaseModel
+from ...statics                      import _unset
+from ..utils.statics                 import get_data_uuid
+from .File_Utils                     import cache_folder, temp_folder
+from contextlib                      import contextmanager
 from ...base_modules.Execution_Types import _item,_mixin
+from .Env_Variables import CACHE
 
 from pydantic    import BaseModel as pydantic_Basemodel
 from inspect     import isgeneratorfunction
@@ -67,6 +69,9 @@ class Cache_Item(BaseModel):
         self.out_sockets = {}
         self.extra_data  = {}
         self.local_roots = {} #Local fp conversion
+
+    def ascociate_dir(self,dir):
+        self.local_roots[dir] = None
 
     def transform_cache(self,memo)->Self:
         ''' Converts all first level strings, 
@@ -160,7 +165,9 @@ class Cache():
                 global current_cache
                 current_cache.get().add_cache(cache_item)
             
-            self.create_cache_asc(cache_item)
+            CACHE.get().create_cache_asc(cache_item,
+                        public = cache_future_asc_public.get(), 
+                        local  = cache_future_asc_local.get() )
 
             cache_future_asc_public.reset(t1)
             cache_future_asc_local .reset(t2)
@@ -173,21 +180,6 @@ class Cache():
 
         return wrapper
 
-    @ContextVar
-    def cache_folder(self, *args,**kwargs):
-        with cache_folder(self.state_key, *args,**kwargs) as cwd:
-            global cache_cache_folders
-            cache_cache_folders.get().append(cwd)
-            yield cwd
-
-    @ContextVar
-    def temp_folder(self,*args,**kwargs):
-        
-        with temp_folder(self.state_key,*args,**kwargs) as cwd:
-            global cache_temp_folders
-            cache_temp_folders.get().append(cwd)
-            yield cwd
-        ...
 
     @staticmethod
     def value_cache_gen_wrapper(func):
@@ -234,7 +226,9 @@ class Cache():
                 if res is _unset:
                     raise Exception(f'A resulting value cannot be unset! {self.__module__}.{self.__name__} : {func}')
                 
-            self.create_cache_asc(cache_item)
+            CACHE.get().create_cache_asc(cache_item,
+                                  public = cache_future_asc_public.get(), 
+                                  local  = cache_future_asc_local.get() )
 
             cache_future_asc_public.reset(t1)
             cache_future_asc_local .reset(t2)
@@ -248,26 +242,88 @@ class Cache():
 
         return wrapper
 
+
+
 class Cache_IO():
     ''' Inherited method class on each node for ease of access to caching functionality '''
     
-    def cache_search(self,):
-        ...
-
-    def intake_cache():
-        ...
-
-    def add_cache():
-        ...
-
-    def asscociate_key(self,key:str):
+    def cache_search(self, *args, asc_key = True):
+        ''' Search itenerary of current cache object with UUIDs of argument inputs '''
+        return self.cache_search_key(get_data_uuid(*args), asc_key = asc_key)
+    
+    def cache_search_key(self, key:str, asc_key = True):
+        assert isinstance(key, str)
+        cache : Cache = CACHE.get()
+        if asc_key: self.asscociate_key(key)
+        return cache.search(key)
+        
+    def asscociate_key(self, key:str, local_only=False):
         ''' Ascociates key with potential future cache '''
-        ...
+        assert isinstance(key, str)
+        cache_future_asc_local.get().append(key)
+        if not local_only:
+            cache_future_asc_public.get().append(key)
+        return _unset
 
-class node_mixin(Cache_IO,_mixin.node): ...
+    def intake_cache(self,):
+        ''' Apply cache to current datastructure '''
+        raise NotImplementedError('MUST BE IMPLIMENTED PER DATASTRUCTURE')
+
+    def create_cache(self,):
+        ''' Create cache from current datastructure '''
+        raise NotImplementedError('MUST BE IMPLIMENTED PER DATASTRUCTURE')
+
+    @contextmanager
+    def cache_folder(self, *args,**kwargs):
+        with cache_folder(self.state_key, *args,**kwargs) as cwd:
+            global cache_cache_folders
+            cache_cache_folders.get().append(cwd)
+            yield cwd
+
+    @contextmanager
+    def temp_folder(self,*args,**kwargs):
+        with temp_folder(self.state_key,*args,**kwargs) as cwd:
+            global cache_temp_folders
+            cache_temp_folders.get().append(cwd)
+            yield cwd
+
+class socket_mixin(_mixin.socket):
+    def import_cache_data(self, data:dict)->None:
+        self.value = data['value']
+        
+    def export_cache_data(self)->dict:
+        data = {}
+        data['value'] = self.value
+        return data
+
+class socket_collection_mixin(_mixin.socket_collection):
+    def import_cache_data(self,data):
+        for k,v in data:
+            self[k].import_cache_data(v)
+        
+    def export_cache_data(self):
+        data = {}
+        for k,v in self.items():
+            data[k] = v.export_cache_data()
+        return data
+        
+
+class node_mixin(Cache_IO,_mixin.node): 
+    def intake_cache(self,cache_item:Cache_Item):
+        ''' Apply cache to current datastructure '''
+        return self.out_sockets.import_cache_data(cache_item.out_sockets)
+
+    def create_cache(self,):
+        ''' Create cache from current datastructure '''        
+        cache_item = Cache_Item()
+        cache_item.out_sockets = self.out_sockets.export_cache_data()
+        return cache_item
+    
 
 _cache_mixins_ = [
-    node_mixin
+    socket_mixin,
+    socket_collection_mixin,
+    node_mixin,
 ]
 _cache_items_  = []
 _cache_tests_  = []
