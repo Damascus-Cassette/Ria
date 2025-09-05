@@ -1,10 +1,13 @@
 from ...models.struct_file_io import BaseModel
 from ...statics               import _unset
+from ..utils.statics import get_data_uuid
+from .File_Utils import cache_folder, temp_folder
+from ...base_modules.Execution_Types import _item,_mixin
 
 from pydantic    import BaseModel as pydantic_Basemodel
 from inspect     import isgeneratorfunction
 from contextvars import ContextVar
-from typing      import Any
+from typing      import Any, Self
 from enum        import Enum
 
 class cache_item_location_state(Enum):
@@ -37,7 +40,7 @@ class Cache_Item_Reference(pydantic_Basemodel):
     local_only  : bool
 
 class Cache_Itenerary[Cache_Item_Reference](dict):
-    ''' May make this a synced datastructure '''
+    ''' May make this a socket synced datastructure '''
 
 
 class Cache_Item(BaseModel):
@@ -46,21 +49,38 @@ class Cache_Item(BaseModel):
     `extra_data` best used for controlled validation inside a func before yielding/returning or handled inside of yield & post
     Usual best practice with yield is to always locally ascociate the `state_key` with a cache in the wrapper, 
         so an exec function itself should only run once w/a
+    Ascociated files are relative to the root, which should have an equivilent key.
+        Can I collide in form but not files? No, as the UID is generated after evaluating the folder key.
+        All oibjects are quirried for filepath convertion, and it's up to each non-trival data type to convert in/out of roots
     '''
 
-    data_uid    : str                       #UID of this data 
+    _io_blacklist_ = ['local_root']
+    data_uid    : str                       #UID of this data, post conversion
 
     out_sockets : dict[str, dict[str, Any]] #Socket name/index, then attributes that are intaken. 
     extra_data  : dict                      #Generic data to be handled by the node itself
 
+    space_ids   : tuple[str] = tuple() #Data UUID Hash of root's contents. Pre-calculating UID, just keep as indices
+    local_roots : dict = None          #Local-only path to folder containing cache. Converts child-data from space_id somewhere on import. 
+
     def __init__(self,):
         self.out_sockets = {}
         self.extra_data  = {}
+        self.local_roots = {} #Local fp conversion
+
+    def transform_cache(self,memo)->Self:
+        ''' Converts all first level strings, 
+        quiries all non-trival data types.
+        Blindspot of dicts/lists?
+        '''
+        raise NotImplementedError('TODO')
 
     def set_uid(self,):
+        ''' This should happen after cache-folder is uploaded and self is transformed '''
         assert not getattr(self.data_uid)
-        key =  uuid_hash_from_data(self.out_sockets)
-        key =+ uuid_hash_from_data(self.extra_data)
+        key =  get_data_uuid(self.out_sockets)
+        key =+ get_data_uuid(self.extra_data)
+        key =+ self.space_id
         self.data_uid = key
 
     # def references(self,Cache):...
@@ -69,13 +89,22 @@ current_cache           = ContextVar('current_cache', default = None)
 cache_future_asc_public = ContextVar('cache_future_asc_public', default = None)
 cache_future_asc_local  = ContextVar('cache_future_asc_local', default = None)
 
+cache_cache_folders     = ContextVar('cache_cache_folders', default = None)
+cache_temp_folders      = ContextVar('cache_temp_folders',  default = None)
+
 class Cache():
     ''' Shallow container for all cache_items, handles cache retrieval w/a
-    Synced with manager. Has a search func.
+    Synced with manager. Has a search func for finding caches
+    Holds temporary 
     '''
 
-    itenerary : Cache_Itenerary
-    data      : dict[Cache_Item]
+    itenerary    : Cache_Itenerary
+    data         : dict[Cache_Item] #Converted in place at task completion?
+
+    # data_folders : #How should I track this data, apart from just folder location? 
+
+    # foreignized_iten : dict[str,   str] #Prev and post-keys, buffer for converting itenerary and data
+    # foreignized_data : dict[Cache_Item] #Converted dict
     
     def __init__(self,):
         self.itenerary = Cache_Itenerary()
@@ -99,7 +128,6 @@ class Cache():
     
         currently goes through these phases:
             node executes -> uncached & local -> cached & local -> cached ascociated & local
-        
 
         '''
         def wrapper(self,*args,**kwargs):
@@ -108,10 +136,11 @@ class Cache():
             if self.still_need_to_execute_or_cache(state_key):
                 return None
             
-            global cache_future_asc_public
-            global cache_future_asc_local
             t1 = cache_future_asc_public.set([])
             t2 = cache_future_asc_local .set([])
+
+            t3 = cache_cache_folders.set([])
+            t4 = cache_temp_folders .set([])
 
 
 
@@ -136,10 +165,30 @@ class Cache():
             cache_future_asc_public.reset(t1)
             cache_future_asc_local .reset(t2)
 
+            cache_cache_folders.reset(t3)
+            cache_temp_folders .reset(t4)
+            #TODO: Add to global lists
+
             return res
 
         return wrapper
+
+    @ContextVar
+    def cache_folder(self, *args,**kwargs):
+        with cache_folder(self.state_key, *args,**kwargs) as cwd:
+            global cache_cache_folders
+            cache_cache_folders.get().append(cwd)
+            yield cwd
+
+    @ContextVar
+    def temp_folder(self,*args,**kwargs):
         
+        with temp_folder(self.state_key,*args,**kwargs) as cwd:
+            global cache_temp_folders
+            cache_temp_folders.get().append(cwd)
+            yield cwd
+        ...
+
     @staticmethod
     def value_cache_gen_wrapper(func):
         ''' Wrapper for generator-Execution Function.  Self is Node.
@@ -150,16 +199,16 @@ class Cache():
 
         '''
         def wrapper(self,*args,**kwargs):
-            self:node
             
             state_key = self.state_key
             if self.still_need_to_execute_or_cache(state_key):
                 return None
 
-            global cache_future_asc_public
-            global cache_future_asc_local
             t1 = self.cache_future_asc_public.set([])
             t2 = self.cache_future_asc_local .set([])
+
+            t3 = cache_cache_folders.set([])
+            t4 = cache_temp_folders .set([])
 
             if (res:=self.find_cache(state_key)) is not _unset:
                 self.intake_cache(res)
@@ -189,6 +238,11 @@ class Cache():
 
             cache_future_asc_public.reset(t1)
             cache_future_asc_local .reset(t2)
+            
+            #task.asscociate_folders() Perhaps
+            cache_cache_folders.reset(t3)
+            cache_temp_folders .reset(t4)
+            #TODO: Add to global lists?
 
             return res
 
@@ -197,7 +251,7 @@ class Cache():
 class Cache_IO():
     ''' Inherited method class on each node for ease of access to caching functionality '''
     
-    def cache_search(self,):        
+    def cache_search(self,):
         ...
 
     def intake_cache():

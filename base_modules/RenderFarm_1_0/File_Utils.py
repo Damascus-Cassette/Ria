@@ -9,11 +9,17 @@ from types import FunctionType
 
 class Cache_Env():
     ''' Folder-Env to enter and work on. Typically created with Env Varaibles. Creates folder if it doesnt exist. 
-    Creates and unlocks when enters, locks when exits. Meant to enforce non-editability of cached files.'''
+    Creates and unlocks when enters, locks when exits. Meant to enforce non-editability of cached files.
+    Will consider making the folder auto-incriment at a later time.
+    '''
     
-    def __init__(self, dp:str):
+    def __init__(self, dp:str, 
+                 to_inlink : tuple[str] = tuple(), 
+                 to_incopy : tuple[str] = tuple()):
         os.makedirs(dp,exist_ok=True)
         self.dp = Path(dp)
+        self.inlink(to_inlink)
+        self.incopy(to_incopy)
     
     def __enter__(self):
         self.unlock()
