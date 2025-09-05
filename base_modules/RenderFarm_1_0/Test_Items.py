@@ -70,11 +70,11 @@ class meta_test_add_node(item.meta_node):
 
     @hook_trigger('compile')        #REQUIRED
     @debug_print_wrapper(0)
-    def compile(self, exec_graph, backwards_context, state_key)->None:
+    def compile(self, exec_graph )->None:
         print ('STATE KEY:',self.current_context_state_key.get())
 
-        i1 = self.in_sockets[0].compile(exec_graph, backwards_context)
-        i2 = self.in_sockets[1].compile(exec_graph, backwards_context)
+        i1 = self.in_sockets[0].compile(exec_graph)
+        i2 = self.in_sockets[1].compile(exec_graph)
         #Should be unset, a value or sockets
         # print(exec_graph)
         # i2 = self.in_sockets[1].compile()
@@ -88,7 +88,7 @@ class meta_test_add_node(item.meta_node):
             assert len(exec_graph.nodes) == length + 1
             #Looks to be spawning extra nodes??
         self.out_sockets[0].value = val.out_sockets[0]
-
+        print('IN COMPILE VAL:', val)
         assert len(exec_graph.nodes) == length + 1  
 
         return val

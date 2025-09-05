@@ -41,6 +41,11 @@ class socket_mixin(_mixin.socket):
 
         #Above MAY need to be more unique, though I think the stuructral access is OK
 
+    def init_state_components(self):
+        if self.dir.upper() != 'OUT':
+            return self.init_state_components_insockets
+        return self.init_state_components_outsockets
+
     def init_state_components_outsockets(self):
         ''' Called on out sockets, forwards quiry to node (which observes local state)
             - ~note: this method causes a structural_key change if a sibling socket's local_state_key is different.~
@@ -69,8 +74,8 @@ class socket_mixin(_mixin.socket):
         deps = tuple()
         struct_key = ''
 
-        for x in self.links:
-            _struct_key, _deps = x.link.out_socket.init_state_components_outsockets()
+        for link in self.links:
+            _struct_key, _deps = link.out_socket.init_state_components_outsockets()
         
             struct_key = struct_key + _struct_key
             deps = deps + _deps

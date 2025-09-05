@@ -50,28 +50,38 @@ class socket_mixin(_mixin.socket):
     @hook(event='__init__', mode = 'pre', see_args=True,passthrough=False)
     def _init_(self, *args,**kwargs):
         self._value = _socket_cache()
-        self.current_context_state_key = ContextVar(f'{hash(self)}.state_key', default = _unset)
+        # self.current_context_state_key = ContextVar(f'{hash(self)}.state_key', default = _unset)
 
-    @contextmanager
-    def state_key_as(self,val):
-        t = self.current_context_state_key.set(val)
-        yield
-        self.current_context_state_key.reset(t)
+    # @contextmanager
+    # def state_key_as(self,val):
+    #     t = self.current_context_state_key.set(val)
+    #     yield
+    #     self.current_context_state_key.reset(t)
 
     @property
     def value(self):
-        assert not (key:=self.current_context_state_key.get()) is _unset
+        # if not (key:=getattr(self,'override_value_state_key',None)):
+        #     assert not (key:=self.state_key) is _unset
+        key = self.value_key
         return self._value[key]
     
     @value.setter
     def value(self,value):
-        if (key:=self.current_context_state_key.get()) is _unset:
-            key = self.context.node.state_key
+        
+        # if not (key:=getattr(self,'override_value_state_key',None)):
+        #     key = self.value_key
+
+        key = self.value_key
         self._value[key] = value
 
     @property
     def exec_value(self):
         return self._value['EXECUTE']
+    
+    @property
+    def value_key(self):
+        return self.context.node.value_key
+        
 
     # @hook(event = 'execute', mode = 'wrap')
     # def _execute_wrapper_(self,execute_func)->tuple[Any,str]:
@@ -245,6 +255,10 @@ class socket_mixin(_mixin.socket):
 class execute_node_mixin(_mixin.exec_node):
     ''' Statefull function container, socket.value is single context '''
 
+    @property
+    def value_key(self):
+        return 'EXECUTE' 
+
     @hook_trigger('Execute')
     # @hook_trigger('Auto_Populate_Sockets', from_dict = True) #Could be usefull
     def execute(self,):
@@ -260,6 +274,11 @@ class execute_node_mixin(_mixin.exec_node):
 class meta_node_mixin(_mixin.meta_node):
     ''' Stateful function container that 'compiles' to am exec graph '''
 
+
+    @property
+    def value_key(self):
+        return self.state_key
+
     @property
     def address(self)->str:
         c = self.context
@@ -271,27 +290,9 @@ class meta_node_mixin(_mixin.meta_node):
         self.current_context_state_key = ContextVar(f'{hash(self)}.state_key', default = _unset)
             #Address is not garunteed to be known at this time 
 
-    @contextmanager
-    def state_key_as(self,val):
-        t = self.current_context_state_key.set(val)
-        yield
-        self.current_context_state_key.reset(t)
-
-    @hook(event = 'compile', mode = 'wrap', see_args=True)
-    def _compile_wrapper_(self, compile_func, exec_sg, backwards_context:dict, _return_state_token = False, *args, **kwargs)->tuple[Any,str]:
-        def wrapper(self, exec_sg, backwards_context, *args,**kwargs):
-            state_key = self.state_key
-            with self.state_key_as(state_key):
-                val =  compile_func(self,exec_sg, backwards_context,state_key,*args,**kwargs)
-                if _return_state_token:
-                    return val,state_key
-                return val
-                
-        return wrapper
-
     @hook_trigger('compile')
     # @hook_trigger('Auto_Populate_Sockets', from_dict = True) #Could be usefull
-    def compile(self, exec_subgraph, backwards_context,): # structure_key, state_key, job, task): #Add to wrapper as Declarative fulllfillment
+    def compile(self, exec_subgraph): # structure_key, state_key, job, task): #Add to wrapper as Declarative fulllfillment
         ''' Execute using in_socket values via in_socket.compile()
         Cross-Nodes will have any inputs promised to a copy of self.Exec_Variant  
         ''' #Automatic construction?
@@ -308,6 +309,7 @@ class subgraph_mixin(_mixin.subgraph):
         if backwards_context is None:
             backwards_context = BackwardsContextType()
         t = Backwards_Context.set(backwards_context)
+        target.init_state_components()
         res =  target.execute()
         Backwards_Context.reset(t)
         return res
@@ -318,11 +320,11 @@ class subgraph_mixin(_mixin.subgraph):
     def compile(self,target, exec_subgraph, backwards_context=None):
         if backwards_context is None:
             backwards_context = BackwardsContextType()
-
         t = Backwards_Context.set(backwards_context)
-        target.compile(exec_subgraph,)
+        target.init_state_components()
+        res = target.compile(exec_subgraph,)
         Backwards_Context.reset(t)
-
+        return res
         #Task Discovery Error handling, Diff & upload to manager in another module
 
 
@@ -345,6 +347,8 @@ def test_execute(graph,subgraph):
     assert new_link.out_socket is a.out_sockets[0]
 
     subgraph.execute(b.out_sockets[0])
+    print(a.out_sockets[0]._value)
+
     assert a.out_sockets[0].exec_value == 2
     assert b.out_sockets[0].exec_value == 3
 
