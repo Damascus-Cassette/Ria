@@ -22,7 +22,10 @@ import hashlib as _hashlib
 
 def get_data_uuid(data):
     ''' Return deterministic UID of mem data via getrandbits and static seed'''
-    return _uuid.UUID(STATIC_RANDOM.getrandbits(data),version=4)
+    str(data)
+    #Blindspot with key ordering and generic data types that need to use export to string.
+    return str(_uuid.uuid5(_uuid.NAMESPACE_X500,data))
+    # return _uuid.UUID(STATIC_RANDOM.getrandbits(data),version=4)
 
 def get_file_uid(filepath):
     ''' Return UID of file, sha256 hash. Follow symlinks and get sha256 of file'''

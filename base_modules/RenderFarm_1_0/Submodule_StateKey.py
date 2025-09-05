@@ -72,8 +72,8 @@ class socket_mixin(_mixin.socket):
         for x in self.links:
             _struct_key, _deps = x.link.out_socket.init_state_components_outsockets()
         
-            struct_key =+ _struct_key
-            deps =+ _deps
+            struct_key = struct_key + _struct_key
+            deps = deps + _deps
 
         deps = tuple(sorted(list(set(deps))))
         struct_key = get_data_uuid(struct_key)
@@ -102,8 +102,8 @@ class socket_collection_mixin(_mixin.socket_collection):
         deps = tuple()
         for socket in self:
             _struct_key, _deps = socket.init_state_components_insockets()
-            struct_key =+ _struct_key
-            deps =+ _deps
+            struct_key = struct_key + _struct_key
+            deps = deps + _deps
 
         deps = tuple(sorted(list(set(deps))))
         struct_key = get_data_uuid(struct_key)
@@ -136,7 +136,7 @@ class node_mixin(_mixin.node):
             if val is _unset:
                 raise Exception(f'Unset Context Error with key: {key}, node: {self.context.Repr()}', )
 
-            state_key =+ get_data_uuid(val)
+            state_key = struct_key + get_data_uuid(val)
 
         return get_data_uuid(state_key)
 
@@ -157,16 +157,16 @@ class node_mixin(_mixin.node):
         deps = tuple()
 
         _struct_key, _deps = self.in_sockets.init_state_components()
-        struct_key =+ _struct_key
-        deps =+ _deps
+        struct_key = struct_key + _struct_key
+        deps = deps + _deps
         
         _struct_key, _deps = self.side_sockets.init_state_components()
-        struct_key =+ _struct_key
-        deps =+ _deps
+        struct_key = struct_key + _struct_key
+        deps = deps + _deps
 
         # _struct_key = self.out_sockets.local_state_key()
         # struct_key =+ _struct_key
-        # # deps =+ _deps
+        # # deps = deps + _deps
 
         deps = self.change_context_dep_keys(tuple(sorted(list(set(deps)))))
         struct_key = get_data_uuid(struct_key)
@@ -176,7 +176,7 @@ class node_mixin(_mixin.node):
 
         return struct_key, deps
     
-    def change_context_dep_keys(deps:dep_keys)->dep_keys:
+    def change_context_dep_keys(self,deps:dep_keys)->dep_keys:
         ''' Contextual add/remove dependencies from passing downstream
         Zone-Start should add    a key based on the zone set
         Zone-End   should remove a key based on the zone set

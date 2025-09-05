@@ -305,14 +305,19 @@ class subgraph_mixin(_mixin.subgraph):
     def execute(self, target, backwards_context=None):
         # if backwards_context is None:
         #     backwards_context = Backwards_Context()
-        return target.execute()
+        if backwards_context is None:
+            backwards_context = BackwardsContextType()
+        t = Backwards_Context.set(backwards_context)
+        res =  target.execute()
+        Backwards_Context.reset(t)
+        return res
         #Task Discovery Error handling, Diff & upload to manager in another module
 
     @hook_trigger('compile')
     @debug_print_wrapper(0)
     def compile(self,target, exec_subgraph, backwards_context=None):
         if backwards_context is None:
-            backwards_context = BackwardsContextType
+            backwards_context = BackwardsContextType()
 
         t = Backwards_Context.set(backwards_context)
         target.compile(exec_subgraph,)
