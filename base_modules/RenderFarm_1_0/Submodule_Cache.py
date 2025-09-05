@@ -92,12 +92,13 @@ class Cache_Item(BaseModel):
 
     # def references(self,Cache):...
 
-current_cache           = ContextVar('current_cache', default = None) 
 cache_future_asc_public = ContextVar('cache_future_asc_public', default = None)
 cache_future_asc_local  = ContextVar('cache_future_asc_local', default = None)
 
 cache_cache_folders     = ContextVar('cache_cache_folders', default = None)
 cache_temp_folders      = ContextVar('cache_temp_folders',  default = None)
+
+from .Env_Variables import CACHE
 
 class Cache():
     ''' Shallow container for all cache_items, handles cache retrieval w/a
@@ -120,8 +121,19 @@ class Cache():
     # def sync_item():
     #     ''' sync item from the manager class '''
 
-    def create_cache_asc(self):
-        raise NotImplementedError('')
+    def create_cache_asc(self, cache_item, public=tuple(), local=tuple()):
+        #For now making all public,
+        local_key = None
+        for k,v in self.caches.items():
+            if v is cache_item:
+                local_key = k
+        if not local_key:
+            raise Exception('Local Key not found!')
+
+        for key_asc in public:
+            self.itenerary[key_asc] = local_key
+        # for key_asc in local:
+        #     self.itenerary[key_asc] = local_key
 
     @classmethod
     def create_wrapper(self,func):
@@ -155,7 +167,7 @@ class Cache():
 
             if (res:=self.cache_search_key(state_key)) is _unset:
                 #execute if not in cache            
-                res = func(*args,**kwargs)
+                res = func(self,*args,**kwargs)
 
             if isinstance(res,Cache_Item):
                 cache_item = res
@@ -164,8 +176,7 @@ class Cache():
 
             elif self.create_cache:
                 cache_item = self.create_cache()
-                global current_cache
-                current_cache.get().add_cache(cache_item)
+                CACHE.get().add_cache(state_key,cache_item)
             
             CACHE.get().create_cache_asc(cache_item,
                         public = cache_future_asc_public.get(), 
@@ -209,7 +220,7 @@ class Cache():
             else:
                 #execute if not in cache            
                 self.asscociate_key(state_key)
-                gen = func(*args,**kwargs)
+                gen = func(self,*args,**kwargs)
 
                 for res in gen:
                     if res is _unset:
@@ -222,8 +233,7 @@ class Cache():
 
                     if self.create_cache:
                         cache_item = self.create_cache()
-                        global current_cache
-                        current_cache.get().add_cache(cache_item)
+                        CACHE.get().add_cache(state_key,cache_item)
                     break
                 if res is _unset:
                     raise Exception(f'A resulting value cannot be unset! {self.__module__}.{self.__name__} : {func}')
@@ -245,13 +255,25 @@ class Cache():
         return wrapper
 
 
+    def search(self,key):
+        if self.itenerary.get(key, None):
+            key = self.itenerary[key]
+        return self.caches.get(key,_unset)
+
+
+    def add_cache(self,original_key, cache_item:Cache_Item):
+        self.caches[original_key] = cache_item
+        self.itenerary[original_key] = original_key
 
 class Cache_IO():
     ''' Inherited method class on each node for ease of access to caching functionality '''
     
     def cache_search(self, *args, asc_key = True):
         ''' Search itenerary of current cache object with UUIDs of argument inputs '''
-        return self.cache_search_key(get_data_uuid(*args), asc_key = asc_key)
+        key = ''
+        for x in args:
+            key = key + get_data_uuid(key)
+        return self.cache_search_key(key, asc_key = asc_key)
     
     def cache_search_key(self, key:str, asc_key = True):
         assert isinstance(key, str)
@@ -300,7 +322,7 @@ class socket_mixin(_mixin.socket):
 
 class socket_collection_mixin(_mixin.socket_collection):
     def import_cache_data(self,data):
-        for k,v in data:
+        for k,v in data.items():
             self[k].import_cache_data(v)
         
     def export_cache_data(self):
@@ -313,11 +335,11 @@ class socket_collection_mixin(_mixin.socket_collection):
 class node_mixin(Cache_IO,_mixin.node): 
     
     @hook(event = 'compile', mode = 'wrap', key = '_compile_cache_wrap_')
-    def _compile_cache_wrap_(self,func):
+    def _compile_cache_wrap_(self,func,*args,**kwargs):
         return Cache.create_wrapper(func)
     
     @hook(event = 'execute', mode = 'wrap', key = '_execute_cache_wrap_')
-    def _execute_cache_wrap_(self,func):
+    def _execute_cache_wrap_(self,func,*args,**kwargs):
         return Cache.create_wrapper(func)
 
     def intake_cache(self,cache_item:Cache_Item):
