@@ -6,6 +6,8 @@ from contextlib                      import contextmanager
 from ...base_modules.Execution_Types import _item,_mixin
 from .Env_Variables import CACHE
 
+from ...models.struct_hook_base import hook
+
 from pydantic    import BaseModel as pydantic_Basemodel
 from inspect     import isgeneratorfunction
 from contextvars import ContextVar
@@ -309,6 +311,15 @@ class socket_collection_mixin(_mixin.socket_collection):
         
 
 class node_mixin(Cache_IO,_mixin.node): 
+    
+    @hook(event = 'compile', mode = 'wrap', key = '_compile_cache_wrap_')
+    def _compile_cache_wrap_(self,func):
+        return Cache.create_wrapper(func)
+    
+    @hook(event = 'execute', mode = 'wrap', key = '_execute_cache_wrap_')
+    def _execute_cache_wrap_(self,func):
+        return Cache.create_wrapper(func)
+
     def intake_cache(self,cache_item:Cache_Item):
         ''' Apply cache to current datastructure '''
         return self.out_sockets.import_cache_data(cache_item.out_sockets)

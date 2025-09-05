@@ -52,7 +52,6 @@ class meta_test_socket(item.socket):
     Version       = '1.0'
     Value_Type    = item.socket|int
     Default_Value = 0
-    ...    
 
 class meta_test_add_node(item.meta_node):
     ''' Add two input sockets '''
