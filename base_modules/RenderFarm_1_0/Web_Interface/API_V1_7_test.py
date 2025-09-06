@@ -134,9 +134,6 @@ class A_Foreign(Foreign_Entity_Base, DB_Base):
     def export_auth(self,)->tuple:
         return tuple()
 
-    
-
-
 
 class B_Local(Local_Entity_Base):
     Entity_Type = Entity_Types.B
@@ -224,10 +221,14 @@ app_b  = inst_b.attach_to_app(FastAPI())
 
 
 
+
 @app_a.get("/url-list")
+def get_all_urls():
+    url_list = [{"path": route.path, "name": route.name} for route in app_a.routes]
+    return url_list
 @app_b.get("/url-list")
 def get_all_urls():
-    url_list = [{"path": route.path, "name": route.name} for route in app.routes]
+    url_list = [{"path": route.path, "name": route.name} for route in app_b.routes]
     return url_list
 
 #python -m uvicorn Web_Interface.API_V1_7_test:app_a --port 4000 --reload
