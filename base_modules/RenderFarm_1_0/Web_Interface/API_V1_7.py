@@ -12,7 +12,7 @@ from functools   import partial, wraps
 from fastapi     import FastAPI, APIRouter,Request, Depends, Response
 from copy        import copy
 from typing      import Self, Any
-
+from enum        import Enum
 class _UNSET  : ''' Static Unset local to file '''
 # class LOCAL   : ''' Internal for type Anno '''
 # class FOREIGN : ''' External for type Anno '''
@@ -314,7 +314,8 @@ class Foreign_Entity_Base:
             assert hasattr(cls, 'matches_header' )
             assert hasattr(cls, 'export_auth'   )
     is_local      = False
-
+    _interactive  = True
+    
     export_header  : FunctionType
     intake_header  : FunctionType
     matches_header : FunctionType
@@ -405,12 +406,9 @@ class Local_Entity_Base():
         _INIT_ORIGIN.reset(t)
 
     def attach_to_app(self, app:FastAPI):
-        for v in Interface_Base._iter_insts(v):
+        for v in Interface_Base._iter_insts(self):
             v._register(app)
         return app
-    
-    def make_active(self):
-        ACTIVE_ENTITY.set(self)
     
     def Ensure_Req_Entity():
         ''' Ensure DB Connection, return foreign item '''

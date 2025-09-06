@@ -73,7 +73,7 @@ class A_Local(Local_Entity_Base):
     def export_header(self, to_entity:Foreign_Entity_Base)->dict:
         return {'Role':self.Entity_Type.value}
     
-    def __init__(self, engine, SessionMaker, session):
+    def __init__(self, db_url):
         super().__init__()
 
         self.db_url  = db_url
@@ -82,10 +82,21 @@ class A_Local(Local_Entity_Base):
         self.session = self.Session()
         DB_Base.metadata.create_all(self.engine)
 
+    Interface = AB_Interface
+
 
 class A_Foreign(Foreign_Entity_Base, DB_Base):
     __tablename__ = Entity_Types.A.value 
     Entity_Type   = Entity_Types.A
+
+    def __init__(self,host,port):
+        self.host = host
+        self.port = port
+        # self.id  = host + ':' +port
+
+    id  = Column(Integer, primary_key=True)
+    host = Column(String)
+    port = Column(String)
 
     def export_header(self, from_entity:Local_Entity_Base)->dict:
         return {}
@@ -100,7 +111,8 @@ class A_Foreign(Foreign_Entity_Base, DB_Base):
         return tuple()
 
     
-    Interface = AB_Interface
+    _Interface = AB_Interface
+
 
 
 class B_Local(Local_Entity_Base):
@@ -117,10 +129,22 @@ class B_Local(Local_Entity_Base):
         self.session = self.Session()
         DB_Base.metadata.create_all(self.engine)
 
+    Interface = AB_Interface
+
 
 class B_Foreign(Foreign_Entity_Base, DB_Base):
     __tablename__ = Entity_Types.B.value 
     Entity_Type   = Entity_Types.B
+
+    def __init__(self,host,port):
+        self.host = host
+        self.port = port
+        # self.id  = host + ':' +port
+
+    id  = Column(Integer, primary_key=True)
+    host = Column(String)
+    port = Column(String)
+
 
     def export_header(self, from_entity:Local_Entity_Base)->dict:
         return {}
@@ -134,7 +158,7 @@ class B_Foreign(Foreign_Entity_Base, DB_Base):
     def export_auth(self,)->tuple:
         return tuple()
     
-    Interface = AB_Interface
+    _Interface = AB_Interface
 
 
 
@@ -143,8 +167,8 @@ from fastapi import FastAPI
 db_url = 'sqlite:///database_A.db'
 inst_a = A_Local(db_url)
 inst_a.session.add(B_Foreign(
-    host = '',
-    port = '',
+    host = '127.00.0.1',
+    port = '4001',
 ))
 inst_a.session.commit()
 app_a  = inst_a.attach_to_app(FastAPI())
@@ -153,8 +177,8 @@ app_a  = inst_a.attach_to_app(FastAPI())
 db_url = 'sqlite:///database_B.db'
 inst_b = B_Local(db_url)
 inst_b.session.add(A_Foreign(
-    host = '',
-    port = '',
+    host = '127.00.0.1',
+    port = '4000',
 ))
 inst_b.session.commit()
 app_b  = inst_b.attach_to_app(FastAPI())
@@ -168,3 +192,6 @@ app_b  = inst_b.attach_to_app(FastAPI())
 def get_all_urls():
     url_list = [{"path": route.path, "name": route.name} for route in app.routes]
     return url_list
+
+#python -m uvicorn Web_Interface.API_V1_7_test:app_a --port 4000 --reload
+#python -m uvicorn Web_Interface.API_V1_7_test:app_b --port 4001 --reload
