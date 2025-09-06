@@ -8,13 +8,17 @@ from sqlalchemy     import (Column              ,
                             Integer             ,
                             String              ,
                             create_engine       ,
-                            Table               )
+                            Table               ,
+                            Engine as EngineType,
+                            )
 
 from sqlalchemy.orm import (declarative_base    , 
                             relationship        , 
                             sessionmaker        , 
                             Mapped              , 
-                            mapped_column       )
+                            mapped_column       ,
+                            Session as SessionType
+                            )
 
 
 from .API_V1_7      import (Interface_Base      , 
@@ -22,6 +26,8 @@ from .API_V1_7      import (Interface_Base      ,
                             Local_Entity_Base   ,
                             OL_IO               )
 
+
+from fastapi import Request
 from enum import Enum
 
 DB_Base = declarative_base()
@@ -69,12 +75,12 @@ class AB_Interface(Interface_Base):
 
 class A_Local(Local_Entity_Base):
     Entity_Type = Entity_Types.A
+    Interface = AB_Interface
 
-    def export_header(self, to_entity:Foreign_Entity_Base)->dict:
-        return {'Role':self.Entity_Type.value}
-    
-    def __init__(self, db_url):
+    def __init__(self, unique_id, db_url):
         super().__init__()
+
+        self.unique_id = unique_id
 
         self.db_url  = db_url
         self.engine  = create_engine(db_url)
@@ -82,12 +88,29 @@ class A_Local(Local_Entity_Base):
         self.session = self.Session()
         DB_Base.metadata.create_all(self.engine)
 
-    Interface = AB_Interface
+    db_url  : str
+    engine  : EngineType
+    Session : SessionType #Base Type
+    session : SessionType #Instance
 
+    def export_header(self, to_entity:Foreign_Entity_Base)->dict:
+        return {'Role':self.Entity_Type.value, 'UID' : self.unique_id}
+
+    def Find_Entity_From_Req(self, request:Request):
+        ''' Ensure DB Connection, return foreign item '''
+        for Table in [A_Foreign,B_Foreign]:
+            for row in self.session.query(Table).execute().fetchall():
+                if row.matches_request(request, request.headers):
+                    row.intake_request(request, request.headers)
+                    return row
+        raise NotImplementedError('Should return a unique')
+    
 
 class A_Foreign(Foreign_Entity_Base, DB_Base):
-    __tablename__ = Entity_Types.A.value 
+    __tablename__ = Entity_Types.A.value + '_Entity'
     Entity_Type   = Entity_Types.A
+    
+    _Interface = AB_Interface
 
     def __init__(self,host,port):
         self.host = host
@@ -101,40 +124,55 @@ class A_Foreign(Foreign_Entity_Base, DB_Base):
     def export_header(self, from_entity:Local_Entity_Base)->dict:
         return {}
     
-    def intake_header(self, request, header):
+    def intake_request(self, request, header):
         pass
 
-    def matches_header(self,header):
-        return header.get('Role', '') == self.Entity_Type.value
+    def matches_request(self,request:Request, headers:Request.headers):
+        return all(headers.get('Role', default = '') == self.Entity_Type.value,
+                   headers.get('UID',  default = '') == self.unique_id)
 
     def export_auth(self,)->tuple:
         return tuple()
 
     
-    _Interface = AB_Interface
 
 
 
 class B_Local(Local_Entity_Base):
     Entity_Type = Entity_Types.B
-
-    def export_header(self, to_entity:Foreign_Entity_Base)->dict:
-        return {'Role':self.Entity_Type.value}
-
-    def __init__(self, db_url):
+    Interface   = AB_Interface
+    
+    def __init__(self, unique_id, db_url):
         super().__init__()
+
+        self.unique_id = unique_id
         self.db_url  = db_url
         self.engine  = create_engine(db_url)
         self.Session = sessionmaker(bind=self.engine)
         self.session = self.Session()
         DB_Base.metadata.create_all(self.engine)
 
-    Interface = AB_Interface
+    db_url  : str
+    engine  : EngineType
+    Session : SessionType #Base Type
+    session : SessionType #Instance
 
+    def export_header(self, to_entity:Foreign_Entity_Base)->dict:
+        return {'Role':self.Entity_Type.value, 'UID' : self.unique_id}
+
+    def Find_Entity_From_Req(self, request:Request):
+        ''' Ensure DB Connection, return foreign item '''
+        for Table in [A_Foreign,B_Foreign]:
+            for row in self.session.query(Table).execute().fetchall():
+                if row.matches_request(request, request.headers):
+                    row.intake_request(request, request.headers)
+                    return row
+        raise NotImplementedError('Should return a unique')
 
 class B_Foreign(Foreign_Entity_Base, DB_Base):
-    __tablename__ = Entity_Types.B.value 
+    __tablename__ = Entity_Types.B.value + '_Entity'
     Entity_Type   = Entity_Types.B
+    _Interface    = AB_Interface
 
     def __init__(self,host,port):
         self.host = host
@@ -145,27 +183,26 @@ class B_Foreign(Foreign_Entity_Base, DB_Base):
     host = Column(String)
     port = Column(String)
 
-
     def export_header(self, from_entity:Local_Entity_Base)->dict:
         return {}
     
-    def intake_header(self, request, header):
+    def intake_request(self, request, header):
         pass
 
-    def matches_header(self,header):
-        return header.get('Role', '') == self.Entity_Type.value
+    def matches_request(self,request:Request, headers:Request.headers):
+        return all(headers.get('Role', default = '') == self.Entity_Type.value,
+                   headers.get('UID',  default = '') == self.unique_id)
 
     def export_auth(self,)->tuple:
         return tuple()
     
-    _Interface = AB_Interface
 
 
 
 from fastapi import FastAPI
 
 db_url = 'sqlite:///database_A.db'
-inst_a = A_Local(db_url)
+inst_a = A_Local('TestEntityA',db_url)
 inst_a.session.add(B_Foreign(
     host = '127.00.0.1',
     port = '4001',
@@ -175,7 +212,7 @@ app_a  = inst_a.attach_to_app(FastAPI())
 
 
 db_url = 'sqlite:///database_B.db'
-inst_b = B_Local(db_url)
+inst_b = B_Local('TestEntityB',db_url)
 inst_b.session.add(A_Foreign(
     host = '127.00.0.1',
     port = '4000',

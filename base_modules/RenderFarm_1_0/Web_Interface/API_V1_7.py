@@ -30,9 +30,9 @@ _CONNECTION_TARGET    = ContextVar('_CONNECTION_TARGET' , default = None)
 _INIT_ORIGIN          = ContextVar('_INIT_ORIGIN'       , default = None) #Init origin for interface instances. Simplfies a bit.
 
 
-# async def Ensure_Reqs_Entity(Incoming_Req):
+# async def Find_Entity_From_Req(Incoming_Req):
 #     assert ACTIVE_ENTITY
-#     return await ACTIVE_ENTITY.get().Ensure_Reqs_Entity(Incoming_Req)
+#     return await ACTIVE_ENTITY.get().Find_Entity_From_Req(Incoming_Req)
     
 
 
@@ -236,10 +236,10 @@ class _OL_Container():
         sig = _sig(func)
         
         if not iscoroutinefunction(func):
-            async def wrapped(request:Request, _ext_entity =Depends(self._container.root_entity.Ensure_Reqs_Entity),*args,**kwargs):
+            async def wrapped(request:Request, _ext_entity =Depends(self._container.root_entity.Find_Entity_From_Req),*args,**kwargs):
                 return self(mode, _ext_entity, request, *args,**kwargs)
         else:
-            def wrapped(request:Request, _ext_entity =Depends(self._container.root_entity.Ensure_Reqs_Entity),*args,**kwargs):
+            def wrapped(request:Request, _ext_entity =Depends(self._container.root_entity.Find_Entity_From_Req),*args,**kwargs):
                 return self(mode, _ext_entity, request, *args,**kwargs)
 
         #Depends(_async_...) as a bind to primary thread, trying to ensure syncronous execution
@@ -308,11 +308,11 @@ class Foreign_Entity_Base:
         assert hasattr(cls, '__tablename__' )
         assert hasattr(cls, 'Entity_Type' )
         if cls._interactive:
-            assert hasattr(cls, '_Interface'    )
-            assert hasattr(cls, 'export_header' )
-            assert hasattr(cls, 'intake_header' )
-            assert hasattr(cls, 'matches_header' )
-            assert hasattr(cls, 'export_auth'   )
+            assert hasattr(cls, '_Interface'      )
+            assert hasattr(cls, 'export_header'   )
+            assert hasattr(cls, 'intake_request'  )
+            assert hasattr(cls, 'matches_request' )
+            assert hasattr(cls, 'export_auth'     )
     is_local      = False
     _interactive  = True
     
@@ -410,9 +410,9 @@ class Local_Entity_Base():
             v._register(app)
         return app
     
-    def Ensure_Req_Entity():
+    def Find_Entity_From_Req(self, request:Request):
         ''' Ensure DB Connection, return foreign item '''
-        raise NotImplementedError('Still workign towards this!')
+        raise NotImplementedError('Implament in Local_Class!')
 
 class Interface_Base():
     Router_Subpath : str = ''
