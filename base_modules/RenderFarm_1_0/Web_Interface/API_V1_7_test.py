@@ -73,6 +73,16 @@ class A_Local(Local_Entity_Base):
     def export_header(self, to_entity:Foreign_Entity_Base)->dict:
         return {'Role':self.Entity_Type.value}
     
+    def __init__(self, engine, SessionMaker, session):
+        super().__init__()
+
+        self.db_url  = db_url
+        self.engine  = create_engine(db_url)
+        self.Session = sessionmaker(bind=self.engine)
+        self.session = self.Session()
+        DB_Base.metadata.create_all(self.engine)
+
+
 class A_Foreign(Foreign_Entity_Base, DB_Base):
     __tablename__ = Entity_Types.A.value 
     Entity_Type   = Entity_Types.A
@@ -99,6 +109,15 @@ class B_Local(Local_Entity_Base):
     def export_header(self, to_entity:Foreign_Entity_Base)->dict:
         return {'Role':self.Entity_Type.value}
 
+    def __init__(self, db_url):
+        super().__init__()
+        self.db_url  = db_url
+        self.engine  = create_engine(db_url)
+        self.Session = sessionmaker(bind=self.engine)
+        self.session = self.Session()
+        DB_Base.metadata.create_all(self.engine)
+
+
 class B_Foreign(Foreign_Entity_Base, DB_Base):
     __tablename__ = Entity_Types.B.value 
     Entity_Type   = Entity_Types.B
@@ -118,18 +137,34 @@ class B_Foreign(Foreign_Entity_Base, DB_Base):
     Interface = AB_Interface
 
 
-class Connection_Pool():
-    ''' Dedup interface for entities '''
-TODO
-    def __init__():
-        ...    
 
-db_url = 'sqlite:///database.db'
-engine  = create_engine(db_url)
-Session = sessionmaker(bind=engine)
-session = Session()
+from fastapi import FastAPI
 
-DB_Base.metadata.create_all(engine)
-
+db_url = 'sqlite:///database_A.db'
+inst_a = A_Local(db_url)
+inst_a.session.add(B_Foreign(
+    host = '',
+    port = '',
+))
+inst_a.session.commit()
+app_a  = inst_a.attach_to_app(FastAPI())
 
 
+db_url = 'sqlite:///database_B.db'
+inst_b = B_Local(db_url)
+inst_b.session.add(A_Foreign(
+    host = '',
+    port = '',
+))
+inst_b.session.commit()
+app_b  = inst_b.attach_to_app(FastAPI())
+
+#On app start, that one must be made active.
+
+
+
+@app_a.get("/url-list")
+@app_b.get("/url-list")
+def get_all_urls():
+    url_list = [{"path": route.path, "name": route.name} for route in app.routes]
+    return url_list

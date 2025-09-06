@@ -9,7 +9,7 @@ from contextvars import ContextVar
 from inspect     import isclass, iscoroutinefunction, signature as _sig
 import requests
 from functools   import partial, wraps
-from fastapi     import FastAPI, APIRouter,Request, Depends
+from fastapi     import FastAPI, APIRouter,Request, Depends, Response
 from copy        import copy
 from typing      import Self, Any
 
@@ -25,8 +25,15 @@ class Command(Enum):
 
 # BASE = declarative_base()
 
-CONNECTION_TARGET = ContextVar('CONNECTION_TARGET', default = None)
-INIT_ORIGIN       = ContextVar('INIT_ORIGIN',       default = None) #Init origin for interface instances. Simplfies a bit.
+# ACTIVE_ENTITY         = ContextVar('ACTIVE_ENTITY'      , default = None)
+_CONNECTION_TARGET    = ContextVar('_CONNECTION_TARGET' , default = None)
+_INIT_ORIGIN          = ContextVar('_INIT_ORIGIN'       , default = None) #Init origin for interface instances. Simplfies a bit.
+
+
+# async def Ensure_Reqs_Entity(Incoming_Req):
+#     assert ACTIVE_ENTITY
+#     return await ACTIVE_ENTITY.get().Ensure_Reqs_Entity(Incoming_Req)
+    
 
 
 class _def_dict_list(dict):
@@ -207,32 +214,32 @@ class _OL_Container():
             raise Exception(f'{self} SETUP ERROR: "{key}" already in use by {getattr(self,key)}' )
         setattr(self,key,func)
 
-    def _register(self, router, entity_pool, args=None, kwargs=None):
+    def _register(self, router, args=None, kwargs=None):
         ''' Registers reciever functions to contextual entity pool '''
         for mode, func_list in self._reciever_functions.items():
             face_ol_item : _ol_func_item_recieve = func_list[0] #First func in list is used to define the interface.
             # _args,_kwargs = face_func._api_route_args(self._container._root_entity, self._container, self, router, *args, **kwargs)
-            _args,_kwargs = self._api_router_args_(face_ol_item, entity_pool, mode, args, kwargs)
+            _args,_kwargs = self._api_router_args_(face_ol_item, mode, args, kwargs)
             router.add_api_route(*_args,**_kwargs)
 
-    def _api_router_args_(self, face_ol_item:_ol_func_item_recieve, entity_pool, mode:Enum, args=None, kwargs=None)->tuple[tuple,dict]:
+    def _api_router_args_(self, face_ol_item:_ol_func_item_recieve, mode:Enum, args=None, kwargs=None)->tuple[tuple,dict]:
         if kwargs is None: kwargs = {}
         if args   is None: args   = tuple()
 
-        wrapped = self._api_route_wrapped_func_(face_ol_item, mode, entity_pool)
+        wrapped = self._api_route_wrapped_func_(face_ol_item, mode)
         path    = self._path
 
         return (path, wrapped) + self._f_args + args, {'methods':[mode.value]} | self._f_kwargs | kwargs
 
-    def _api_route_wrapped_func_(self, face_ol_item:_ol_func_item_recieve, mode, entity_pool)->FunctionType:
+    def _api_route_wrapped_func_(self, face_ol_item:_ol_func_item_recieve, mode)->FunctionType:
         func = face_ol_item.func
         sig = _sig(func)
         
         if not iscoroutinefunction(func):
-            async def wrapped(request:Request, _ext_entity =Depends(entity_pool._async_ensure_incoming_entity_),*args,**kwargs):
+            async def wrapped(request:Request, _ext_entity =Depends(self._container.root_entity.Ensure_Reqs_Entity),*args,**kwargs):
                 return self(mode, _ext_entity, request, *args,**kwargs)
         else:
-            def wrapped(request:Request, _ext_entity =Depends(entity_pool._async_ensure_incoming_entity_),*args,**kwargs):
+            def wrapped(request:Request, _ext_entity =Depends(self._container.root_entity.Ensure_Reqs_Entity),*args,**kwargs):
                 return self(mode, _ext_entity, request, *args,**kwargs)
 
         #Depends(_async_...) as a bind to primary thread, trying to ensure syncronous execution
@@ -313,6 +320,26 @@ class Foreign_Entity_Base:
     matches_header : FunctionType
     export_auth    : FunctionType
 
+    host : str
+    port : str
+    mode : str = 'http://'
+
+    def _cast_responce(self, res : requests.Response)->Request:
+        if isinstance(res,Response): return res
+        return Response(
+            content     = res.content,
+            status_code = res.status_code,
+            headers     = res.headers,
+            # media_type  = res.media_type,
+        )
+
+    def _domain(self)->str:
+        assert not (self.mode is None)
+        assert not (self.host is None)
+        assert not (self.port is None)
+
+        return self.mode + self.host+':'+self.port
+
     def get(self, from_entity, path:str, _raw_responce=False, **kwargs):
         header = self.export_header(from_entity) | from_entity.export_header(self)
         auth   = self.export_auth(from_entity) 
@@ -350,17 +377,21 @@ class Foreign_Entity_Base:
 
     @contextmanager
     def Interface(self):
-        t = CONNECTION_TARGET.set(self)
+        t = _CONNECTION_TARGET.set(self)
         yield self._interface
-        CONNECTION_TARGET.reset(t)
+        _CONNECTION_TARGET.reset(t)
 
     #TODO: Convert to async requests.
 
 class Local_Entity_Base():
     ''' Local Entity base class, registration as app and container for interacting with external connections '''
     export_header : FunctionType
-    As_App        : FunctionType
+    attach_to_app : FunctionType
     is_local      = True
+
+    engine       : ...
+    SessionMaker : ...
+    session      : ...
 
     def __init_subclass__(cls):
         assert hasattr(cls, 'Entity_Type'   )
@@ -369,14 +400,21 @@ class Local_Entity_Base():
 
     
     def __init__(self):
-        t = INIT_ORIGIN.set(self)
+        t = _INIT_ORIGIN.set(self)
         _OL_Container._on_new(self)
-        INIT_ORIGIN.reset(t)
+        _INIT_ORIGIN.reset(t)
 
     def attach_to_app(self, app:FastAPI):
         for v in Interface_Base._iter_insts(v):
             v._register(app)
         return app
+    
+    def make_active(self):
+        ACTIVE_ENTITY.set(self)
+    
+    def Ensure_Req_Entity():
+        ''' Ensure DB Connection, return foreign item '''
+        raise NotImplementedError('Still workign towards this!')
 
 class Interface_Base():
     Router_Subpath : str = ''
@@ -386,19 +424,19 @@ class Interface_Base():
     @property
     def root_entity(self):
         if self._foreign_interface:
-            return CONNECTION_TARGET.get()
+            return _CONNECTION_TARGET.get()
         else:
             return self._root_entity
     
     def __init__(self, parent):
-        self._origin = INIT_ORIGIN.get()
+        self._origin = _INIT_ORIGIN.get()
         self._parent = parent
         _OL_Container._on_new(self)
         Interface_Base._on_new(self)
         
     @classmethod
     def foreign_platonic(cls):
-        ''' Set mode of children to be interface send-only and self.root to get context CONNECTION_TARGET'''
+        ''' Set mode of children to be interface send-only and self.root to get context _CONNECTION_TARGET'''
         inst = cls()
         inst._foreign_interface = True
         return inst
@@ -433,16 +471,16 @@ class Interface_Base():
     def _create_local_router(self):
         return APIRouter()
     
-    def _attach_local_router(self,local_router:APIRouter,entity_pool,args=None,kwargs=None):        
+    def _attach_local_router(self,local_router:APIRouter,args=None,kwargs=None):        
         for ol_func in _OL_Container._iter_insts(self):
-            ol_func._register(local_router,entity_pool,args,kwargs)
+            ol_func._register(local_router,args,kwargs)
         for subinterface in Interface_Base._iter_insts(self):
             subinterface : Self
-            subinterface._register(local_router,entity_pool,args,kwargs)
+            subinterface._register(local_router,args,kwargs)
         return local_router
     
-    def _register(self, parent_router, entity_pool, args=None, kwargs=None):
-        local_router = self._attach_local_router(self._create_local_router(),entity_pool,args,kwargs)
+    def _register(self, parent_router, args=None, kwargs=None):
+        local_router = self._attach_local_router(self._create_local_router(),args,kwargs)
         parent_router.include_router(local_router,prefix = getattr(self,'Router_Subpath', ''))
         return parent_router
 
@@ -496,9 +534,9 @@ if __name__ == '__main__':
         
         @contextmanager
         def Interface(self):
-            t = CONNECTION_TARGET.set(self)
+            t = _CONNECTION_TARGET.set(self)
             yield self._interface
-            CONNECTION_TARGET.reset(t)
+            _CONNECTION_TARGET.reset(t)
 
         def export_header(self,target_entity)->dict:
             ''' Exports information about self to be used in the header of a quiry '''
