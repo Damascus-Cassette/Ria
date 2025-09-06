@@ -37,10 +37,37 @@ class Entity_Types(Enum):
     B = 'B'
     UNDEC = 'UNDEC'
 
-class UNDEC_Foreign(Foreign_Entity_Base):
+class UNDEC_Foreign(Foreign_Entity_Base,DB_Base):
     __tablename__ = Entity_Types.UNDEC.value 
     _interactive  = False
     Entity_Type   = Entity_Types.UNDEC
+
+    def __init__(self,host,port):
+        self.host = host
+        self.port = port
+        # self.id  = host + ':' +port
+
+    id  = Column(Integer, primary_key=True)
+    host = Column(String)
+    port = Column(String)
+
+    def __repr__(self):
+        return f'< {self.Entity_Type} | {self.host}:{self.port} @ row {self.id} > '
+
+    def matches_request(self, request:Request, headers:Request.headers):
+        return all([
+            str(self.host) == str(request.client.host),
+            # str(self.port) == str(request.client.port),
+        ])
+
+    def intake_request(self, request:Request, headers:Request.headers):
+        self.port = request.client.port
+        
+    
+    @classmethod
+    def New_From_Request(cls, request):
+        return cls(request.client.host, request.client.port)
+
 
 class AB_Interface(Interface_Base):
     
@@ -54,8 +81,9 @@ class AB_Interface(Interface_Base):
 
     @test.Get_Send()
     def _test(self, this_entity, requesting_entity, raw_path, *args,**kwargs): 
-        raise NotImplementedError('TODO')
         return this_entity.get(requesting_entity, raw_path, *args,**kwargs)
+        raise NotImplementedError('TODO')
+
 
 
     @OL_IO('/list_entities')
@@ -63,13 +91,22 @@ class AB_Interface(Interface_Base):
 
     @list_entities.Get_Recieve()
     def _list_entities(self, this_entity, other_entity):
-        raise NotImplementedError('TODO')
+        ''' Act as a table dump, keyed. Respond with requester as well '''
+        data = {}
+        data['_Requesting_Entity:'] = str(other_entity)
+        for table in [UNDEC_Foreign, A_Foreign, B_Foreign]:
+            _rows = []
+            rows = this_entity.session.query(table).all()
+            for row in rows:
+                _rows.append(str(row))
+            data[table.__tablename__] = _rows
+        return data            
 
     @list_entities.Get_Send()
     def _list_entities(self, this_entity, requesting_entity, raw_path, *args,**kwargs):
         raise NotImplementedError('TODO')
-        return this_entity.get(requesting_entity, raw_path, *args,**kwargs)
         #  return self._Root_Entity.entity_pool.ext_pool._web_repr_()
+        return this_entity.get(requesting_entity, raw_path, *args,**kwargs)
 
 
 
@@ -98,11 +135,31 @@ class A_Local(Local_Entity_Base):
 
     def Find_Entity_From_Req(self, request:Request):
         ''' Ensure DB Connection, return foreign item '''
-        for Table in [A_Foreign,B_Foreign]:
-            for row in self.session.query(Table).execute().fetchall():
-                if row.matches_request(request, request.headers):
-                    row.intake_request(request, request.headers)
-                    return row
+        #In full, make so that the UID and the Role are used to search
+        if incoming_role:=request.headers.get('role'):
+            table = ROLE_TABLE_MAPPING[incoming_role]
+            print('GOT ROLE:', incoming_role)
+        else:
+            table = UNDEC_Foreign
+        rows = self.session.query(table).all()
+        for row in rows:
+            if row.matches_request(request, request.headers):
+                row.intake_request(request, request.headers)
+                self.session.commit()
+                return row
+            
+        new_row = table.New_From_Request(request)
+        self.session.add(new_row)
+        self.session.commit()
+        return new_row
+
+        result = self.session.execute(table.select())
+
+        # for Table in [A_Foreign,B_Foreign]:
+        #     for row in self.session.query(Table).execute().fetchall():
+        #         if row.matches_request(request, request.headers):
+        #             row.intake_request(request, request.headers)
+        #             return row
         raise NotImplementedError('Should return a unique')
     
 
@@ -112,12 +169,13 @@ class A_Foreign(Foreign_Entity_Base, DB_Base):
     
     _Interface = AB_Interface
 
-    def __init__(self,host,port):
+    def __init__(self,unqiue_id,host,port):
+        self.id = unqiue_id
         self.host = host
         self.port = port
         # self.id  = host + ':' +port
 
-    id  = Column(Integer, primary_key=True)
+    id   = Column(String, primary_key=True)
     host = Column(String)
     port = Column(String)
 
@@ -128,12 +186,11 @@ class A_Foreign(Foreign_Entity_Base, DB_Base):
         pass
 
     def matches_request(self,request:Request, headers:Request.headers):
-        return all(headers.get('Role', default = '') == self.Entity_Type.value,
-                   headers.get('UID',  default = '') == self.unique_id)
+        return all([headers.get('Role', default = '') == self.Entity_Type.value,
+                   headers.get('UID',  default = '') == self.unique_id])
 
     def export_auth(self,)->tuple:
         return tuple()
-
 
 class B_Local(Local_Entity_Base):
     Entity_Type = Entity_Types.B
@@ -171,12 +228,13 @@ class B_Foreign(Foreign_Entity_Base, DB_Base):
     Entity_Type   = Entity_Types.B
     _Interface    = AB_Interface
 
-    def __init__(self,host,port):
+    def __init__(self,unqiue_id,host,port):
+        self.id = unqiue_id
         self.host = host
         self.port = port
         # self.id  = host + ':' +port
 
-    id  = Column(Integer, primary_key=True)
+    id  = Column(String, primary_key=True)
     host = Column(String)
     port = Column(String)
 
@@ -187,20 +245,25 @@ class B_Foreign(Foreign_Entity_Base, DB_Base):
         pass
 
     def matches_request(self,request:Request, headers:Request.headers):
-        return all(headers.get('Role', default = '') == self.Entity_Type.value,
-                   headers.get('UID',  default = '') == self.unique_id)
+        return all([headers.get('Role', default = '') == self.Entity_Type.value,
+                   headers.get('UID',  default = '') == self.unique_id])
 
     def export_auth(self,)->tuple:
         return tuple()
     
 
+ROLE_TABLE_MAPPING = {
+    A_Foreign.Entity_Type.value : A_Foreign,
+    B_Foreign.Entity_Type.value : B_Foreign,
+}
 
 
 from fastapi import FastAPI
 
 db_url = 'sqlite:///database_A.db'
 inst_a = A_Local('TestEntityA',db_url)
-inst_a.session.add(B_Foreign(
+inst_a.session.merge(B_Foreign(
+    unqiue_id = 'TestEntityB',
     host = '127.00.0.1',
     port = '4001',
 ))
@@ -210,7 +273,8 @@ app_a  = inst_a.attach_to_app(FastAPI())
 
 db_url = 'sqlite:///database_B.db'
 inst_b = B_Local('TestEntityB',db_url)
-inst_b.session.add(A_Foreign(
+inst_b.session.merge(A_Foreign(
+    unqiue_id= 'TestEntityA',
     host = '127.00.0.1',
     port = '4000',
 ))

@@ -159,6 +159,16 @@ class _OL_Container():
             if isinstance(v,cls):
                 if not (v._container is inst): 
                     setattr(inst,k,v._view(inst))
+    
+    @staticmethod
+    def _iter_insts(inst):
+        ''' Intialize Interface Structure '''
+        for k in [x for x in dir(inst) if not x.startswith('_')]:
+            v = getattr(inst,k)
+            if isclass(v):
+                continue
+            if issubclass(v.__class__,_OL_Container) or (v.__class__ is _OL_Container):
+                yield v
 
     def _view(self,container):
         new = copy(self)
@@ -403,6 +413,7 @@ class Local_Entity_Base():
     def __init__(self):
         t = _INIT_ORIGIN.set(self)
         _OL_Container._on_new(self)
+        Interface_Base._on_new(self)
         _INIT_ORIGIN.reset(t)
 
     def attach_to_app(self, app:FastAPI):
@@ -419,12 +430,13 @@ class Interface_Base():
     _foreign_interface = False
     _origin           = None
     _parent           : Self|Foreign_Entity_Base|Local_Entity_Base
+
     @property
     def root_entity(self):
         if self._foreign_interface:
             return _CONNECTION_TARGET.get()
         else:
-            return self._root_entity
+            return self._origin
     
     def __init__(self, parent):
         self._origin = _INIT_ORIGIN.get()
