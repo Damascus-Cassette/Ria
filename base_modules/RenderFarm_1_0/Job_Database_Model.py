@@ -130,10 +130,12 @@ class DB_Task():
     pickups         : Mapped['DB_task_pickups']      = relationship(back_populates='task_data')
     # banned_
 
+
 class Dependency_Links():
     __tablename__ = 'dependency_links'
     left  : Mapped[str] = mapped_column(ForeignKey("DB_Task.id"),nullable=True, primary_key=True)
     right : Mapped[str] = mapped_column(ForeignKey("DB_Task.id"),nullable=True, primary_key=True)
+
 
 class DB_task_pickups():
     ''' Each pickup of a task streams here '''
@@ -146,6 +148,7 @@ class DB_task_pickups():
     log_location   = Column(String) #Refering to a stream
     event_location = Column(String) #Refering to filtered events / communication between the two.
         #Location on the manager's side.
+
 
 class DB_Zone(Base):
     ''' Visual container class spawned by zones. (label,inst_id,meta_id) should be passed back by the zones in backwards context '''
