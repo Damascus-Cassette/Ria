@@ -18,10 +18,11 @@ class _UNSET  : ''' Static Unset local to file '''
 # class FOREIGN : ''' External for type Anno '''
 
 class Command(Enum):
-    GET    = 'GET'
-    POST   = 'POST'
-    PATCH  = 'PATCH'
-    DELETE = 'DELETE'
+    GET       = 'GET'
+    POST      = 'POST'
+    PATCH     = 'PATCH'
+    DELETE    = 'DELETE'
+    # WEBSOCKET = 'WEBSOCKET'
 
 # BASE = declarative_base()
 
@@ -71,7 +72,7 @@ class _method():
 
 class _ol_func_item():
     ''' Container for a function & it's evaluation '''
-
+    
     def __init__(self,func,key=None,filter=True):
         self.func          = func
         self.key           = key
@@ -85,9 +86,9 @@ class _ol_func_item():
     
     @classmethod
     def _wrapper(cls, parent:'_OL_Container', mode, key=None, *args,**kwargs):
-        ''' Wrapper to Intake info with resolve as:
-            un-nest w/a
-            return a _method[original_function] '''
+        ''' THis is the wrapper added on the interface itself, 
+        it returns the original function and adds the instance of this housing classe (_ol_func_item or inheritors) to the _OL_func_container        
+        '''
         def wrapper[F](func:F)->F:
 
             if isinstance(func,(_ol_func_item_deliver,_ol_func_item_recieve)):
@@ -105,6 +106,12 @@ class _ol_func_item():
 
 class _ol_func_item_recieve(_ol_func_item):
     ''' Ext -- calling -> Int '''
+
+    def __init__(self,func, key=None, filter=True, default_deliver=False):
+        self.func             = func
+        self.key              = key
+        self.filter           = filter
+        self.default_deliver  = default_deliver
 
     def __call__(self, *args, **kwds):
         return self.func(*args, **kwds)
@@ -213,9 +220,10 @@ class _OL_Container():
 
     def add_func_container(self,mode,func_item:_ol_func_item):
         if   isinstance(func_item,_ol_func_item_deliver):
+            if getattr(func_item, 'default_deliver'):
+                self._reciever_functions[mode].append( _ol_func_item_deliver(func= self._default_delivier(mode,func_item.func)  , key=func_item.key, filter=func_item.filter))
             return self._delivery_functions[mode].append(func_item)
         elif isinstance(func_item,_ol_func_item_recieve):
-            print('')
             return self._reciever_functions[mode].append(func_item)
         raise Exception('COULD NOT INTAKE', mode, func_item.func.__name__)
 
@@ -264,6 +272,21 @@ class _OL_Container():
         return wrapped
     
 
+    def _default_delivier(self,mode,o_func):
+        def default_delivier(self,this_entity,requesting_entity, raw_path, *args,**kwargs):
+            match mode:
+                case Command.GET:
+                    return this_entity.get(requesting_entity, raw_path, *args,**kwargs)
+                case Command.PATCH:
+                    return this_entity.patch(requesting_entity, raw_path, *args,**kwargs)
+                case Command.POST:
+                    return this_entity.post(requesting_entity, raw_path, *args,**kwargs)
+                case Command.DELETE:
+                    return this_entity.delete(requesting_entity, raw_path, *args,**kwargs)
+        default_delivier.__name__ = o_func.__name__
+        default_delivier.__doc__  = o_func.__doc__
+        return default_delivier
+
     @wraps(_ol_func_item_recieve._wrapper)
     def Get_Recieve(self,*args,**kwargs):
         return _ol_func_item_recieve._wrapper(parent=self,mode=Command.GET,*args,**kwargs)
@@ -297,17 +320,27 @@ class _OL_Container():
     def Delete_Send(self,*args,**kwargs):
         return _ol_func_item_deliver._wrapper(parent=self,mode=Command.DELETE,*args,**kwargs)
 
-    def Send_Get(self,sending_entity,*args,**kwargs):
-        return self(Command.GET, sending_entity, *args, **kwargs)
+
+    # @wraps(_ol_func_item_recieve._wrapper)
+    # def Websocket_Server(self,*args,**kwargs):        
+    #     return _ol_func_item_recieve._wrapper(parent=self,mode=Command.DELETE,*args,**kwargs)
+
+    # @wraps(_ol_func_item_deliver._wrapper)
+    # def Websocket_Client(self,*args,**kwargs):
+    #     return _ol_func_item_deliver._wrapper(parent=self,mode=Command.WEBSOCKET,*args,**kwargs)
+
+    # def Send_Get(self,sending_entity,*args,**kwargs):
+    #     return self(Command.GET, sending_entity, *args, **kwargs)
     
-    def Send_Post(self,sending_entity,*args,**kwargs):
-        return self(Command.POST, sending_entity, *args, **kwargs)
+    # def Send_Post(self,sending_entity,*args,**kwargs):
+    #     return self(Command.POST, sending_entity, *args, **kwargs)
     
-    def Send_Patch(self,sending_entity,*args,**kwargs):
-        return self(Command.PATCH, sending_entity, *args, **kwargs)
+    # def Send_Patch(self,sending_entity,*args,**kwargs):
+    #     return self(Command.PATCH, sending_entity, *args, **kwargs)
     
-    def Send_Delete(self,sending_entity,*args,**kwargs):
-        return self(Command.DELETE, sending_entity, *args, **kwargs)
+    # def Send_Delete(self,sending_entity,*args,**kwargs):
+    #     return self(Command.DELETE, sending_entity, *args, **kwargs)
+
 
 OL_IO = _OL_Container._wrapper
 
