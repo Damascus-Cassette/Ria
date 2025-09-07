@@ -29,21 +29,46 @@ if __name__ == "__main__":
 
 class Interface():
 
-    @IO_websocket('Path')
-    async def WS_Manager_to_Client(this_entity:Entity, other_entity:Entity, request : Request, websocket: WebSocket):
+    # @IO_websocket('Path')
+    # async def WS_Manager_to_Client(this_entity:Entity, other_entity:Entity, request : Request, websocket: WebSocket):
+    #     #https://www.starlette.io/websockets/
+    #     websocket.accept()
+    #     try:
+    #         while True:
+    #             a = await websocket.recieve_message()
+    #             intake_message(a)
+    #             if criteria.get():
+    #                 websocket.close()
+    #     except:
+    #         ...?
+    
+    Interface_Websocket = IO_websocket('Path')
+
+    @Interface_Websocket.manager.on_request() #Accept or deny
+    @Interface_Websocket.manager.on_open()    #After accepting
+    @Interface_Websocket.manager.on_message() #On message recieve
+    @Interface_Websocket.manager.on_error()   #On error in event loop
+    @Interface_Websocket.manager.on_close()   #Gracefully closing the event
+
+    @Interface_Websocket.manager.CustomManager()
+    async def WS_Manager_to_Client(self, events, this_entity:Entity, other_entity:Entity, request : Request, websocket: WebSocket):
+        ''' I could wrap the events, but this gives more control'''
         #https://www.starlette.io/websockets/
         websocket.accept()
+        events.on_load()
         try:
             while True:
                 a = await websocket.recieve_message()
+                events.on_load()
                 intake_message(a)
                 if criteria.get():
+                    events.on_load()
                     websocket.close()
         except:
             ...?
-    
+
     #Have this as as default with connection objects and inherit the hooks added bellow?
-    @WS_Manager_to_Client.CustomClient() #Evaluates header & interface, and all that like normal
+    @Interface_Websocket.client.CustomClient() #Evaluates header & interface, and all that like normal
     async def WS_Client_to_Manager(self,this_entity, other_entity, path, header, preset_kwargs):
         ws = websocket.WebSocketApp(path,
                                 header = header,
@@ -53,8 +78,9 @@ class Interface():
             #Meaning the foreign_entity holds the ws object.
         return ws
     
-    @WS_Manager_to_Client.client.on_open()
-    @WS_Manager_to_Client.client.on_message()
-    @WS_Manager_to_Client.client.on_error()
-    @WS_Manager_to_Client.client.on_close()
-    
+    @Interface_Websocket.client.on_open()
+    @Interface_Websocket.client.on_message()
+    @Interface_Websocket.client.on_error()
+    @Interface_Websocket.client.on_close()
+    def event(self, this_entity, other_entity, path, and_event_args_kwargs):
+        ...
