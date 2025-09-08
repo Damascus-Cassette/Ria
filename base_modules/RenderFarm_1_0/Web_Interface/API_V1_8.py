@@ -2,7 +2,7 @@
 from fastapi     import APIRouter, Response, Request, Depends, FastAPI
 from enum        import Enum
 from functools   import partial
-from inspect     import signature, isclass, iscoroutinefunction
+from inspect     import signature, isclass, iscoroutinefunction, _empty
 from string      import Formatter
 from types       import FunctionType
 from contextlib  import contextmanager
@@ -18,6 +18,7 @@ class Commands(Enum):
     POST      = 'POST'
     PATCH     = 'PATCH' 
     PUT       = 'PUT'
+    DELETE    = 'DELETE'
     WEBSOCKET = 'WEBSOCKET'
 
 class IO():
@@ -36,24 +37,7 @@ class IO():
         self.args          =  args
         self.kwargs        =  kwargs
 
-    def __get__(self,inst,inst_cls):
-        if inst is None:
-            return self
-        return partial(self,inst)
 
-    def __call__(self, container, *args, local_entity=None, **kwargs):
-        ''' Direct call is to send function '''
-        if not local_entity:
-            assert _LOCAL_ENTITY.get()
-            local_entity =_LOCAL_ENTITY.get()
-        
-        assert _CONNECTION_TARGET.get()
-        this_entity =_CONNECTION_TARGET.get()
-        assert issubclass(this_entity.__class__ ,Foreign_Entity_Base)
-        assert issubclass(local_entity.__class__,Local_Entity_Base)
-
-        raw_path = container.get_path() + self.fapi_router.prefix + self.path
-        return self._send(container,this_entity,local_entity,raw_path,*args,*kwargs)
     
     def _register(self, container, this_entity):
         ''' Access through dict to avoid __get__ I think? '''
@@ -112,10 +96,23 @@ class IO():
     # def _api_route_wrapped_func_websocket_
 
     @classmethod
-    def Get(cls,router,path,*args,**kwargs):
+    def _wrapper(cls,cmd,router,path,*args,**kwargs):
         def wrapper(func): 
-            return cls(Commands.GET,func,router,path,*args,**kwargs)
+            return cls(cmd,func,router,path,*args,**kwargs)
         return wrapper
+    
+    @classmethod
+    def Get(cls,router,path,*args,**kwargs): return cls._wrapper(Commands.GET,router,path,*args,**kwargs)
+    @classmethod
+    def Post(cls,router,path,*args,**kwargs): return cls._wrapper(Commands.POST,router,path,*args,**kwargs)
+    @classmethod
+    def Delete(cls,router,path,*args,**kwargs): return cls._wrapper(Commands.DELETE,router,path,*args,**kwargs)
+    @classmethod
+    def Patch(cls,router,path,*args,**kwargs): return cls._wrapper(Commands.PATCH,router,path,*args,**kwargs)
+    @classmethod
+    def Put(cls,router,path,*args,**kwargs): return cls._wrapper(Commands.PUT,router,path,*args,**kwargs)
+    
+
 
     def Send(self,*args,**kwargs):
         ''' Only accessable during construction, due to __get__ '''
@@ -126,15 +123,47 @@ class IO():
             return None
         return wrapper
 
+    def __get__(self,inst,inst_cls):
+        if inst is None:
+            return self
+        return partial(self,inst)
+
+    def __call__(self, container, *args, local_entity=None, **kwargs):
+        ''' Direct call is to send function '''
+        if not local_entity:
+            assert _LOCAL_ENTITY.get()
+            local_entity =_LOCAL_ENTITY.get()
+        
+        # print('__call__ ARGS  : ', args)
+        # print('__call__ KWARGS: ', kwargs)
+
+        assert _CONNECTION_TARGET.get()
+        this_entity =_CONNECTION_TARGET.get()
+        assert issubclass(this_entity.__class__ ,Foreign_Entity_Base)
+        assert issubclass(local_entity.__class__,Local_Entity_Base)
+
+        raw_path = container.get_path() + self.fapi_router.prefix + self.path
+        return self._send(container,this_entity,local_entity,raw_path,*args,**kwargs)
+
     @property
     def _send(self):
         ''' Header for send functions of each type'''
         if self.send_func:
             return self.send_func
         match self.command:
-            case Commands.GET: return self._send_get_default
+            case Commands.GET:  return self._send_get_default
+            case Commands.POST: return self._send_post_default
+            case Commands.DELETE: return self._send_delete_default
+            case Commands.PUT: return self._send_put_default
+            case Commands.PATCH: return self._send_patch_default
+            # case Commands.WEBSOCKET: return self._send_websocket_default
             case _:
                 raise Exception(f'Command Not Found For Send! {self.command}')
+    @property
+    def _send_fmt_func(self):
+        if self.send_func: return self.send_func 
+        return self.func
+        
 
     # def _send_get(self,container,this_entity,other_entity,raw_path,*args,**kwargs):
     #     # if self.send_func:
@@ -143,8 +172,24 @@ class IO():
     #     return self._send_get_default(container,this_entity,other_entity,raw_path,*args,**kwargs)
 
     def _send_get_default(self,container, this_entity, other_entity,raw_path,*args,**kwargs):   
-        args, kwargs, path = self._format_path_consume(self._send, raw_path, args, kwargs)
+        args, kwargs, path = self._format_path_consume(self._send_fmt_func, raw_path, args, kwargs)
         return this_entity.get(other_entity,path,*args,**kwargs)
+
+    def _send_post_default(self,container, this_entity, other_entity,raw_path,*args,**kwargs):   
+        args, kwargs, path = self._format_path_consume(self._send_fmt_func, raw_path, args, kwargs)
+        return this_entity.post(other_entity,path,*args,**kwargs)
+
+    def _send_delete_default(self,container, this_entity, other_entity,raw_path,*args,**kwargs):   
+        args, kwargs, path = self._format_path_consume(self._send_fmt_func, raw_path, args, kwargs)
+        return this_entity.delete(other_entity,path,*args,**kwargs)
+
+    def _send_put_default(self,container, this_entity, other_entity,raw_path,*args,**kwargs):   
+        args, kwargs, path = self._format_path_consume(self._send_fmt_func, raw_path, args, kwargs)
+        return this_entity.put(other_entity,path,*args,**kwargs)
+
+    def _send_patch_default(self,container, this_entity, other_entity,raw_path,*args,**kwargs):   
+        args, kwargs, path = self._format_path_consume(self._send_fmt_func, raw_path, args, kwargs)
+        return this_entity.patch(other_entity,path,*args,**kwargs)
 
     def _format_path_consume(self, func, raw_path, args, kwargs):
         '''convert all to kwargs by key and order, pop and format string, convert back and return.
@@ -167,10 +212,16 @@ class IO():
                 _args.append(args[i])
             elif v.POSITIONAL_OR_KEYWORD or v.KEYWORD_ONLY:
                 if k in kwargs.keys():
-                    _kwargs[k] = kwargs
-                else:
+                    _kwargs[k] = kwargs[k]
+                elif v.default is not _empty:
                     _kwargs[k] = v.default
-
+                else:
+                    _kwargs[k] = None
+                    
+        print('FORMAT_CONSUME RETURN input args   : ', args)
+        print('FORMAT_CONSUME RETURN input kwargs : ', kwargs)
+        print('FORMAT_CONSUME RETURN _args   : ',_args)
+        print('FORMAT_CONSUME RETURN _kwargs : ',_kwargs)
         path = raw_path.format(_fmt)
         return _args, _kwargs, path 
     
@@ -264,7 +315,7 @@ class Foreign_Entity_Base:
         header = self.export_header(from_entity) | from_entity.export_header(self)
         auth   = self.export_auth(from_entity)
         res = requests.get(self._domain()+path, params=kwargs, auth = auth, headers=header)
-        print('OUTGOING GET RES:', res.content)
+        # print('OUTGOING GET RES:', res.content)
         if _raw_responce: return res
         else:             return res.content
 
@@ -278,7 +329,15 @@ class Foreign_Entity_Base:
     def post(self, from_entity, path:str, _raw_responce=False, **kwargs): 
         header = self.export_header(from_entity) | from_entity.export_header(self)
         auth   = self.export_auth(from_entity) 
+
+        # print('PATH',   self._domain()+path)
+        # print('PARAMS', kwargs)
+        # print('AUTH',   auth)
+        # print('HEADER', header)
+
+
         res = requests.post(self._domain()+path, params=kwargs, auth = auth, headers=header)
+        # print('OUTGOING GET RES:', res.content)
         if _raw_responce: return res
         else:             return res.content
 

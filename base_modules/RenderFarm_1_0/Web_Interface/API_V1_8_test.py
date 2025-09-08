@@ -76,6 +76,14 @@ class AB_Interface(Interface_Base):
     # @test.Send()
     # def _test(this_e, other_e, raw_path):
     #     return this_e.get(other_e, raw_path)
+    @IO.Get(router1,'/current_test')
+    def test_0(self, this_e, other_e, request)->dict:
+        res = {}
+        for con_entity in this_e.connections(B_Foreign):
+            res[con_entity.Entity_Type.value] = data = []
+            with con_entity.Active():
+                data.append(con_entity.interface.test_4(data = 'HELLO!'))
+        return res
 
     @IO.Get(router1,'/path/{msg}')
     def test_1(self, this_e, other_e, request, msg=''):
@@ -85,7 +93,7 @@ class AB_Interface(Interface_Base):
     def test_2(self, this_e, other_e, request):
         print(f'INSIDE /reflect, {this_e} {other_e}, {request}')
         return f'GET /reflect from {other_e} -> {this_e}'
-    
+
     @IO.Get(router1,'/reflect_on_entities')
     def test_3(self, this_e, other_e, request)->dict:
         res = {}
@@ -93,10 +101,26 @@ class AB_Interface(Interface_Base):
         for con_entity in this_e.connections(B_Foreign):
             res[con_entity.Entity_Type.value] = data = []
             with con_entity.Active():
-                data.append(con_entity.interface.test_2(_raw_responce = True))
+                data.append(con_entity.interface.test_2(data ='HELLO'))
         return res
     
+    @IO.Post(router1,'/test')
+    def test_4(self, this_e, other_e, request, data)->str:
+        print(f'DATA IS {data}')
+        return f'SUCESS IN POST: {data}'
 
+    @IO.Delete(router1,'/test')
+    def test_5(self, this_e, other_e, request, data)->str:
+        return f'SUCESS IN DELETE: {data}'
+
+    @IO.Patch(router1,'/test')
+    def test_6(self, this_e, other_e, request, data)->str:
+        return f'SUCESS IN PATCH: {data}'
+
+    @IO.Put(router1,'/test')
+    def test_7(self, this_e, other_e, request, data)->str:
+        return f'SUCESS IN Put: {data}'
+        
 
     # @test.Send()
     # def _test(this_e, other_e,raw_path, msg):
