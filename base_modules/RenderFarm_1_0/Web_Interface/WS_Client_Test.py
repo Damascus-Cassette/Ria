@@ -116,7 +116,7 @@ class Websocket_Client():
     custom_start = None
     def start_ws(self, this_e:'local_entity', other_e:'foreign_entity', path:str):
         header    = other_e.export_header() | this_e.export_header()
-        callbacks = self.create_callback(this_e,other_e)
+        callbacks = self.create_callback(this_e, other_e)
 
         ws = websocket.WebSocketApp(path, header = header, **callbacks)
         ws.run_forever(dispatcher=rel, reconnect=5)
