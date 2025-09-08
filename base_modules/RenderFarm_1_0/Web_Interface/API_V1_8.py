@@ -11,6 +11,7 @@ import requests
 
 
 _CONNECTION_TARGET = ContextVar('_CONNECTION_TARGET',default = None)
+_LOCAL_ENTITY = ContextVar('_LOCAL_ENTITY',default = None)
 
 class Commands(Enum):
     GET       = 'GET'
@@ -40,16 +41,19 @@ class IO():
             return self
         return partial(self,inst)
 
-    def __call__(self, container, other_entity:'Local_Entity_Base', *args, **kwargs):
+    def __call__(self, container, *args, local_entity=None, **kwargs):
         ''' Direct call is to send function '''
+        if not local_entity:
+            assert _LOCAL_ENTITY.get()
+            local_entity =_LOCAL_ENTITY.get()
         
         assert _CONNECTION_TARGET.get()
         this_entity =_CONNECTION_TARGET.get()
         assert issubclass(this_entity.__class__ ,Foreign_Entity_Base)
-        assert issubclass(other_entity.__class__,Local_Entity_Base)
+        assert issubclass(local_entity.__class__,Local_Entity_Base)
 
-        raw_path = container.raw_path() + self.fapi_router.prefix + self.path
-        return self._send(container,this_entity,other_entity,raw_path,*args,*kwargs)
+        raw_path = container.get_path() + self.fapi_router.prefix + self.path
+        return self._send(container,this_entity,local_entity,raw_path,*args,*kwargs)
     
     def _register(self, container, this_entity):
         ''' Access through dict to avoid __get__ I think? '''
@@ -61,7 +65,6 @@ class IO():
     def _register_regular(self, container, this_entity):
         _args,_kwargs = self._api_router_args_regular_(container,this_entity)
         self.fapi_router.add_api_route(*_args,**_kwargs)
-        # print('REGISTERED FUNC:', self.func)
     
     def _api_router_args_regular_(self, container, this_entity):
         wrapped = self._api_route_wrapped_func_regular_(container, this_entity)
@@ -74,10 +77,17 @@ class IO():
         
         if iscoroutinefunction(func):
             async def wrapped(request:Request, *args, _foreign_entity = Depends(this_entity.Find_Entity_From_Req), **kwargs):
-                return await func(container,this_entity,_foreign_entity, request, *args,**kwargs)
+                t =  _LOCAL_ENTITY.set(this_entity)
+                res = await func(container,this_entity,_foreign_entity, request, *args,**kwargs)
+                _LOCAL_ENTITY.reset(t)
+                return res
+
         else:
             def wrapped(request:Request, *args, _foreign_entity = Depends(this_entity.Find_Entity_From_Req), **kwargs):
-                return func(container,this_entity,_foreign_entity, request, *args,**kwargs)
+                t =  _LOCAL_ENTITY.set(this_entity)
+                res =  func(container,this_entity,_foreign_entity, request, *args,**kwargs)
+                _LOCAL_ENTITY.reset(t)
+                return res
 
         params = signature(wrapped).parameters
         wrapped.__name__      = func.__name__
@@ -87,9 +97,9 @@ class IO():
 
         parameters        = (params['request'], *o_args, params['_foreign_entity'], *o_kwargs)
         return_annotation = sig.return_annotation
-        print('o_args:', list(o_args))
-        print('o_kwargs:', list(o_kwargs))
-        print('PARAMS:', list(parameters))
+        # print('o_args:', list(o_args))
+        # print('o_kwargs:', list(o_kwargs))
+        # print('PARAMS:', list(parameters))
 
         wrapped.__signature__ = sig.replace(
             parameters        = parameters,
@@ -119,20 +129,22 @@ class IO():
     @property
     def _send(self):
         ''' Header for send functions of each type'''
+        if self.send_func:
+            return self.send_func
         match self.command:
-            case Commands.GET: return self._send_get
+            case Commands.GET: return self._send_get_default
             case _:
                 raise Exception(f'Command Not Found For Send! {self.command}')
 
-    def _send_get(self,container,this_entity,other_entity,raw_path,*args,**kwargs):
-        if self.send_func:
-            return self.send_func(container,this_entity,other_entity,raw_path,*args,**kwargs)
-        else:
-            return self._send_get_default(container,this_entity,other_entity,raw_path,*args,**kwargs)
+    # def _send_get(self,container,this_entity,other_entity,raw_path,*args,**kwargs):
+    #     # if self.send_func:
+    #     #     return self.send_func(container,this_entity,other_entity,raw_path,*args,**kwargs)
+    #     # else:
+    #     return self._send_get_default(container,this_entity,other_entity,raw_path,*args,**kwargs)
 
     def _send_get_default(self,container, this_entity, other_entity,raw_path,*args,**kwargs):   
-        args, kwargs, path = self._format_path_consume(self.send_func, raw_path, args, kwargs)
-        this_entity.get(other_entity,path,*args,**kwargs)
+        args, kwargs, path = self._format_path_consume(self._send, raw_path, args, kwargs)
+        return this_entity.get(other_entity,path,*args,**kwargs)
 
     def _format_path_consume(self, func, raw_path, args, kwargs):
         '''convert all to kwargs by key and order, pop and format string, convert back and return.
@@ -145,7 +157,8 @@ class IO():
 
         keys = [x[1] for x in Formatter().parse(raw_path) if x[1] is not None]
         
-        for i,(k,v) in enumerate(sig.parameters.items()[3:]):
+        for i,(k,v) in enumerate(list(sig.parameters.items())[4:]):
+            # print(i,k,v)
             # this_e, other_e and raw_path
             if k in keys:
                 _fmt[k] = v
@@ -158,7 +171,7 @@ class IO():
                 else:
                     _kwargs[k] = v.default
 
-        path = raw_path.foramt(_fmt)
+        path = raw_path.format(_fmt)
         return _args, _kwargs, path 
     
 
@@ -195,7 +208,7 @@ class Interface_Base():
 
     def _register(self,local_entity,p_router:APIRouter):
         # applicable = [v for k,v in self.__dict__.items() if (not k.startswith('_')) and (isinstance(v,IO))]
-        print('REGISTERING SELF', self)
+        # print('REGISTERING SELF', self)
         # for k,v in self.__dict__.items():
 
         for k in dir(self):
@@ -219,6 +232,7 @@ class Foreign_Entity_Base:
             assert hasattr(cls, 'intake_request'  )
             assert hasattr(cls, 'matches_request' )
             assert hasattr(cls, 'export_auth'     )
+            # assert hasattr(cls, 'New_From_Request')
     _interactive  = True      #If Undec/Unknown w/out interface this is false to not check structure
     
     export_header  : FunctionType
@@ -248,8 +262,9 @@ class Foreign_Entity_Base:
 
     def get(self, from_entity, path:str, _raw_responce=False, **kwargs):
         header = self.export_header(from_entity) | from_entity.export_header(self)
-        auth   = self.export_auth(from_entity) 
+        auth   = self.export_auth(from_entity)
         res = requests.get(self._domain()+path, params=kwargs, auth = auth, headers=header)
+        print('OUTGOING GET RES:', res.content)
         if _raw_responce: return res
         else:             return res.content
 
@@ -284,7 +299,7 @@ class Foreign_Entity_Base:
     @contextmanager
     def Active(self):
         t = _CONNECTION_TARGET.set(self)
-        yield self._Interface
+        yield
         _CONNECTION_TARGET.reset(t)
 
 class Local_Entity_Base():

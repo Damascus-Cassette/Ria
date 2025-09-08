@@ -57,12 +57,12 @@ class UNDEC_Foreign(Foreign_Entity_Base,DB_Base):
         ])
 
     def intake_request(self, request:Request, headers:Request.headers):
+        self.host = request.client.host
         self.port = request.client.port
-        
     
     @classmethod
-    def New_From_Request(cls, request):
-        return cls(request.client.host, request.client.port)
+    def New_From_Request(cls, local_entity, request):
+        return cls(request.headers.get('UID'), request.client.host, request.client.port)
 
 
 class AB_Interface(Interface_Base):
@@ -80,6 +80,24 @@ class AB_Interface(Interface_Base):
     @IO.Get(router1,'/path/{msg}')
     def test_1(self, this_e, other_e, request, msg=''):
         return f'GET Test_Success : {msg}'
+
+    @IO.Get(router1,'/reflect')
+    def test_2(self, this_e, other_e, request):
+        print(f'INSIDE /reflect, {this_e} {other_e}, {request}')
+        return f'GET /reflect from {other_e} -> {this_e}'
+    
+    @IO.Get(router1,'/reflect_on_entities')
+    def test_3(self, this_e, other_e, request)->dict:
+        res = {}
+
+        for con_entity in this_e.connections(B_Foreign):
+            res[con_entity.Entity_Type.value] = data = []
+            with con_entity.Active():
+                data.append(con_entity.interface.test_2(_raw_responce = True))
+        return res
+    
+
+
     # @test.Send()
     # def _test(this_e, other_e,raw_path, msg):
     #     return this_e.get(other_e, raw_path, msg=msg)
@@ -140,16 +158,28 @@ class A_Local(Local_Entity_Base):
                 self.session.commit()
                 return row
             
-        new_row = table.New_From_Request(request)
+        new_row = table.New_From_Request(self,request)
         self.session.add(new_row)
         self.session.commit()
-        return new_row    
+        return new_row
+    
+    def connections(self, table_types:Foreign_Entity_Base=None):
+        if table_types is None: table_types = list(ROLE_TABLE_MAPPING.values())
+        elif not isinstance(table_types,(list,tuple)): table_types = [table_types]
+        for table in table_types:
+            assert issubclass(table, Foreign_Entity_Base)
+            rows = self.session.query(table).all()
+            for other_entity in rows:
+                yield other_entity
 
 class A_Foreign(Foreign_Entity_Base, DB_Base):
     __tablename__ = Entity_Types.A.value + '_Entity'
     Entity_Type   = Entity_Types.A
-    interface     = AB_Interface
+    interface     = AB_Interface()
     
+    def __repr__(self):
+        return f'< {self.Entity_Type} | {self.host}:{self.port} @ row {self.id} > '
+
     def __init__(self,unqiue_id,host,port):
         self.id = unqiue_id
         self.host = host
@@ -164,15 +194,19 @@ class A_Foreign(Foreign_Entity_Base, DB_Base):
         return {}
     
     def intake_request(self, request, header):
-        self.port = header.get('port', default = '----')
-        self.host = header.get('host', default = '----')
+        self.port = request.client.port
+        self.host = request.client.host
         
     def matches_request(self,request:Request, headers:Request.headers):
         return all([headers.get('Role', default = '') == self.Entity_Type.value,
-                    headers.get('UID',  default = '') == self.unique_id])
+                    headers.get('UID',  default = '') == self.id])
 
-    def export_auth(self,)->tuple:
+    def export_auth(self,from_entity)->tuple:
         return tuple()
+    
+    @classmethod
+    def New_From_Request(cls,local_entity, request):
+        return cls(request.headers.get('UID'), request.client.host, request.client.port)
     
 class B_Local(A_Local):
     Entity_Type   = Entity_Types.B 
@@ -180,8 +214,11 @@ class B_Local(A_Local):
 class B_Foreign(Foreign_Entity_Base, DB_Base):
     __tablename__ = Entity_Types.B.value + '_Entity'
     Entity_Type   = Entity_Types.B 
-    interface     = AB_Interface
+    interface     = AB_Interface()
     
+
+    def __repr__(self):
+        return f'< {self.Entity_Type} | {self.host}:{self.port} @ row {self.id} > '
     def __init__(self,unqiue_id,host,port):
         self.id = unqiue_id
         self.host = host
@@ -196,14 +233,16 @@ class B_Foreign(Foreign_Entity_Base, DB_Base):
         return {}
     
     def intake_request(self, request, header):
-        self.port = header.get('port', default = '----')
-        self.host = header.get('host', default = '----')
+        # self.port = header.get('port', default = '----')
+        # self.host = header.get('host', default = '----')
+        self.port = request.client.port
+        self.host = request.client.host
         
     def matches_request(self,request:Request, headers:Request.headers):
         return all([headers.get('Role', default = '') == self.Entity_Type.value,
-                    headers.get('UID',  default = '') == self.unique_id])
+                    headers.get('UID',  default = '') == self.id])
 
-    def export_auth(self,)->tuple:
+    def export_auth(self,from_entity)->tuple:
         return tuple()
 
 ROLE_TABLE_MAPPING = {
@@ -218,7 +257,7 @@ db_url = 'sqlite:///database_A.db'
 inst_a = A_Local('TestEntityA',db_url)
 inst_a.session.merge(B_Foreign(
     unqiue_id = 'TestEntityB',
-    host = '127.00.0.1',
+    host = '127.0.0.1',
     port = '4001',
 ))
 inst_a.session.commit()
@@ -229,7 +268,7 @@ db_url = 'sqlite:///database_B.db'
 inst_b = B_Local('TestEntityB',db_url)
 inst_b.session.merge(A_Foreign(
     unqiue_id= 'TestEntityA',
-    host = '127.00.0.1',
+    host = '127.0.0.1',
     port = '4000',
 ))
 inst_b.session.commit()
