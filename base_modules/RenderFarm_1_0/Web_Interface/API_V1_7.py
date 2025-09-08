@@ -418,7 +418,7 @@ class Foreign_Entity_Base:
         res = requests.put(self._domain()+path, params=kwargs,data=data, auth = auth, headers=header)
         if _raw_responce: return res
         else:             return res.content
-
+    
     @contextmanager
     def Interface(self):
         t = _CONNECTION_TARGET.set(self)
@@ -474,9 +474,9 @@ class Interface_Base():
     def __init__(self, parent):
         self._origin = _INIT_ORIGIN.get()
         self._parent = parent
+        IO_Websocket._on_new(self)
         _OL_Container._on_new(self)
         Interface_Base._on_new(self)
-        IO_Websocket._on_new(self)
 
     @classmethod
     def foreign_platonic(cls):
@@ -732,7 +732,7 @@ class Websocket_Client():
             res[key] = callback
         return res
     
-    async def websocket_start_header(self, requesting_entity : 'Local_Entity_Base'):
+    def websocket_start_header(self, requesting_entity : 'Local_Entity_Base'):
         ''' handle creation of a websocket & arg injection, plus entity callback '''
 
         this_entity  = _CONNECTION_TARGET.get()
@@ -749,7 +749,7 @@ class Websocket_Client():
         
         ws = self.websocket_run(this_entity,other_entity,raw_path,header,callbacks)
         callback = other_entity.websocket_pool.outgoing.attach(ws, this_entity)
-        await ws
+        # await ws
         #Not sure if will work
         callback()
 
@@ -799,9 +799,9 @@ class IO_Websocket():
         new                = copy(self)
         new._container     = container
         new.manager        = copy(new.manager)
-        new.manager.parent = self
+        new.manager.parent = new
         new.client         = copy(new.client)
-        new.client.parent  = self
+        new.client.parent  = new
         return new
     
     def _register(self,parent_router:APIRouter):

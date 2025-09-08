@@ -104,14 +104,47 @@ class AB_Interface(Interface_Base):
             for row in rows:
                 _rows.append(str(row))
             data[table.__tablename__] = _rows
-        return data            
+        return data                
 
     @list_entities.Get_Send()
     def _list_entities(self, this_entity, requesting_entity, raw_path, *args,**kwargs):
         raise NotImplementedError('TODO')
-        #  return self._Root_Entity.entity_pool.ext_pool._web_repr_()
         return this_entity.get(requesting_entity, raw_path, *args,**kwargs)
+
+    # @OL_IO('/test_entity_connection')
+    # def test_entity_connection():...
+
+    # @test_entity_connection.Get_Recieve()
+    # def _test_entity_connection(self,this_entity, other_entity):
+    #     data = []
+    #     for table in [UNDEC_Foreign, A_Foreign, B_Foreign]:
+    #         _rows = []
+    #         rows = this_entity.session.query(table).all()
+    #         for row in rows:
+    #             with row.Interface() as interface:
+    #                 echo_responce = interface.echo('NAHNAH')
+    #             _rows.append(echo_responce)
+    #         data[table.__tablename__] = _rows
+
+    @OL_IO('/t/{msg}')
+    def test_msg():...
     
+    @test_msg.Get_Recieve()
+    def _test_msg(self,this_entity, other_entity, msg):
+        return msg
+
+    # @OL_IO('/echo')
+    # def echo():...
+
+    # @echo.Post_Recieve()
+    # def _echo(self,this_entity, other_entity, data):
+    #     return {'this_entity':str(this_entity), 'other_entity':str(other_entity), 'data':data}
+    # @echo.Post_Send()
+    # def _echo(self,this_entity, other_entity, raw_path, data):
+    #     return this_entity.get(this_entity, other_entity, raw_path, data = data)
+        
+
+
     @OL_IO('/test_websocket')
     def test_websocket():...
 
