@@ -218,10 +218,10 @@ class IO():
                 else:
                     _kwargs[k] = None
                     
-        print('FORMAT_CONSUME RETURN input args   : ', args)
-        print('FORMAT_CONSUME RETURN input kwargs : ', kwargs)
-        print('FORMAT_CONSUME RETURN _args   : ',_args)
-        print('FORMAT_CONSUME RETURN _kwargs : ',_kwargs)
+        # print('FORMAT_CONSUME RETURN input args   : ', args)
+        # print('FORMAT_CONSUME RETURN input kwargs : ', kwargs)
+        # print('FORMAT_CONSUME RETURN _args   : ',_args)
+        # print('FORMAT_CONSUME RETURN _kwargs : ',_kwargs)
         path = raw_path.format(_fmt)
         return _args, _kwargs, path 
     

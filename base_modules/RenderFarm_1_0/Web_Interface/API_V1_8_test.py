@@ -20,8 +20,8 @@ from fastapi        import (Request                       ,
                             APIRouter                     ,
                             WebSocket as WebSocket_Manager)
 
-from websocket      import (WebSocket    as Websocket_Client   ,
-                            WebSocketApp as WebsocketApp_Client)
+# from websocket      import (WebSocket    as Websocket_Client   ,
+#                             WebSocketApp as WebsocketApp_Client)
 from enum import Enum
 
 DB_Base = declarative_base()
@@ -132,8 +132,10 @@ class AB_Interface(Interface_Base):
     #     ''' list all current connections? '''
 
     # websocket_test = IO.Websocket(router1,'/websocket')
-    
-    # # @websocket_test.manager.custom_app('on_load')
+    # # @websocket_test.manager.custom_app()
+    # class _WebsocketClient(WebSocketClient):
+    #    def opened
+
     # @websocket_test.manager.event('on_load')
     # def websocket_test():
     #     ...
@@ -309,3 +311,4 @@ def get_all_urls():
 
 #python -m uvicorn Web_Interface.API_V1_8_test:app_a --port 4000 --reload
 #python -m uvicorn Web_Interface.API_V1_8_test:app_b --port 4001 --reload
+
