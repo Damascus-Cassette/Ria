@@ -1,10 +1,10 @@
 
-from fastapi     import APIRouter, Response, Request, Depends
+from fastapi     import APIRouter, Response, Request, Depends, FastAPI
 from enum        import Enum
 from functools   import partial
 from inspect     import signature, isclass, iscoroutinefunction
 from string      import Formatter
-from typing      import FunctionType
+from types       import FunctionType
 from contextlib  import contextmanager
 from contextvars import ContextVar
 import requests
@@ -24,6 +24,8 @@ class IO():
     send_func   = None
     send_args   = None
     send_kwargs = None
+
+    fapi_router : APIRouter
 
     def __init__(self, command, func, router, path, *args, **kwargs):
         self.command       =  command
@@ -54,14 +56,16 @@ class IO():
         if self.command is Commands.WEBSOCKET:
             self._register_websocket(container,this_entity)
         self._register_regular(container, this_entity)
+        return self.fapi_router
 
     def _register_regular(self, container, this_entity):
         _args,_kwargs = self._api_router_args_regular_(container,this_entity)
-        self.router.add_api_route(*_args,**_kwargs)
+        self.fapi_router.add_api_route(*_args,**_kwargs)
+        # print('REGISTERED FUNC:', self.func)
     
     def _api_router_args_regular_(self, container, this_entity):
         wrapped = self._api_route_wrapped_func_regular_(container, this_entity)
-        path    = self._path
+        path    = self.path
         return (path, wrapped) + self.args, {'methods':[self.command.value]} | self.kwargs
 
     def _api_route_wrapped_func_regular_(self, container, this_entity):
@@ -69,18 +73,28 @@ class IO():
         sig = signature(func)
         
         if iscoroutinefunction(func):
-            async def wrapped(request:Request, _foreign_entity =Depends(this_entity.Find_Entity_From_Req),*args,**kwargs):
-                return func(container,this_entity,_foreign_entity, request, *args,**kwargs)
+            async def wrapped(request:Request, *args, _foreign_entity = Depends(this_entity.Find_Entity_From_Req), **kwargs):
+                return await func(container,this_entity,_foreign_entity, request, *args,**kwargs)
         else:
-            def wrapped(request:Request, _foreign_entity =Depends(this_entity.Find_Entity_From_Req),*args,**kwargs):
+            def wrapped(request:Request, *args, _foreign_entity = Depends(this_entity.Find_Entity_From_Req), **kwargs):
                 return func(container,this_entity,_foreign_entity, request, *args,**kwargs)
 
-        params = signature(wrapped)
+        params = signature(wrapped).parameters
         wrapped.__name__      = func.__name__
-        wrapped._signaturenature__ = sig.replace(
-            parameters        = [params['request'], params['_foreign_entity'], *list(sig.parameters.values())[3:]], 
-            return_annotation = sig.return_annotation )
-        
+
+        o_args   = [x for x in list(sig.parameters.values())[4:] if x.POSITIONAL_OR_KEYWORD] 
+        o_kwargs = [x for x in list(sig.parameters.values())[4:] if (not x.POSITIONAL_OR_KEYWORD) and x.KEYWORD_ONLY]
+
+        parameters        = (params['request'], *o_args, params['_foreign_entity'], *o_kwargs)
+        return_annotation = sig.return_annotation
+        print('o_args:', list(o_args))
+        print('o_kwargs:', list(o_kwargs))
+        print('PARAMS:', list(parameters))
+
+        wrapped.__signature__ = sig.replace(
+            parameters        = parameters,
+            return_annotation = return_annotation,)
+
         return wrapped
 
     # def _register_websocket
@@ -180,13 +194,20 @@ class Interface_Base():
                 yield v
 
     def _register(self,local_entity,p_router:APIRouter):
-        applicable = [v for k,v in self.__dict__.items() if (not k.startswith('_')) and (isinstance(v,IO))]
-        for io in applicable:
-            io._register(local_entity)
-        routers = [v for k,v in self.__dict__.items() if (not k.startswith('_')) and (isinstance(v,APIRouter))]
-        for router in routers:
-            p_router.add_api_route(getattr(self,'Route_Subpath',''),router)
+        # applicable = [v for k,v in self.__dict__.items() if (not k.startswith('_')) and (isinstance(v,IO))]
+        print('REGISTERING SELF', self)
+        # for k,v in self.__dict__.items():
 
+        for k in dir(self):
+            if k.startswith('_'): continue
+            v = getattr(self.__class__,k,None)
+            if isinstance(v,IO):
+                v._register(self,local_entity)
+
+
+        for k in dir(self):
+            if isinstance(v:=getattr(self,k), APIRouter):
+                p_router.include_router(v, prefix = getattr(self,'Route_Subpath',''),)
 
 class Foreign_Entity_Base:    
     ''' Foreign Entity Base class, Gives the post commands and ensures formatting on subclasses '''
@@ -278,7 +299,6 @@ class Local_Entity_Base():
 
     def __init_subclass__(cls):
         assert hasattr(cls, 'Entity_Type'   )
-        assert hasattr(cls, 'Interface'     )
         assert hasattr(cls, 'export_header' )
     
     def __init__(self):
@@ -289,6 +309,6 @@ class Local_Entity_Base():
             v._register(self, app)
         return app
     
-    def Find_Entity_From_Req(self, request:Request):
+    async def Find_Entity_From_Req(self, request:Request):
         ''' Ensure DB Connection, return foreign item '''
         raise NotImplementedError('Implament in Local_Class!')
