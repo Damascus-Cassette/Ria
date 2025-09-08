@@ -220,7 +220,7 @@ class _OL_Container():
 
     def add_func_container(self,mode,func_item:_ol_func_item):
         if   isinstance(func_item,_ol_func_item_deliver):
-            if getattr(func_item, 'default_deliver'):
+            if hasattr(func_item, 'default_deliver'):
                 self._reciever_functions[mode].append( _ol_func_item_deliver(func= self._default_delivier(mode,func_item.func)  , key=func_item.key, filter=func_item.filter))
             return self._delivery_functions[mode].append(func_item)
         elif isinstance(func_item,_ol_func_item_recieve):
@@ -422,7 +422,7 @@ class Foreign_Entity_Base:
     @contextmanager
     def Interface(self):
         t = _CONNECTION_TARGET.set(self)
-        yield self._interface
+        yield self._Interface
         _CONNECTION_TARGET.reset(t)
 
     #TODO: Convert to async requests.
@@ -476,7 +476,8 @@ class Interface_Base():
         self._parent = parent
         _OL_Container._on_new(self)
         Interface_Base._on_new(self)
-        
+        IO_Websocket._on_new(self)
+
     @classmethod
     def foreign_platonic(cls):
         ''' Set mode of children to be interface send-only and self.root to get context _CONNECTION_TARGET'''
@@ -517,6 +518,8 @@ class Interface_Base():
     def _attach_local_router(self,local_router:APIRouter,args=None,kwargs=None):        
         for ol_func in _OL_Container._iter_insts(self):
             ol_func._register(local_router,args,kwargs)
+        for websocket in IO_Websocket._iter_insts(self):
+            websocket._register(local_router)
         for subinterface in Interface_Base._iter_insts(self):
             subinterface : Self
             subinterface._register(local_router,args,kwargs)
@@ -592,4 +595,310 @@ if __name__ == '__main__':
         def intake_header(self,header)->None:
             ''' Intakes header to foreign data inst '''
             raise NotImplementedError('EXAMPLE ONLY')
+
+
+from fastapi   import WebSocket as Server_Websocket, Request, Depends, WebSocketDisconnect, WebSocketException, APIRouter
+from inspect   import signature
+from functools import partial
+from copy      import copy
+import websocket as websocket_client
+from   websocket import WebSocketApp
+import rel
+
+class Event_Pool(dict):
+    def __missing__(self,key):
+        self[key] = inst = []
+        return inst
+
+    def _call_event_manager(self,this_entity, _ext_entity, websocket, args, kwargs, key, *u_args, _extra_callbacks:list = None, **u_kwargs):
+        ''' partial-held and called within a websocket process to call events based on key.'''
+        res = []
+        if _extra_callbacks is None: _extra_callbacks = []
+        for event in self[key]:
+            res.append(event(this_entity, _ext_entity, websocket, *args,*u_args, **(kwargs|u_kwargs)))
+        return res
+
+    def _call_event_client(self,this_entity, _ext_entity, args, kwargs, key, _extra_callbacks:list = None, *u_args, **u_kwargs):
+        ''' partial-held and called within a websocket process to call events based on key.'''
+        res = []
+        if _extra_callbacks is None: _extra_callbacks = []
+        for event in (self[key]).extend(_extra_callbacks):
+            res.append(event(this_entity, _ext_entity, *args,*u_args, **(kwargs|u_kwargs)))
+        return res
+
+class Websocket_Manager(): 
+    events : Event_Pool
+
+    def __init__(self, parent):
+        self.events = Event_Pool()
+        self.parent = parent
+    
+    custom_run_websocket = None
+
+    def event(self,key):
+        ''' Produce a wrapper utilizing a key '''
+        def wrapper(func):
+            self.events[key].append(func)
+            return func
+        return wrapper
+
+    def websocket_wrapper(self):
+        ''' Produce a wrapped primary-event loop async function for fastapi's wrapper '''
+        this_entity  = self.parent._container.root_entity
+        ensure_req_entity = this_entity.Find_Entity_From_Req
+        
+        #May need to be async?
+        async def websocket_wrapper(request     : Request             ,
+                              websocket   : Server_Websocket          ,
+                              _ext_entity = Depends(ensure_req_entity),
+                              *args, **kwargs):
+             
+             close_callback = this_entity.websocket_pool.incoming.attach(websocket, _ext_entity, self.parent)
+
+             res = await self.run_websocket(this_e    = this_entity ,
+                                       other_e   = _ext_entity ,
+                                       events    = partial(self.events._call_event_manager, this_entity, _ext_entity, websocket, args, kwargs) ,
+                                       request   = request     ,
+                                       websocket = websocket   ,
+                                       *args, **kwargs         )
+             close_callback(res)
+             return res
+        
+        if self.custom_run_websocket:
+            #Wrap it if there's a custom run func.
+            sig = signature(self.custom_run_websocket)
+            websocket_wrapper.__name__      = self.custom_run_websocket.__name__
+            o_params = signature(websocket_wrapper).parameters
+            websocket_wrapper.__signature__ = sig.replace(
+                parameters        = [o_params['request'], 
+                                     o_params['websocket'], 
+                                     o_params['_ext_entity'], 
+                                     *list(sig.parameters.values())[3:]], 
+                return_annotation = sig.return_annotation )
+            
+        return websocket_wrapper
+
+    @staticmethod
+    async def run_websocket(this_e     : Local_Entity_Base   ,
+                            other_e    : Foreign_Entity_Base ,
+                            events     : dict                ,
+                            request    : Request             ,
+                            websocket  : Server_Websocket    ,
+                            *args, **kwargs                  ):
+        ''' websockets daemon w/ events '''
+        events('on_request')
+        accept = events('accept_request')
+        if len(accept) and (not all(accept)):
+            websocket.send_denial_response()
+            return
+        try:
+            await websocket.accept()
+            events('on_open')
+            while True:
+                msg = await websocket.recieve_json()
+                events('on_message', msg)
+                if any(events('do_close')):
+                    websocket.close()
+        except WebSocketDisconnect as E:
+            events('on_close', E)
+        except WebSocketException  as E:
+            events('on_error', E) #Placate or raise error?
+
+    def create_router(self,path)->APIRouter:
+        local_router = APIRouter()
+        local_router.add_api_websocket_route(path, self.websocket_wrapper())
+        return local_router
+
+class Websocket_Client(): 
+    events : Event_Pool
+
+    def __init__(self, parent):
+        self.events = Event_Pool()
+        self.parent = parent
+    
+    custom_run_websocket = None
+
+    def event(self,key):
+        ''' Produce a wrapper utilizing a key '''
+        def wrapper(func):
+            self.events[key].append(func)
+            return func
+        return wrapper
+    
+    def default_callbacks_kwargs(self, this_entity, other_entity, _extra_callbacks=None)->dict:
+        res = {}
+        for key in ['on_request', 'accept_request', 'on_open', 'on_message', 'on_error', 'on_close' ]:
+            callback = partial(self.events._call_event_client, this_entity, other_entity, key = key, _extra_callbacks=_extra_callbacks.get(key,[]))                
+            res[key] = callback
+        return res
+    
+    async def websocket_start_header(self, requesting_entity : 'Local_Entity_Base'):
+        ''' handle creation of a websocket & arg injection, plus entity callback '''
+
+        this_entity  = _CONNECTION_TARGET.get()
+        other_entity = requesting_entity
+        
+        raw_path = self.parent._container._get_raw_path_()+'/'+self.parent.path
+            #will need to format eventually
+
+        assert issubclass(this_entity.__class__ , Foreign_Entity_Base)
+        assert issubclass(other_entity.__class__, Local_Entity_Base  )
+
+        callbacks = self.default_callbacks_kwargs(this_entity,other_entity)
+        header = other_entity.export_header | this_entity.export_header()
+        
+        ws = self.websocket_run(this_entity,other_entity,raw_path,header,callbacks)
+        callback = other_entity.websocket_pool.outgoing.attach(ws, this_entity)
+        await ws
+        #Not sure if will work
+        callback()
+
+    def websocket_run(self,this_entity, other_entity, path, header, callbacks):
+        ''' Create and return the app, want to change to be standalone daemon similar to manager. '''
+        #websocket_client.WebSocket!! for lower level app creation.
+            
+        ws = websocket_client.WebSocketApp(path, header = header, **callbacks)
+            #TODO: Get rid of this dependency I dont even know will work
+        ws.run_forever(dispatcher=rel, reconnect=5)
+        return ws
+    
+    def __call__(self,requesting_entity):
+        self.websocket_start_header(requesting_entity)
+        
+class IO_Websocket():
+    manager    : Websocket_Manager
+    client     : Websocket_Client
+    _container : Interface_Base 
+
+    def __init__(self, path):
+        self.manager    = Websocket_Manager(self)
+        self.client     = Websocket_Client(self)
+        self.path       = path
+        self._container = None
+
+    @classmethod
+    def _on_new(cls,inst):
+        ''' Utility, Call on new item to setup 'views' 
+        creates local shallow copies w/ parent fixed '''
+        for k in [x for x in dir(inst) if not x.startswith('_')]:
+            v = getattr(inst,k)
+            if isinstance(v,cls):
+                if not (v._container is inst): 
+                    setattr(inst,k,v._view(inst))
+
+    @staticmethod
+    def _iter_insts(inst):
+        ''' Intialize Interface Structure '''
+        for k in [x for x in dir(inst) if not x.startswith('_')]:
+            v = getattr(inst,k)
+            if isclass(v) : continue
+            if issubclass(v.__class__,IO_Websocket): yield v
+
+
+    def _view(self,container):
+        new                = copy(self)
+        new._container     = container
+        new.manager        = copy(new.manager)
+        new.manager.parent = self
+        new.client         = copy(new.client)
+        new.client.parent  = self
+        return new
+    
+    def _register(self,parent_router:APIRouter):
+        parent_router.include_router(self.manager.create_router(self.path))
+        return parent_router
+
+    # def __call__(self, other_entity, request=None, *args, **kwargs):
+    #     ''' Direct call routing '''
+    #     this_entity = self._container.root_entity
+    #     recieving = issubclass(this_entity.__class__, Local_Entity_Base)
+
+    #     if recieving:
+    #         assert request is not None
+    #         return manager.start_websocket(self._container, this_entity, other_entity, *args, **kwargs)
+
+class Websocket_Client_Container():
+    ''' Client-Side Websocket Interface, abstracted to be uniform '''
+    websocket : WebSocketApp
+
+    def __init__(self,websocket : WebSocketApp, to_entity, from_entity, tags:tuple = tuple()):
+        self.websocket     = websocket
+        self.entity_type   = to_entity.Entity_Type.value
+        self.entity_id     = to_entity.export_identifier()
+        self.local_entity  = from_entity
+        self.tags          = tags
+
+class Websocket_Manager_Container():
+    ''' Manager-Side Websocket Interface, abstracted to be uniform '''
+    def __init__(self,websocket : WebSocketApp, to_entity, from_entity, tags:tuple = tuple()):
+        self.websocket      = websocket
+        self.entity_type    = from_entity.Entity_Type.value
+        self.entity_id      = from_entity.export_identifier()
+        self.local_entity   = to_entity
+        self.tags           = tags
+
+    # def close():
+    #     ...    
+    # def echo():
+    #     ...    
+    # def send_json():
+    #     ...    
+
+class Websocket_Pool_Slice():
+    ''' Filtered bulk_call-iterable-slice yielding from websocket pool base.
+    Tags are inclusive '''
+    
+    def __init__(self,pool:'Websocket_Pool_Base', entity_type=None, entity_id=None, tags=None):
+        self.pool = pool
+        self.entity_type = entity_type
+        self.entity_id = entity_id
+        self.tags = tags
+
+    def __iter__(self):
+        for socket in self.pool:
+            if self.entity_type:
+                if not socket.entity_type == self.entity_type:
+                    continue
+            if self.entity_id:
+                if not socket.entity_id == self.entity_id:
+                    continue
+            if self.tags:
+                if not any([x in socket.tags for x in self.tags]):
+                    continue
+            yield socket
+
+    # def on_ea(self,func_name,*args,**kwargs):
+    #     for x in self:
+    #         getattr(x,func_name)(*args,**kwargs)
+                
+class _Websocket_Pool_Base():
+    Base = None
+    data : list
+    
+    def __init__(self,      local_entity):
+        self.local_entity = local_entity
+        self.data   = []
+
+    def attach(self, websocket, to_entity, from_entity, tags)->FunctionType:
+        item = self.Base(websocket,to_entity, from_entity, tags)
+        self.data.append(item)
+        return partial(self.data.remove, item)
+
+    def slice(self,entity_type=None, entity_id=None, tags=None):
+        return Websocket_Pool_Slice(self, entity_type=entity_type, entity_id=entity_id, tags=tags)
+
+    def __iter__(self):
+        for socket in self.data:
+            yield socket
+
+class Websocket_Pool_Outgoing(_Websocket_Pool_Base):
+    Base = Websocket_Manager_Container
+class Websocket_Pool_Incoming(_Websocket_Pool_Base):
+    Base = Websocket_Manager_Container
+
+class Websocket_Pool():
+    def __init__(self, entity):
+        self.incoming = Websocket_Pool_Incoming(entity)
+        self.outgoing = Websocket_Pool_Outgoing(entity)
+    
     

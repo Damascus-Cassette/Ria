@@ -9,25 +9,29 @@ from sqlalchemy     import (Column              ,
                             String              ,
                             create_engine       ,
                             Table               ,
-                            Engine as EngineType,
-                            )
+                            Engine as EngineType)
 
 from sqlalchemy.orm import (declarative_base    , 
                             relationship        , 
                             sessionmaker        , 
                             Mapped              , 
                             mapped_column       ,
-                            Session as SessionType
-                            )
+                            Session as SessionType)
 
 
 from .API_V1_7      import (Interface_Base      , 
                             Foreign_Entity_Base , 
                             Local_Entity_Base   ,
-                            OL_IO               )
+                            OL_IO               ,
+                            IO_Websocket        ,
+                            Websocket_Pool      )
 
 
-from fastapi import Request
+from fastapi        import (Request                       ,
+                            WebSocket as WebSocket_Manager)
+
+from websocket      import (WebSocket    as Websocket_Client   ,
+                            WebSocketApp as WebsocketApp_Client)
 from enum import Enum
 
 DB_Base = declarative_base()
@@ -107,7 +111,40 @@ class AB_Interface(Interface_Base):
         raise NotImplementedError('TODO')
         #  return self._Root_Entity.entity_pool.ext_pool._web_repr_()
         return this_entity.get(requesting_entity, raw_path, *args,**kwargs)
+    
+    @OL_IO('/test_websocket')
+    def test_websocket():...
 
+    @test_websocket.Get_Recieve()
+    def _test_websocket(self, this_entity:Local_Entity_Base, other_entity:Foreign_Entity_Base):
+        for table in [A_Foreign, B_Foreign]:
+            rows = this_entity.session.query(table).all()
+            for other_entity in rows:
+                with other_entity.Interface() as interface:
+                    a = interface.websocket.client(this_entity)
+                    
+        return str(list(this_entity.websocket_pool.outgoing))
+
+    websocket = IO_Websocket('/websocket')
+
+    @websocket.manager.event('on_load')
+    def _on_load(from_entity, to_entity, websocket : WebSocket_Manager ):
+        print('CLIENT ACCEPTED CONNECTION!')
+        websocket.close()
+
+    @websocket.manager.event('on_close')
+    def _on_close(from_entity, to_entity, websocket : Websocket_Client ):
+        print('CLOSED WEBSOCKET!')
+
+
+    @websocket.client.event('on_load')
+    def _on_load(from_entity, to_entity, websocket : Websocket_Client ):
+        print('MANAGER ACCEPTED CONNECTION!')
+        websocket.close()
+
+    @websocket.client.event('on_close')
+    def _on_close(from_entity, to_entity, websocket : Websocket_Client ):
+        print('CLOSED WEBSOCKET!')
 
 
 class A_Local(Local_Entity_Base):
@@ -116,13 +153,14 @@ class A_Local(Local_Entity_Base):
 
     def __init__(self, unique_id, db_url):
         super().__init__()
-
         self.unique_id = unique_id
+        self.websocket_pool = Websocket_Pool(self)
 
         self.db_url  = db_url
         self.engine  = create_engine(db_url)
         self.Session = sessionmaker(bind=self.engine)
         self.session = self.Session()
+        
         DB_Base.metadata.create_all(self.engine)
 
     db_url  : str
@@ -198,8 +236,8 @@ class B_Local(Local_Entity_Base):
     
     def __init__(self, unique_id, db_url):
         super().__init__()
-
         self.unique_id = unique_id
+        self.websocket_pool = Websocket_Pool(self)
         self.db_url  = db_url
         self.engine  = create_engine(db_url)
         self.Session = sessionmaker(bind=self.engine)

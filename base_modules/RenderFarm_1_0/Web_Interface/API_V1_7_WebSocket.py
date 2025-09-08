@@ -6,7 +6,9 @@ from inspect   import signature
 from functools import partial
 from copy      import copy
 import websocket as websocket_client
+from   websocket import WebSocketApp
 import rel
+
 
 class Event_Pool(dict):
     def __missing__(self,key):
@@ -154,14 +156,14 @@ class Websocket_Client():
         callback()
 
     def run(self,this_entity, other_entity, path, header, callbacks):
+        
+        #websocket_client.WebSocket!! for lower level
+            
         ws = websocket_client.WebSocketApp(path, header = header, **callbacks)
             #TODO: Get rid of this dependency I dont even know will work
         ws.run_forever(dispatcher=rel, reconnect=5)
         return ws
-    
         
-
-
 class IO_Websocket():
     manager    : Websocket_Manager
     client     : Websocket_Client
@@ -204,3 +206,78 @@ class IO_Websocket():
     #     if recieving:
     #         assert request is not None
     #         return manager.start_websocket(self._container, this_entity, other_entity, *args, **kwargs)
+
+class Websocket_Client_Container():
+    ''' Client-Side Websocket Interface, abstracted to be uniform '''
+    websocket : WebSocketApp
+
+    def __init__(self,websocket : WebSocketApp, to_entity, from_entity, tags:tuple = tuple()):
+        self.websocket     = websocket
+        self.entity_type   = to_entity.Entity_Type.value
+        self.entity_id     = to_entity.export_identifier()
+        self.local_entity  = from_entity
+        self.tags          = tags
+
+class Websocket_Manager_Container():
+    ''' Manager-Side Websocket Interface, abstracted to be uniform '''
+    def __init__(self,websocket : WebSocketApp, to_entity, from_entity, tags:tuple = tuple()):
+        self.websocket      = websocket
+        self.entity_type    = from_entity.Entity_Type.value
+        self.entity_id      = from_entity.export_identifier()
+        self.local_entity   = to_entity
+        self.tags           = tags
+
+    # def close():
+    #     ...    
+    # def echo():
+    #     ...    
+    # def send_json():
+    #     ...    
+
+class Websocket_Pool_Slice():
+    ''' Filtered bulk_call-iterable-slice yielding from websocket pool base.
+    Tags are inclusive '''
+    
+    def __init__(self,pool:'Websocket_Pool_Base', entity_type=None, entity_id=None, tags=None):
+        self.pool = pool
+        self.entity_type = entity_type
+        self.entity_id = entity_id
+        self.tags = tags
+
+    def __iter__(self):
+        for socket in self.pool:
+            if self.entity_type:
+                if not socket.entity_type == self.entity_type:
+                    continue
+            if self.entity_id:
+                if not socket.entity_id == self.entity_id:
+                    continue
+            if self.tags:
+                if not any([x in socket.tags for x in self.tags]):
+                    continue
+            yield socket
+
+    # def on_ea(self,func_name,*args,**kwargs):
+    #     for x in self:
+    #         getattr(x,func_name)(*args,**kwargs)
+                
+class Websocket_Pool_Base():
+    Base = Websocket_Manager_Container
+    data : list
+    
+    def __init__(self,      local_entity):
+        self.local_entity = local_entity
+        self.data   = []
+
+    def attach(self, websocket, to_entity, from_entity, tags)->Callable:
+        item = self.Base(websocket,to_entity, from_entity, tags)
+        self.data.append(item)
+        return partial(self.data.remove, item)
+
+    def slice(self,entity_type=None, entity_id=None, tags=None):
+        return Websocket_Pool_Slice(self, entity_type=entity_type, entity_id=entity_id, tags=tags)
+
+    def __iter__(self):
+        for socket in self.data:
+            yield socket
+
