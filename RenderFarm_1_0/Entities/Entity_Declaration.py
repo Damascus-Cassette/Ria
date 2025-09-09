@@ -3,7 +3,6 @@
 import os
 import yaml
 from fastapi.responses import HTMLResponse
-from .Entity_Settings import Manager_Settings
 from pathlib import Path
 from contextvars import ContextVar
 
@@ -11,12 +10,14 @@ from fastapi        import (Request, Response, APIRouter, WebSocket as WebSocket
 from sqlalchemy     import (Column, Boolean, ForeignKey, Integer, String, create_engine, Table, Engine as EngineType, Enum as Sql_Enum, )
 from sqlalchemy.orm import (declarative_base, relationship, sessionmaker, Mapped, mapped_column ,Session as SessionType)
 
-from .Entity_Settings_Common        import CURRENT_DIR
 from .Job_Database_Model            import Base as Job_DB_Model
 from ..File_Management              import File_DB_Model
 from .Statics                       import Entity_Types, Trust_States, Connection_States
 from ..Web_Interface.API_V1_8       import Foreign_Entity_Base, Local_Entity_Base, Interface_Base, IO
 from ..Web_Interface.Websocket_Pool import Client_Websocket_Pool,Manager_Websocket_Pool,Manager_Websocket_Wrapper_Base
+from .Entity_Settings               import Manager_Settings, Worker_Settings
+from .Entity_Settings_Common        import CURRENT_DIR
+
 
 Client_DB_Model = declarative_base()
 
@@ -66,8 +67,57 @@ class Manager_Interface(Interface_Base):
     async def state_info(self, this_e, other_e, websocket:WebSocket_Manager):
         await websocket.accept()
 
+class Local_Common():
 
-class Manager_Local(Local_Entity_Base):
+    def export_header(self, to_entity:Foreign_Entity_Base)->dict:
+        return {'Role': self.Entity_Type.value, 
+                'UID' : self.unique_id}
+
+    def export_header(self, to_entity:Foreign_Entity_Base)->dict:
+        return {'Role': self.Entity_Type.value, 
+                'UID' : self.unique_id}
+
+    async def Find_Entity_From_Req(self, request:Request):
+        ''' Ensure DB Connection, return foreign item '''
+        if incoming_role:=request.headers.get('role'):
+            table = ROLE_TABLE_MAPPING[incoming_role]
+            print('GOT ROLE:', incoming_role)
+        else:
+            table = UNDEC_Foreign
+        rows = self.session.query(table).all()
+        for row in rows:
+            if row.matches_request(request, request.headers):
+                row.intake_request(request, request.headers)
+                self.session.commit()
+                return row
+            
+        new_row = table.New_From_Request(self,request)
+        self.session.add(new_row)
+        self.session.commit()
+        return new_row
+    
+    def load_settings(self,settings_loc):
+        ''' Ensure settings exist, from calling directory if relative? '''
+        if settings_loc.startswith('.'):
+            settings_loc = Path(settings_loc).relative_to(CURRENT_DIR.get())
+        
+        if not Path(settings_loc).exists():
+            settings = self.SettingsType()
+            data = settings._export_()
+            with open(settings_loc,'w') as f:
+                yaml.dump(data,f)
+            self.settings = settings
+        else:        
+            with open(settings_loc,'r') as f:
+                data = yaml.load(f)
+                self.settings = self.SettingsType()
+                self.settings._import_(data)
+
+        CURRENT_DIR.set(Path(self.settings.root_dir))
+        #resolves root dir if relative to current path, settins as current dict
+        #Must be done before other loading steps.
+
+class Manager_Local(Local_Common,Local_Entity_Base):
     Entity_Type   = Entity_Types.MANAGER
     SettingsType  = Manager_Settings
     InterfaceType = Manager_Interface
@@ -100,27 +150,6 @@ class Manager_Local(Local_Entity_Base):
         #self.services_pool = ServicesPoolType(self)
         #self.event_handler = EventHandlerType(self)
         self.settup_dbs()
-
-    def set_settings(self,settings_loc):
-        ''' Ensure settings exist, from calling directory if relative? '''
-        if settings_loc.startswith('.'):
-            settings_loc = Path(settings_loc).relative_to(CURRENT_DIR.get())
-        
-        if not Path(settings_loc).exists():
-            settings = self.SettingsType()
-            data = settings._export_()
-            with open(settings_loc,'w') as f:
-                yaml.dump(data,f)
-            self.settings = settings
-        else:        
-            with open(settings_loc,'r') as f:
-                data = yaml.load(f)
-                self.settings = self.SettingsType()
-                self.settings._import_(data)
-
-        CURRENT_DIR.set(Path(self.settings.root_dir))
-        #resolves root dir if relative to current path, settins as current dict
-        #Must be done before other loading steps.
 
     def settup_dbs(self):
         self.settup_client_db()
@@ -166,37 +195,24 @@ class Manager_Local(Local_Entity_Base):
 
         Job_DB_Model.metadata.create_all(self.Job_DB_Engine)
 
-    def export_header(self, to_entity:Foreign_Entity_Base)->dict:
-        return {'Role': self.Entity_Type.value, 
-                'UID' : self.unique_id}
 
-    def export_header(self, to_entity:Foreign_Entity_Base)->dict:
-        return {'Role': self.Entity_Type.value, 
-                'UID' : self.unique_id}
+class Worker_Local(Local_Common, Local_Entity_Base):
+    Entity_Type  = Entity_Types.WORKER
+    SettingsType = Worker_Settings
+    settings     : Worker_Settings
+    
+    def __init__(self, settings_loc:str='.worker_settings.yaml'):
+        self.interface              = self.InterfaceType(self)
+        self.manager_websocket_pool = Manager_Websocket_Pool()
+        self.client_websocket_pool  = Client_Websocket_Pool()
+        self.load_settings(settings_loc)
+        #self.services_pool = ServicesPoolType(self)
+        #self.event_handler = EventHandlerType(self)
 
-    async def Find_Entity_From_Req(self, request:Request):
-        ''' Ensure DB Connection, return foreign item '''
-        if incoming_role:=request.headers.get('role'):
-            table = ROLE_TABLE_MAPPING[incoming_role]
-            print('GOT ROLE:', incoming_role)
-        else:
-            table = UNDEC_Foreign
-        rows = self.session.query(table).all()
-        for row in rows:
-            if row.matches_request(request, request.headers):
-                row.intake_request(request, request.headers)
-                self.session.commit()
-                return row
-            
-        new_row = table.New_From_Request(self,request)
-        self.session.add(new_row)
-        self.session.commit()
-        return new_row
+        self.connect_to_manager()
 
-
-class Worker_Local(Local_Entity_Base):
-    Entity_Type = Entity_Types.WORKER
-
+    def connect_to_manager():
+        ...
 
 class Foreign_Common():
     def __repr__(self):
