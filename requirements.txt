@@ -2,8 +2,7 @@ flask
 sqlalchemy
 pyyaml
 pytest
-uvicorn
+uvicorn[standard]
 fastapi
 requests
-websocket-client
-rel
+ws4py

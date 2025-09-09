@@ -1,5 +1,5 @@
 
-from fastapi     import APIRouter, Response, Request, Depends, FastAPI
+from fastapi     import APIRouter, Response, Request, Depends, FastAPI, WebSocket, WebSocketDisconnect
 from enum        import Enum
 from functools   import partial
 from inspect     import signature, isclass, iscoroutinefunction, _empty
@@ -8,6 +8,7 @@ from types       import FunctionType
 from contextlib  import contextmanager
 from contextvars import ContextVar
 import requests
+from functools import wraps
 
 
 _CONNECTION_TARGET = ContextVar('_CONNECTION_TARGET',default = None)
@@ -46,6 +47,15 @@ class IO():
         self._register_regular(container, this_entity)
         return self.fapi_router
 
+    def _register_websocket(self, container, this_entity):
+        _args,_kwargs = self._api_router_args_websocket_(container,this_entity)
+        self.fapi_router.add_api_websocket_route(*_args,**_kwargs)
+
+    def _api_router_args_websocket_(self, container, this_entity):
+        wrapped = self._api_route_wrapped_func_websocket_(container, this_entity)
+        path    = self.path
+        return (path, wrapped, self.func.__name__) + self.args, self.kwargs
+
     def _register_regular(self, container, this_entity):
         _args,_kwargs = self._api_router_args_regular_(container,this_entity)
         self.fapi_router.add_api_route(*_args,**_kwargs)
@@ -54,6 +64,40 @@ class IO():
         wrapped = self._api_route_wrapped_func_regular_(container, this_entity)
         path    = self.path
         return (path, wrapped) + self.args, {'methods':[self.command.value]} | self.kwargs
+
+    def _api_route_wrapped_func_websocket_(self, container, this_entity):
+        func = self.func
+        sig = signature(func)
+        
+        if iscoroutinefunction(func):
+            async def wrapped(websocket:WebSocket, *args, _foreign_entity = Depends(this_entity.Find_Entity_From_WsReq), **kwargs):
+                t =  _LOCAL_ENTITY.set(this_entity)
+                res = await func(container,this_entity,_foreign_entity, websocket, *args,**kwargs)
+                _LOCAL_ENTITY.reset(t)
+                return res
+
+        else:
+            def wrapped(websocket:WebSocket, *args, _foreign_entity = Depends(this_entity.Find_Entity_From_WsReq), **kwargs):
+                t =  _LOCAL_ENTITY.set(this_entity)
+                res =  func(container,this_entity,_foreign_entity, websocket, *args,**kwargs)
+                _LOCAL_ENTITY.reset(t)
+                return res
+
+        params = signature(wrapped).parameters
+        wrapped.__name__      = func.__name__
+
+        o_args   = [x for x in list(sig.parameters.values())[4:] if x.POSITIONAL_OR_KEYWORD] 
+        o_kwargs = [x for x in list(sig.parameters.values())[4:] if (not x.POSITIONAL_OR_KEYWORD) and x.KEYWORD_ONLY]
+
+        parameters        = (params['websocket'], *o_args, params['_foreign_entity'], *o_kwargs)
+        return_annotation = sig.return_annotation
+
+        wrapped.__signature__ = sig.replace(
+            parameters        = parameters,
+            return_annotation = return_annotation,)
+
+        return wrapped
+
 
     def _api_route_wrapped_func_regular_(self, container, this_entity):
         func = self.func
@@ -81,9 +125,6 @@ class IO():
 
         parameters        = (params['request'], *o_args, params['_foreign_entity'], *o_kwargs)
         return_annotation = sig.return_annotation
-        # print('o_args:', list(o_args))
-        # print('o_kwargs:', list(o_kwargs))
-        # print('PARAMS:', list(parameters))
 
         wrapped.__signature__ = sig.replace(
             parameters        = parameters,
@@ -111,6 +152,8 @@ class IO():
     def Patch(cls,router,path,*args,**kwargs): return cls._wrapper(Commands.PATCH,router,path,*args,**kwargs)
     @classmethod
     def Put(cls,router,path,*args,**kwargs): return cls._wrapper(Commands.PUT,router,path,*args,**kwargs)
+    @classmethod
+    def Websocket(cls,router,path,*args,**kwargs): return cls._wrapper(Commands.WEBSOCKET,router,path,*args,**kwargs)
     
 
 
@@ -120,9 +163,31 @@ class IO():
             self.send_func   = func
             self.send_args   = args
             self.send_kwargs = kwargs
-            return None
+            return func
         return wrapper
 
+    def Client(self,*args,**kwargs):
+        ''' Wrap a websocket connection function to be declarativly typed '''
+        def wrapper(func):
+            assert self.command is Commands.WEBSOCKET
+            self.send_func   = self._Wrap_WS_Client(func)
+            self.send_args   = args
+            self.send_kwargs = kwargs
+            return func
+        return wrapper
+    
+    def _Wrap_WS_Client(self,func):
+        @wraps(func)
+        async def wrapper(container, this_entity, other_entity, raw_path,*args,**kwargs):   
+            args, kwargs, path = self._format_path_consume(self._send_fmt_func, raw_path, args, kwargs, ignore_slice_start=5)
+            print('ARGS IS'   , args)
+            print('KWARGS IS' , kwargs)
+            headers = this_entity.export_header(other_entity) | other_entity.export_header(this_entity)
+            res = await func(container,this_entity,other_entity,path,headers,*args,**kwargs)
+            print('RES IS:', res)
+            return res
+        return wrapper 
+    
     def __get__(self,inst,inst_cls):
         if inst is None:
             return self
@@ -150,15 +215,18 @@ class IO():
         ''' Header for send functions of each type'''
         if self.send_func:
             return self.send_func
+
         match self.command:
-            case Commands.GET:  return self._send_get_default
-            case Commands.POST: return self._send_post_default
-            case Commands.DELETE: return self._send_delete_default
-            case Commands.PUT: return self._send_put_default
-            case Commands.PATCH: return self._send_patch_default
-            # case Commands.WEBSOCKET: return self._send_websocket_default
+            case Commands.GET:       return self._send_get_default
+            case Commands.POST:      return self._send_post_default
+            case Commands.DELETE:    return self._send_delete_default
+            case Commands.PUT:       return self._send_put_default
+            case Commands.PATCH:     return self._send_patch_default
+            case Commands.WEBSOCKET:
+                raise Exception(f'Websocket Client function must be declared!')
             case _:
                 raise Exception(f'Command Not Found For Send! {self.command}')
+            
     @property
     def _send_fmt_func(self):
         if self.send_func: return self.send_func 
@@ -191,7 +259,7 @@ class IO():
         args, kwargs, path = self._format_path_consume(self._send_fmt_func, raw_path, args, kwargs)
         return this_entity.patch(other_entity,path,*args,**kwargs)
 
-    def _format_path_consume(self, func, raw_path, args, kwargs):
+    def _format_path_consume(self, func, raw_path, args, kwargs, ignore_slice_start = 4):
         '''convert all to kwargs by key and order, pop and format string, convert back and return.
         if there is a missing input, throw exception for unformatted path '''
         sig = signature(func)
@@ -202,7 +270,7 @@ class IO():
 
         keys = [x[1] for x in Formatter().parse(raw_path) if x[1] is not None]
         
-        for i,(k,v) in enumerate(list(sig.parameters.items())[4:]):
+        for i,(k,v) in enumerate(list(sig.parameters.items())[ignore_slice_start:]):
             # print(i,k,v)
             # this_e, other_e and raw_path
             if k in keys:
@@ -329,15 +397,7 @@ class Foreign_Entity_Base:
     def post(self, from_entity, path:str, _raw_responce=False, **kwargs): 
         header = self.export_header(from_entity) | from_entity.export_header(self)
         auth   = self.export_auth(from_entity) 
-
-        # print('PATH',   self._domain()+path)
-        # print('PARAMS', kwargs)
-        # print('AUTH',   auth)
-        # print('HEADER', header)
-
-
         res = requests.post(self._domain()+path, params=kwargs, auth = auth, headers=header)
-        # print('OUTGOING GET RES:', res.content)
         if _raw_responce: return res
         else:             return res.content
 
@@ -354,7 +414,7 @@ class Foreign_Entity_Base:
         res = requests.put(self._domain()+path, params=kwargs,data=data, auth = auth, headers=header)
         if _raw_responce: return res
         else:             return res.content
-    
+
     @contextmanager
     def Active(self):
         t = _CONNECTION_TARGET.set(self)
@@ -386,3 +446,73 @@ class Local_Entity_Base():
     async def Find_Entity_From_Req(self, request:Request):
         ''' Ensure DB Connection, return foreign item '''
         raise NotImplementedError('Implament in Local_Class!')
+
+    async def Find_Entity_From_WsReq(self, request:Request):
+        ''' Ensure DB Connection in websocket context, return foreign item '''
+        raise NotImplementedError('Implament in Local_Class!')
+    
+class Manager_Websocket_Wrapper_Base():
+    ''' Async container for websocket that attaches and manages state/callbacks with related entity(s) '''
+    
+    local_entity    : Local_Entity_Base
+    foreign_entity  : Foreign_Entity_Base
+    websocket       : WebSocket
+    
+    def __init__(self,local_entity, foreign_entity,websocket):
+        self.local_entity  = local_entity
+        self.foreign_entity = foreign_entity
+        self.websocket    = websocket
+
+    def __getattr__(self, key):
+        if key not in dir(self):
+            return getattr(self.websocket, key)
+        return vars(self)[key]
+
+    async def run(self):
+        ''' Primary Event Loop '''
+        raise NotImplementedError('Implement in child Class!') 
+
+    @wraps(WebSocket.accept)
+    async def accept(self):
+        self.local_entity.websocket_as_manager_pool.append(self)
+        return await self.websocket.accept()
+
+    @wraps(WebSocket.close)
+    async def close(self):
+        await self.websocket.close()
+
+    async def run_with_handler(self,*args,**kwargs):
+        try:
+            await self.run(*args,**kwargs)
+        except WebSocketDisconnect as e:
+            print('CLOSING OTHER SIDE!')
+        finally:
+            self.local_entity.websocket_as_manager_pool.remove(self)
+
+
+# class Client_Websocket_Wrapper_Base():
+#     websocket    : WebSocket
+
+#     def __init__(self, local_entity, foreign_entity, websocket:WebSocket_Client):        
+#         ...
+
+#     def __getattr__(self, key):
+#         if key not in dir(self):
+#             return getattr(self.websocket, key)
+#         return vars(self)[key]
+
+#     @wraps(WebSocket_Client.Connect)
+#     async def connect(self):
+#         res = await self.websocket.connect()
+#         self.local_entity.websocket_as_client_pool.append(self)
+#         return res 
+        
+#     @wraps(WebSocket_Client.accept)
+#     async def accept(self):
+#         self.local_entity.websocket_as_client_pool.append(self)
+#         return await self.websocket.accept()
+
+#     @wraps(WebSocket_Client.close)
+#     async def close(self):
+#         await self.websocket.close()
+#         self.local_entity.websocket_as_manager_pool.remove(self)
