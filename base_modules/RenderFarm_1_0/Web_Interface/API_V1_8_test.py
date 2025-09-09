@@ -13,8 +13,7 @@ from sqlalchemy.orm import (declarative_base    ,
 from .API_V1_8      import (IO                  ,
                             Interface_Base      ,
                             Foreign_Entity_Base ,
-                            Local_Entity_Base   ,
-                            Manager_Websocket_Wrapper_Base,)
+                            Local_Entity_Base   )
 
 
 from fastapi        import (Request                       ,
@@ -24,8 +23,11 @@ from fastapi        import (Request                       ,
 # from websocket      import (WebSocket    as Websocket_Client   ,
 #                             WebSocketApp as WebsocketApp_Client)
 
+from .Websocket_Pool import (Manager_Websocket_Pool, 
+                             Client_Websocket_Pool,
+                             Manager_Websocket_Wrapper_Base,)
 
-from ws4py.client.threadedclient import WebSocketBaseClient, WebSocketClient 
+from ws4py.client.threadedclient import WebSocketClient 
 
 from enum import Enum
 from fastapi.responses import HTMLResponse
@@ -88,6 +90,10 @@ class UNDEC_Foreign(Foreign_Entity_Base,DB_Base):
     id  = Column(Integer, primary_key=True)
     host = Column(String)
     port = Column(String)
+
+    @property
+    def unique_id(self):
+        return self.id
 
     def __repr__(self):
         return f'< {self.Entity_Type} | {self.host}:{self.port} @ row {self.id} > '
@@ -186,22 +192,23 @@ class AB_Interface(Interface_Base):
                 await self.send_text(f"CLOSING CONNECTION")
                 await self.close()
 
-                
-        app = custom_ws_class(this_e,other_e,websocket)        
+        app = custom_ws_class(this_e, other_e, websocket, id = 'test_connection', uid = 'single_test' )        
 
         return await app.run_with_handler()
-        #Consider using asyncio.gather or similar for above.
+        # Consider using asyncio.gather or similar for above.
 
     @test_8b.Client()
     async def test_8c(self, this_e:Foreign_Entity_Base, other_e:Local_Entity_Base, path, headers,):
         
         class custom_ws_class(WebSocketClient):
             def opened(self):
-                other_e.websocket_as_client_pool.append(self)
+                pool = other_e.client_websocket_pool
+                pool.attach(other_e, this_e, self,self.__class__.__name__)
                 self.send('GREETINGS!')
 
             def closed(self, code, reason=None):
-                other_e.websocket_as_client_pool.remove(self)
+                pool = other_e.client_websocket_pool
+                pool.remove(self)
             
             def received_message(self, message):
                 print('RECEIVED MESSAGE:', message)
@@ -230,8 +237,8 @@ class A_Local(Local_Entity_Base):
         super().__init__()
         self.unique_id = unique_id
 
-        self.websocket_as_manager_pool = []
-        self.websocket_as_client_pool  = []
+        self.manager_websocket_pool = Manager_Websocket_Pool()
+        self.client_websocket_pool  = Client_Websocket_Pool()
         # self.websocket_pool = Websocket_Pool(self)
 
         self.db_url  = db_url
