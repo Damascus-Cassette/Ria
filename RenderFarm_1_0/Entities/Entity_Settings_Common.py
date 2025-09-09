@@ -33,12 +33,15 @@ class user_time_str():
 class user_frmt_str():
     def __init__(self,data:str|Any):
         data = str(data)
-        self.data = data
+        self._data = data
     
+    def _export_(self):
+        return self._data
+
     def format(self,data:dict):
         ''' String formatter, typically dict produced from env & contextual variables. '''
         use_dict = {k:v for k,v in data if k in tuple(Formatter(data).parse())}
-        return self.data.format_map(use_dict) 
+        return self._data.format_map(use_dict) 
 
 class user_path():
     ''' Possible relative path '''

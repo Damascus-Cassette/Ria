@@ -1,11 +1,5 @@
 ''' Entity local and foreign declaration, Foregin is the non-local interface of a connection by declared entity typ '''
 
-from .Statics import Entity_Types
-from ..Web_Interface.API_V1_8 import Foreign_Entity_Base, Local_Entity_Base, Interface_Base, IO
-from ..Web_Interface.Websocket_Pool import Client_Websocket_Pool,Manager_Websocket_Pool,Manager_Websocket_Wrapper_Base
-from sqlalchemy.orm import (declarative_base, sessionmaker, Session as SessionType)
-from fastapi import APIRouter,WebSocket as WebSocket_Manager
-# from ws4py.client.threadedclient import WebSocketClient as WebSocket_Client
 import os
 import yaml
 from fastapi.responses import HTMLResponse
@@ -13,29 +7,53 @@ from .Entity_Settings import Manager_Settings
 from pathlib import Path
 from contextvars import ContextVar
 
-from sqlalchemy     import (Column              ,
-                            Boolean             ,
-                            ForeignKey          ,
-                            Integer             ,
-                            String              ,
-                            create_engine       ,
-                            Table               ,
-                            Engine as EngineType,
-                            )
+from fastapi        import (Request, Response, APIRouter, WebSocket as WebSocket_Manager)
+from sqlalchemy     import (Column, Boolean, ForeignKey, Integer, String, create_engine, Table, Engine as EngineType, Enum as Sql_Enum, )
+from sqlalchemy.orm import (declarative_base, relationship, sessionmaker, Mapped, mapped_column ,Session as SessionType)
 
-from sqlalchemy.orm import (declarative_base    , 
-                            relationship        , 
-                            sessionmaker        , 
-                            Mapped              , 
-                            mapped_column       ,
-                            Session as SessionType)
-
-from .Entity_Settings_Common import CURRENT_DIR
+from .Entity_Settings_Common        import CURRENT_DIR
+from .Job_Database_Model            import Base as Job_DB_Model
+from ..File_Management              import File_DB_Model
+from .Statics                       import Entity_Types, Trust_States, Connection_States
+from ..Web_Interface.API_V1_8       import Foreign_Entity_Base, Local_Entity_Base, Interface_Base, IO
+from ..Web_Interface.Websocket_Pool import Client_Websocket_Pool,Manager_Websocket_Pool,Manager_Websocket_Wrapper_Base
 
 Client_DB_Model = declarative_base()
 
-from .Job_Database_Model  import Base as Job_DB_Model
-from ..File_Management    import File_DB_Model
+class UNDEC_Foreign(Foreign_Entity_Base,Client_DB_Model):
+    __tablename__ = Entity_Types.UNDEC.value 
+    _interactive  = False
+    Entity_Type   = Entity_Types.UNDEC
+
+    def __init__(self,host,port):
+        self.host = host
+        self.port = port
+        # self.id  = host + ':' +port
+
+    id  = Column(Integer, primary_key=True)
+    host = Column(String)
+    port = Column(String)
+
+    @property
+    def unique_id(self):
+        return self.id
+
+    def __repr__(self):
+        return f'< {self.Entity_Type} | {self.host}:{self.port} @ row {self.id} > '
+
+    def matches_request(self, request:Request, headers:Request.headers):
+        return all([
+            str(self.host) == str(request.client.host),
+            # str(self.port) == str(request.client.port),
+        ])
+
+    def intake_request(self, request:Request, headers:Request.headers):
+        self.host = request.client.host
+        self.port = request.client.port
+    
+    @classmethod
+    def New_From_Request(cls, local_entity, request):
+        return cls(request.headers.get('UID'), request.client.host, request.client.port)
 
 
 class Manager_Interface(Interface_Base):
@@ -81,7 +99,7 @@ class Manager_Local(Local_Entity_Base):
         self.load_settings(settings_loc)
         #self.services_pool = ServicesPoolType(self)
         #self.event_handler = EventHandlerType(self)
-        self.set_dbs()
+        self.settup_dbs()
 
     def set_settings(self,settings_loc):
         ''' Ensure settings exist, from calling directory if relative? '''
@@ -104,12 +122,12 @@ class Manager_Local(Local_Entity_Base):
         #resolves root dir if relative to current path, settins as current dict
         #Must be done before other loading steps.
 
-    def set_dbs(self):
-        self.set_client_db()
-        self.set_file_db()
-        self.set_job_db()
+    def settup_dbs(self):
+        self.settup_client_db()
+        self.settup_file_db()
+        self.settup_job_db()
 
-    def set_client_db(self,):
+    def settup_client_db(self,):
         ''' Our 'relfective' database that handles foreign connections'''
         db_url = self.settings.client_db.db_loc
     
@@ -121,7 +139,7 @@ class Manager_Local(Local_Entity_Base):
         #self.services_pool.Extend(Client_DB_Services)
         #self.event_handler.Extend(Client_DB_Events  )
 
-    def set_file_db(self,):
+    def settup_file_db(self,):
         ''' The database-storage that handles Files and similar '''
         self.settings.file_db.db_loc
         self.settings.file_db.storage
@@ -135,7 +153,7 @@ class Manager_Local(Local_Entity_Base):
         File_DB_Model.metadata.create_all(self.File_DB_Engine)
         
 
-    def set_job_db(self,):
+    def settup_job_db(self,):
         ''' The local Job database-storage that handles each task and working files. '''
         self.settings.job_db.db_loc
         self.settings.job_db.storage
@@ -148,15 +166,92 @@ class Manager_Local(Local_Entity_Base):
 
         Job_DB_Model.metadata.create_all(self.Job_DB_Engine)
 
-class Manager_Foreign(Foreign_Entity_Base, Client_DB_Model):
-    Entity_Type   = Entity_Types.MANAGER
-    __tablename__ = Entity_Types.MANAGER.value
-    interface = Manager_Interface
+    def export_header(self, to_entity:Foreign_Entity_Base)->dict:
+        return {'Role': self.Entity_Type.value, 
+                'UID' : self.unique_id}
+
+    def export_header(self, to_entity:Foreign_Entity_Base)->dict:
+        return {'Role': self.Entity_Type.value, 
+                'UID' : self.unique_id}
+
+    async def Find_Entity_From_Req(self, request:Request):
+        ''' Ensure DB Connection, return foreign item '''
+        if incoming_role:=request.headers.get('role'):
+            table = ROLE_TABLE_MAPPING[incoming_role]
+            print('GOT ROLE:', incoming_role)
+        else:
+            table = UNDEC_Foreign
+        rows = self.session.query(table).all()
+        for row in rows:
+            if row.matches_request(request, request.headers):
+                row.intake_request(request, request.headers)
+                self.session.commit()
+                return row
+            
+        new_row = table.New_From_Request(self,request)
+        self.session.add(new_row)
+        self.session.commit()
+        return new_row
 
 
 class Worker_Local(Local_Entity_Base):
     Entity_Type = Entity_Types.WORKER
 
+
+class Foreign_Common():
+    def __repr__(self):
+        return f'< {self.Entity_Type} | {self.host}:{self.port} @ row {self.uid} > '
+
+    def __init__(self, uid, host, port):
+        self.uid  = uid
+        self.host = host
+        self.port = port
+
+    def export_header(self, from_entity:Local_Entity_Base)->dict:
+        return {}
+    
+    def intake_request(self, request, header):
+        self.port = request.client.port
+        self.host = request.client.host
+        
+    def matches_request(self,request:Request, headers:Request.headers):
+        return all([headers.get('Role', default = '') == self.Entity_Type.value,
+                    headers.get('UID',  default = '') == self.id])
+
+    def export_auth(self,from_entity)->tuple:
+        return tuple()
+    
+    @classmethod
+    def New_From_Request(cls,local_entity, request):
+        return cls(request.headers.get('UID'), request.client.host, request.client.port)
+    
+
+class Manager_Foreign(Foreign_Common,Foreign_Entity_Base, Client_DB_Model):
+    Entity_Type   = Entity_Types.MANAGER
+    __tablename__ = Entity_Types.MANAGER.value
+    interface     = Manager_Interface()
+
+    uid       = Column(Integer, primary_key=True)
+    host      = Column(String)
+    port      = Column(String)
+    con_state = Column(Sql_Enum(Connection_States), default = Connection_States.NEVER_CON)
+    _trust : Trust_States = Trust_States.TRUSTED
+        #TODO: CHANGE LATER TO BE SECURE
+
+
 class Worker_Foreign(Foreign_Entity_Base, Client_DB_Model):
     Entity_Type   = Entity_Types.WORKER
     __tablename__ = Entity_Types.WORKER.value
+
+    uid       = Column(Integer, primary_key=True)
+    host      = Column(String)
+    port      = Column(String)
+    con_state = Column(Sql_Enum(Connection_States), default = Connection_States.NEVER_CON)
+    _trust : Trust_States = Trust_States.TRUSTED
+        #TODO: CHANGE LATER TO BE SECURE
+
+
+ROLE_TABLE_MAPPING = {
+    Manager_Foreign.Entity_Type.value : Manager_Foreign,
+    Worker_Foreign.Entity_Type.value  : Worker_Foreign ,
+}
