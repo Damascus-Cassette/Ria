@@ -245,7 +245,7 @@ class A_Local(Local_Entity_Base):
         self.engine  = create_engine(db_url)
         self.Session = sessionmaker(bind=self.engine)
         self.session = self.Session()
-        
+
         DB_Base.metadata.create_all(self.engine)
 
     db_url  : str

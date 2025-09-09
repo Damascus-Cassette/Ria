@@ -7,6 +7,12 @@ class Entity_Types(Enum):
     UNDEC   = 'UNDECLARED'
 
 
-class Trust_State(Enum):
+class Trust_States(Enum):
     TRUSTED   = 'TRUSTED'
     UNTRUSTED = 'UNTRUSTED'
+
+class Connection_States(Enum):
+    CONNECTED  = 'CONNECTED'
+    CLOSED     = 'CLOSED'
+    ERROR      = 'ERROR'
+    NEVER_CON  = 'NEVER_CON'
