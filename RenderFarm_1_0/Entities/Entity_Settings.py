@@ -3,7 +3,7 @@
 '''
 
 from ...models.struct_file_io import BaseModel
-from .Entities.Entity_Settings_Common import user_frmt_str, user_time_str
+from .Entity_Settings_Common import user_frmt_str, user_time_str, user_path
 from pathlib import Path
 # class Manager_Cache_Settings(BaseModel):
 #     ''' Cache settings, for handling cache timeout and standards '''
@@ -21,8 +21,8 @@ class Manager_Task_Settings(BaseModel):
 
 class Database_Settings(BaseModel):
     ''' Settings to expose the database through the manager '''
-    database : str = './filespace.db' 
-    storage  : str = './filespace/'   
+    db_loc  : str = './filespace.db' 
+    storage : str = './filespace/'   
 
     timeout_session  : user_time_str = 'MANUAL'
 
@@ -38,20 +38,31 @@ class Database_Settings(BaseModel):
         # This is file/namedfile metadata that replaces the file on cleanup.
         # Used in recovery
 
+class Job_DB_Settings(BaseModel):
+    db_loc   : user_path = './jobs.db'
+    storage  : user_path = './jobs/' 
+
+class Client_DB_Settings(BaseModel):
+    db_loc   : user_path = './clients.db'
+    
 class Manager_Settings(BaseModel):
     ''' Settings for Manager's Operations '''
     # cache     : Manager_Cache_Settings
     # security  : Manager_Sec_Settings
     _log_level: int = 0
 
+    root_dir  : user_path = '.'
+        #Absolute, or Relative to CURRENTDIR.default,
+        #Atm default is os.cwdir
+    
     file_db   : Database_Settings
+    client_db : Client_DB_Settings
+    job_db    : Job_DB_Settings
 
     addr      : str  = '127.22.0.1'
     port      : str  = '4000'
     label     : str  = 'Ria Manager'
-    client_db : Path = './clients.db'
-    job_db    : Path = './jobs.db'
-    job_files : Path = './jobs/' 
+
 
     worker_timeout : user_time_str = '1m' 
 
@@ -64,7 +75,7 @@ class Worker_Settings(BaseModel):
     port              : str  = '4001'
 
     task_tags         : list = tuple() 
-    working_dir       : Path = './working/'
+    working_dir       : user_path = './working/'
     working_dir_ext   : user_frmt_str = '/{job_id}/{task_id}/'
 
 class Worker_Env_Settings(BaseModel):

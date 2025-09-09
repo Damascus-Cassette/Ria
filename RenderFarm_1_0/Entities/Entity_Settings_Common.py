@@ -3,6 +3,8 @@ from typing import Any
 from enum   import Enum
 from time   import time
 from string import Formatter
+from .EnvVars import CURRENT_DIR
+from pathlib import Path
 
 class user_time_enums(Enum):
     MANUAL = 'MANUAL'
@@ -17,11 +19,16 @@ class user_time_str():
     def __init__(self,data:str|Any):
         data = str(data)
         if data in user_time_enums._member_map_.keys():
-            self.data = user_time_enums(data)
+            self._data = user_time_enums(data)
         else:
-            self.data = data
+            self._data = data
 
-    data : time|user_time_enums
+    _data : time|user_time_enums
+
+    @property
+    def data(self):
+        raise NotImplementedError('TODO')
+        # TODO: CONVERT DATA AT READ
 
 class user_frmt_str():
     def __init__(self,data:str|Any):
@@ -32,4 +39,21 @@ class user_frmt_str():
         ''' String formatter, typically dict produced from env & contextual variables. '''
         use_dict = {k:v for k,v in data if k in tuple(Formatter(data).parse())}
         return self.data.format_map(use_dict) 
+
+class user_path():
+    ''' Possible relative path '''
     
+    def __init__(self,data:str):
+        self._data = data
+    
+    def _export_(self):
+        return self._data
+
+    @property
+    def data(self)->Path:
+        if self.data.startswith('.'):
+            return Path(Path(self._data).relative_to(CURRENT_DIR.get()))
+        return Path(self._data) 
+    
+    def __str__(self,):
+        return str(self.data)
