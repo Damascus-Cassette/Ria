@@ -3,7 +3,7 @@
 '''
 
 from ...models.struct_file_io import BaseModel
-from .Entity_Settings_Common import user_frmt_str, user_time_str
+from .Entities.Entity_Settings_Common import user_frmt_str, user_time_str
 from pathlib import Path
 # class Manager_Cache_Settings(BaseModel):
 #     ''' Cache settings, for handling cache timeout and standards '''

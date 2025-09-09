@@ -451,43 +451,6 @@ class Local_Entity_Base():
         ''' Ensure DB Connection in websocket context, return foreign item '''
         raise NotImplementedError('Implament in Local_Class!')
     
-class Manager_Websocket_Wrapper_Base():
-    ''' Async container for websocket that attaches and manages state/callbacks with related entity(s) '''
-    
-    local_entity    : Local_Entity_Base
-    foreign_entity  : Foreign_Entity_Base
-    websocket       : WebSocket
-    
-    def __init__(self,local_entity, foreign_entity,websocket):
-        self.local_entity  = local_entity
-        self.foreign_entity = foreign_entity
-        self.websocket    = websocket
-
-    def __getattr__(self, key):
-        if key not in dir(self):
-            return getattr(self.websocket, key)
-        return vars(self)[key]
-
-    async def run(self):
-        ''' Primary Event Loop '''
-        raise NotImplementedError('Implement in child Class!') 
-
-    @wraps(WebSocket.accept)
-    async def accept(self):
-        self.local_entity.websocket_as_manager_pool.append(self)
-        return await self.websocket.accept()
-
-    @wraps(WebSocket.close)
-    async def close(self):
-        await self.websocket.close()
-
-    async def run_with_handler(self,*args,**kwargs):
-        try:
-            await self.run(*args,**kwargs)
-        except WebSocketDisconnect as e:
-            print('CLOSING OTHER SIDE!')
-        finally:
-            self.local_entity.websocket_as_manager_pool.remove(self)
 
 
 # class Client_Websocket_Wrapper_Base():

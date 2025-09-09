@@ -3,7 +3,7 @@ from .Execution_V2     import main as Execution_V2
 # from .Monadish_Interface_1_1     import main as Monadish_Interface_1_1 
 from .Monadish_Interface_1_2     import main as Monadish_Interface_1_2 
 from .Operations_V1 import main as Operations_V1
-from .RenderFarm_1_0 import main as RenderFarm_V1_0
+from .RenderFarm_1_0.Graph_Module_Common import main as RenderFarm_V1_0
 modules = [
            TestModule_V2          ,
            Execution_V2           ,
