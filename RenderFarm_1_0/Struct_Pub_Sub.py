@@ -24,11 +24,16 @@ class Event_Pool():
     ''' '''
     ...
 
-class Scheduled_Task():
-    
+class Scheduled_Generator():
     def __init__(self, tick:int, func, args, kwargs, last_ran=None):
         ''' Last_ran will subtract from the first tick and execute now if negative '''
-        self.is_generator = isgeneratorfunction(func)
+        assert isgeneratorfunction(func)
+    
+    
+class Scheduled_Task():
+    def __init__(self, tick:int, func, args, kwargs, last_ran=None):
+        ''' Last_ran will subtract from the first tick and execute now if negative '''
+        assert not isgeneratorfunction(func)
 
     def run_once(self):
         self.cont = True
