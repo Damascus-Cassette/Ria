@@ -2,10 +2,11 @@ from enum      import Enum
 
 from typing    import Self,Any
 from functools import wraps, partial
-from types     import FunctionType
+from types     import FunctionType,CoroutineType
 from inspect   import isclass,  iscoroutinefunction, isgeneratorfunction
-
 import asyncio
+
+from .Struct_Scheduled_Task import Scheduled_Task
 
 class _Event_Types():
     PUB      = 'PUB' 
@@ -23,41 +24,6 @@ class _def_dict_list(dict):
 class Event_Pool():
     ''' '''
     ...
-
-class Scheduled_Generator():
-    def __init__(self, tick:int, func, args, kwargs, last_ran=None):
-        ''' Last_ran will subtract from the first tick and execute now if negative '''
-        assert isgeneratorfunction(func)
-    
-    
-class Scheduled_Task():
-    def __init__(self, tick:int, func, args, kwargs, last_ran=None):
-        ''' Last_ran will subtract from the first tick and execute now if negative '''
-        assert not isgeneratorfunction(func)
-
-    def run_once(self):
-        self.cont = True
-        ...
-
-    def run_forever(self):
-        self.cont = True
-        ...
-
-    def generator_loop():
-        ...
-    
-    def loop():
-        ...
-
-    def stop(self):
-        self.cont = False
-        if self.is_generator:
-            return self.generator_tick():
-        ...
-
-    @property
-    def is_running():
-        ...
 
 
 class Event_Item():
@@ -234,7 +200,7 @@ class Event_Router():
     def attach_event(self, event):
         self.event_insts[event.Event_Type.value].append(event)
         
-    def publish(self, key, event_container, original_container, _first_level=False, *args, **kwargs):
+    def publish(self, key, event_container, housing_container, _first_level=False, *args, **kwargs):
         ''' 
         - walk, check local if first level publish 
         - then push event key & args, kwargs to parent which should publish to root, 
@@ -243,36 +209,53 @@ class Event_Router():
         '''
         ...
 
-        self._meta_event('event_publishing_started', key, event_container,original_container, args, kwargs)
+        self._meta_event('event_publishing_started', key, event_container,housing_container, args, kwargs)
         if event_container.local_only and (event_container in self.event_insts):
             ''' catch local-only and trigger locals '''
-            return self.event(self,key,event_container,original_container,args,kwargs,local_only=True)
+            return self.event(self,key,event_container,housing_container,args,kwargs,local_only=True)
         elif self._parent and _first_level:
-            self.event(self,key,event_container,original_container,args,kwargs, local_only=True)
-            self._parent.publish(key,event_container,original_container,args,kwargs)
+            self.event(self,key,event_container,housing_container,args,kwargs, local_only=True)
+            self._parent.publish(key,event_container,housing_container,args,kwargs)
         elif self._parent:
-            self._parent.publish(key,event_container,original_container,args,kwargs)
+            self._parent.publish(key,event_container,housing_container,args,kwargs)
         else:
-            return self.event(self,key,event_container,original_container,args,kwargs)
-        self._meta_event('event_publishing_complete', key, event_container,original_container, args, kwargs)
+            return self.event(self,key,event_container,housing_container,args,kwargs)
+        self._meta_event('event_publishing_complete', key, event_container,housing_container, args, kwargs)
 
-    def event(self,key,event_container, original_container, args, kwargs, local_only = False):
+    def event(self,key,event_container, housing_container, args, kwargs, local_only = False):
         ''' Event occurance under key, local_only=False triggers all that are not local. 
         Also checks filter for each Sub
         '''
-        self._meta_event('sub_posting_started', key, event_container,original_container, args, kwargs)
+        self._meta_event('sub_posting_started', key, event_container,housing_container, args, kwargs)
         for sub in self.event_insts[_Event_Types.SUB.value]:
-            if (local_only or sub.local_only) and (self._container != original_container): 
+            if (local_only or sub.local_only) and (self._container != housing_container): 
                 continue
             if sub.filter:
-                if not sub.filter(key,event_container,original_container,args,kwargs):
+                if not sub.filter(key,event_container,housing_container,args,kwargs):
                     continue
             sub(self._container,key,*args,*kwargs)
-        self._meta_event('sub_posting_complete', key, event_container,original_container, args, kwargs)
+        self._meta_event('sub_posting_complete', key, event_container,housing_container, args, kwargs)
 
-    def schedule(self,*args,**kwargs)->FunctionType:
+    def schedule(self, event_container, housing_container, func,*args,**kwargs)->FunctionType:
         ''' Schedule a function using asyncio and return a callback to cancel the scheduled func. Also append locally to close. Optional on-close hook? '''
-        raise NotImplementedError('STILL WORKING ON IT')
+        
+        task_kwargs = event_container.Kwargs | kwargs.get('_schedule_kwargs', {})
+        if '_schedule_kwargs' in kwargs.keys():
+            del kwargs['_schedule_kwargs']
+
+        scheduled_task = Scheduled_Task(func,*args,**kwargs)
+         
+        self.attach_scheduled_task(scheduled_task,scheduled_task.task(**task_kwargs))
+
+    def attach_scheduled_task(self,taskio,task:CoroutineType):
+        
+        remove = lambda *args,**kwargs: taskio.close; try: self.attach_scheduled_task.remove(taskio)
+
+        self.active_scheduled_tasks.append(taskio, remove)
+        asyncio.create_task(task)
+
+        
+        # raise NotImplementedError('STILL WORKING ON IT')
 
     def _meta_event(self, meta_event_key, event_key, event_container, orignal_container, args, kwargs):
         for sub in self.event_insts[_Event_Types.META_SUB.value]:
