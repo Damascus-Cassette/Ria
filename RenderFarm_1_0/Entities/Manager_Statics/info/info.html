@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>{{Manager_Name}} Info</title>
+    </head>
+    <body>
+        <!-- <form action="" onsubmit="sendMessage(event)">
+            <input type="text" id="messageText" autocomplete="off"/>
+            <button>Send</button>
+        </form> -->
+        <h1>{{Manager_Name}} Info</h1>
+        <div style="display: flex; padding:1em;">
+            <div style="border: thin solid black; padding:1em; width: 20%;">
+                <h2> Log </h2>
+                <ul id='log'> </ul>
+            </div>
+            <div style="border: thin solid black; padding:1em; width: 20%;">
+                <h2> Clients </h2>
+                <ul id='clients'> </ul>
+            </div>
+            <div style="border: thin solid black; padding:1em; width: 20%;"> 
+                <h2> Workers </h2>
+                <ul id='workers'> </ul>
+            </div>
+            <div style="border: thin solid black; padding:1em; width: 20%;"> 
+                <h2> Jobs </h2>
+                <ul id='jobs'> </ul>
+            </div>
+
+        </div>
+        <script src="/static/info/info.js">  </script>
+        
+    </body>
+</html>
+
+<template id = "generic-lineitem-template">
+    <div class="generic-lineitem"; style="display: flex; padding: .25em">
+        <p class="label"></p>
+        <p class="status"></p>
+        <p class="lastcon"></p>
+    </div>
+</template>
+
+<template id = "log-lineitem-item">
+    <div class="log-lineitem"; style="display: flex; padding: .25em">
+        <p class="date"></p>
+        <p class="entity"></p>
+        <p class="type"></p>
+        <p class="message"></p>
+    </div>
+</template>

@@ -64,8 +64,9 @@ class Manager_Interface(Interface_Base):
     @IO.Get(router,'/')
     def base_page(self, this_e, other_e, req, ):
         return this_e.fapi_templates.TemplateResponse(
-            "Info.html",
-            {'request' : req}
+            "/info/info.html",
+            {   'request' : req, 
+                'Manager_Name':this_e.settings.label},
         )
         # return HTMLResponse(content=html_content)
         # return 'HI!'
@@ -75,12 +76,9 @@ class Manager_Interface(Interface_Base):
     async def state_info(self, this_e, other_e, websocket:WebSocket_Manager):
         await websocket.accept()
 
-<<<<<<< HEAD
-=======
 class Worker_Interface(Interface_Base):
     ''' Worker interface is websocket msg : pub-sub based'''
     ...
->>>>>>> c7ed8c3438ab9f6c63c69608953d2ef0b51264e0
 
 class Local_Common():
 
@@ -140,12 +138,14 @@ class Local_Common():
     @classmethod
     def fapi_app(cls, *args, **kwargs):
         from fastapi import FastAPI
+        from fastapi.staticfiles import StaticFiles 
 
         app = FastAPI()
 
         inst  = cls(*args,**kwargs)
         from fastapi.templating import Jinja2Templates
-        inst.fapi_templates = Jinja2Templates(directory=f"{inst._Fapi_Dep_Path}/Manager_Templates")
+        inst.fapi_templates = Jinja2Templates(directory=inst._Fapi_Dep_Path)
+        app.mount("/static", StaticFiles(directory=inst._Fapi_Dep_Path), name="static")
 
         @app.get("/url-list")
         def get_all_urls():
@@ -173,7 +173,7 @@ class Manager_Local(Local_Common,Local_Entity_Base):
     @property
     def _Fapi_Dep_Path(self):
         #HACK make a root path argument that can change to unpack location when using NUITKA
-        return f'{Path(__file__).parents[0]}/Manager_Ext'
+        return f'{Path(__file__).parents[0]}/Manager_Statics'
          
     # services_pool : ServicesPoolType
     # event_handler : EventHandlerType
