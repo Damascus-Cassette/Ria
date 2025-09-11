@@ -22,6 +22,8 @@ from .Entity_Settings_Common        import CURRENT_DIR
 Client_DB_Model = declarative_base()
 
 class UNDEC_Foreign(Foreign_Entity_Base,Client_DB_Model):
+    '''UNREGISTERED & UNTRUSTED CONNECTION, CLIENTS WILL BE DEFINED ELSEWHERE AND ALWAYS PASS IN UID + SEC KEY'''
+
     __tablename__ = Entity_Types.UNDEC.value 
     _interactive  = False
     Entity_Type   = Entity_Types.UNDEC
@@ -31,7 +33,7 @@ class UNDEC_Foreign(Foreign_Entity_Base,Client_DB_Model):
         self.port = port
         # self.id  = host + ':' +port
 
-    id  = Column(Integer, primary_key=True)
+    id   = Column(Integer, primary_key=True)
     host = Column(String)
     port = Column(String)
 
@@ -45,7 +47,6 @@ class UNDEC_Foreign(Foreign_Entity_Base,Client_DB_Model):
     def matches_request(self, request:Request, headers:Request.headers):
         return all([
             str(self.host) == str(request.client.host),
-            # str(self.port) == str(request.client.port),
         ])
 
     def intake_request(self, request:Request, headers:Request.headers):
@@ -54,18 +55,29 @@ class UNDEC_Foreign(Foreign_Entity_Base,Client_DB_Model):
     
     @classmethod
     def New_From_Request(cls, local_entity, request):
-        return cls(request.headers.get('UID'), request.client.host, request.client.port)
+        # raise Exception(f'UNKNOWN:{ra}')
+        return cls(request.client.host, request.client.port)
 
 
 class Manager_Interface(Interface_Base):
-
-    @IO.Get(APIRouter,'/')
-    def base_page(self, this_e, other_e, req):
+    router = APIRouter()
+    @IO.Get(router,'/')
+    def base_page(self, this_e, other_e, req, ):
+        return this_e.fapi_templates.TemplateResponse(
+            "Info.html",
+            {'request' : req}
+        )
+        # return HTMLResponse(content=html_content)
+        # return 'HI!'
         ...
 
-    @IO.Websocket(APIRouter,'/state-info')
+    @IO.Websocket(router,'/state-info')
     async def state_info(self, this_e, other_e, websocket:WebSocket_Manager):
         await websocket.accept()
+
+class Worker_Interface(Interface_Base):
+    ''' Worker interface is websocket msg : pub-sub based'''
+    ...
 
 class Local_Common():
 
@@ -95,6 +107,10 @@ class Local_Common():
         self.session.add(new_row)
         self.session.commit()
         return new_row
+
+    async def Find_Entity_From_WsReq(self, request:WebSocket_Manager):
+        ''' Ensure DB Connection in websocket context, return foreign item '''
+        return await self.Find_Entity_From_Req(request)
     
     def load_settings(self,settings_loc):
         ''' Ensure settings exist, from calling directory if relative? '''
@@ -114,11 +130,34 @@ class Local_Common():
                 self.settings = self.SettingsType()
                 self.settings._import_(data)
 
-        CURRENT_DIR.set(Path(self.settings.root_dir))
+        CURRENT_DIR.set(str(self.settings.root_dir))
         #resolves root dir if relative to current path, settins as current dict
         #Must be done before other loading steps.
 
+    @classmethod
+    def fapi_app(cls, *args, **kwargs):
+        from fastapi import FastAPI
+
+        app = FastAPI()
+
+        inst  = cls(*args,**kwargs)
+        from fastapi.templating import Jinja2Templates
+        inst.fapi_templates = Jinja2Templates(directory=f"{inst._Fapi_Dep_Path}/Manager_Templates")
+
+        @app.get("/url-list")
+        def get_all_urls():
+            url_list = [{"path": route.path, "name": route.name} for route in app.routes]
+            return url_list
+
+        return  inst.attach_to_app(app)
+
+    # def fapi_mount_static(self,app):
+    #     from fastapi import StaticFiles
+    #     app.mount("/static", StaticFiles(directory="static"), name="static")
+    #     ...
+
 class Manager_Local(Local_Common,Local_Entity_Base):
+    
     Entity_Type   = Entity_Types.MANAGER
     SettingsType  = Manager_Settings
     InterfaceType = Manager_Interface
@@ -128,6 +167,11 @@ class Manager_Local(Local_Common,Local_Entity_Base):
     manager_websocket_pool : Manager_Websocket_Pool
     client_websocket_pool  : Client_Websocket_Pool
 
+    @property
+    def _Fapi_Dep_Path(self):
+        #HACK make a root path argument that can change to unpack location when using NUITKA
+        return f'{Path(__file__).parents[0]}/Manager_Ext'
+         
     # services_pool : ServicesPoolType
     # event_handler : EventHandlerType
 
@@ -142,6 +186,7 @@ class Manager_Local(Local_Common,Local_Entity_Base):
     Client_DB_Engine  : EngineType
     Client_DB_Session : SessionType
     client_db_session : SessionType
+    
 
     def __init__(self, settings_loc:str='./manger_settings.yaml'):
         self.interface              = self.InterfaceType(self)
@@ -169,6 +214,9 @@ class Manager_Local(Local_Common,Local_Entity_Base):
         Client_DB_Model.metadata.create_all(self.Client_DB_Engine)
         #self.services_pool.Extend(Client_DB_Services)
         #self.event_handler.Extend(Client_DB_Events  )
+
+        self.session = self.Client_DB_Session()
+        #HACK. Change to make contextual database sessions as per good practice
 
     def settup_file_db(self,):
         ''' The database-storage that handles Files and similar '''
@@ -199,11 +247,11 @@ class Manager_Local(Local_Common,Local_Entity_Base):
 
         Job_DB_Model.metadata.create_all(self.Job_DB_Engine)
 
-
 class Worker_Local(Local_Common, Local_Entity_Base):
-    Entity_Type  = Entity_Types.WORKER
-    SettingsType = Worker_Settings
-    settings     : Worker_Settings
+    Entity_Type   = Entity_Types.WORKER
+    SettingsType  = Worker_Settings
+    InterfaceType = Worker_Interface
+    settings      : Worker_Settings
     
     def __init__(self, settings_loc:str='./worker_settings.yaml'):
         self.interface              = self.InterfaceType(self)
@@ -215,7 +263,7 @@ class Worker_Local(Local_Common, Local_Entity_Base):
 
         self.connect_to_manager()
 
-    def connect_to_manager():
+    def connect_to_manager(self,):
         ...
 
 class Foreign_Common():
@@ -260,9 +308,9 @@ class Manager_Foreign(Foreign_Common,Foreign_Entity_Base, Client_DB_Model):
 
 
 class Worker_Foreign(Foreign_Common,Foreign_Entity_Base, Client_DB_Model):
-    Entity_Type   = Entity_Types.WORKER
     __tablename__ = Entity_Types.WORKER.value
-
+    Entity_Type   = Entity_Types.WORKER
+    
     uid       = Column(Integer, primary_key=True)
     host      = Column(String)
     port      = Column(String)

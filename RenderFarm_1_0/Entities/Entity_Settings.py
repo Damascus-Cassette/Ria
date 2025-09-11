@@ -90,6 +90,8 @@ class Worker_Settings(BaseModel):
     addr              : str  = '127.22.0.1'
     port              : str  = '4001'
 
+    root_dir          : user_path = '.'
+
     task_tags         : list = tuple() 
     working_dir       : user_path = './working/'
     working_dir_ext   : user_frmt_str = '/{job_id}/{task_id}/'
