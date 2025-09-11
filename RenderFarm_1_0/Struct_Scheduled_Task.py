@@ -19,9 +19,17 @@ class Scheduled_Task():
             generator = self.func(self,*self.args,**self.kwargs)
             return self._consumer(self._loop_through_generator(generator))
             
-    @staticmethod
-    async def _consumer(generator:AsyncGeneratorType):
+    async def _consumer(self,generator:AsyncGeneratorType, start_delay = None):
         ''' Consumes the generator '''
+        
+        if start_delay:
+            self._timer = asyncio.create_task(asyncio.sleep())
+        try:
+            await self._timer
+        except asyncio.CancelledError:
+            print('EVENT CANCELED BEFORE INTIIAL DELAY FIRED')
+            return
+
         async for x in generator: ...
         await generator.aclose()
 
@@ -84,19 +92,52 @@ class Scheduled_Task():
         self.timer      = None
         self.is_running = False
 
-    def close(self, finalize:bool=None):
+    def close(self, reason = None, finish_func:bool=None):
         self.continue_execution = False
         if self.timer is None: return
-        if finalize is not None:
-            _fin = self.finalize
-            self.finalize = finalize
+        self.reason = reason
+        if finish_func is not None:
+            _fin = self.finish_func
+            self.finish_func = finish_func
             self.timer.cancel()
-            self.finalize = _fin
+            self.finish_func = _fin
         else:
             self.timer.cancel()
+        self.reason = None
+        
     
     async def aclose(self, finalize:bool = False):
         self.close(finalize=finalize)
+
+
+
+class Scheduled_Task_Pool():
+    unique_tasks : dict
+    anon_tasks   : list
+
+    def __init__(self):
+        self.unique_tasks = {}
+        self.anon_tasks   = []
+        self._created     = []
+            #debug list, check on del if it has any unstarted or unattached.
+
+    def attach_and_run(self,scheduled_task,interval,start_delay=None,UID=None):
+        if scheduled_task in self.created:
+            self._created.remove(scheduled_task)
+        if UID:
+            assert not (UID in self.unique_tasks.keys())
+            self.unique_tasks[UID] = scheduled_task
+        else:
+            self.anon_tasks.append(scheduled_task)
+        
+        task = scheduled_task.task(interval = interval, start_delay=start_delay)
+        
+    def run_task(self, task:CoroutineType):
+        asyncio.create_task(task)
+
+    def close_all(self,reason=None,finish_func=True):
+        for scheduled_task in (*self.unique_tasks.values(),*self.anon_tasks):
+            scheduled_task.close(reason=reason,finish_func=finish_func)
 
 
 if __name__ == '__main__':

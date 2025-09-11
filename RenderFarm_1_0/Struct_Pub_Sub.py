@@ -6,9 +6,10 @@ from types     import FunctionType,CoroutineType
 from inspect   import isclass,  iscoroutinefunction, isgeneratorfunction
 import asyncio
 
-from .Struct_Scheduled_Task import Scheduled_Task
+from .Struct_Scheduled_Task import Scheduled_Task,Scheduled_Task_Pool
 
-class _Event_Types():
+from enum import Enum
+class _Event_Types(Enum):
     PUB      = 'PUB' 
     SUB      = 'SUB' 
     META_SUB = 'META_SUB'       #Meaning Router Events that happen local only 
@@ -20,12 +21,7 @@ class _def_dict_list(dict):
     def __missing__(self,key):
         self[key] = inst = []
         return inst
-
-class Event_Pool():
-    ''' '''
-    ...
-
-
+    
 class Event_Item():
     Constructed = False
     BufferType  : Any
@@ -49,13 +45,13 @@ class Event_Item():
     
     @classmethod
     def New(cls, event_key, router_cls:'Event_Router', event_type:_Event_Types, func, *args, local_only = False, filter=None, buffertype=list, **kwargs):
-        new = type('Event_Router_Constructed', (Event_Router,), {'Constructed':True})
+        new = type(f'Event_Item_Constructed:{event_type.value}', (Event_Item,), {'Constructed':True})
         new.Event_Key   = event_key
         new.Constructed = True
         new.Filter      = filter
         new.Router_cls  = router_cls
         new.Event_Type  = event_type
-        new.Func        = func
+        new.Func        = staticmethod(func)
         new.Local_Only  = local_only    #Handled by router on publish. Only first level call is local. Otherwise pipes to root and then distributes through routers w/ filters applied
         new.BufferType  = buffertype
         new.Args        = args 
@@ -63,33 +59,37 @@ class Event_Item():
 
         return new
 
-    def __init__(self, router, nested = False):
+    def __init__(self, container, router,nested = False):
         if not isclass(self.Func):
             self.func = self.Func
         elif issubclass(self.Func, Event_Item):
             self.func = self.Func(router, nested = True)
         
-        if not nested:
-            self.__get__ = self._get_
+        self._container = container
+        self.is_nested  = nested
 
         self.readers = []
         self.router  = router
 
-        router.attach_event_inst(self)
-    
-    def _get_(self,inst, inst_cls):
+        router.attach_event(self)
+
+    def __get__(self, inst, inst_cls):
         ''' Only appplies after initialization IF this is not nested '''
-        if inst is None:
+        if (inst is None):# or (self.is_nested):
             return self
         return partial(self,inst)
+    #Not sure why this isnt working ??
     
-    def __call__(self,container,*args,**kwargs):
+    def __call__(self, *args,**kwargs):
+        container = self._container
         match self.Event_Type:
             case _Event_Types.PUB:
                 res = self.run_merged_coroutine(container,*args,**kwargs)
-                self.router.Publish(self.event_key,container)
+                self.router.publish(self.Event_Key,self,container)
                 return res
             case _Event_Types.SUB:
+                return self.Func(container, *args, **kwargs)
+            case _Event_Types.READER:
                 return self.Func(container, *args, **kwargs)
             case _Event_Types.BUFFER:
                 if not hasattr(self,'buffer'): self.buffer = self.BufferType()
@@ -118,62 +118,69 @@ class Event_Router():
     @classmethod
     def New(cls, filter = None)->Self:
         ''' Constructs a non-instanciated Event_Router'''
-        new = type('Event_Router_Constructed', (Event_Router,), {'Constructed':True,'filter':filter})
-        new.Event_Children = []
+        new = type('Event_Router_Constructed', (Event_Router,), {'Constructed':True, 'filter':filter,'Event_Children':[]})
         return new
         
     @classmethod
-    def Pub(cls, *args,**kwargs)->FunctionType:
+    def Pub(cls, event_key,*args,**kwargs)->FunctionType:
         ''' Produces a Wrapper that on Execution will publish to the Event_Router.New() local source class instance. @Event.AutoRegister as a flag automatically attaches '''
         assert cls.Constructed
         def wrapper(func):
-            item = Event_Item.New(cls,_Event_Types.PUB,func,*args,**kwargs)
+            item = Event_Item.New(event_key,cls,_Event_Types.PUB,func,*args,**kwargs)
             cls.Event_Children.append(item)
             return item
         return wrapper
 
     @classmethod
-    def Sub(cls,*args,**kwargs)->FunctionType:
+    def Sub(cls,event_key,*args,**kwargs)->FunctionType:
         ''' Produces a Wrapper that on Execution will attach to the Event_Router.New() source class. @Event.AutoRegister as a flag automatically attaches '''
         assert cls.Constructed
         def wrapper(func):
-            item = Event_Item.New(cls,_Event_Types.SUB,func,*args,**kwargs)
+            item = Event_Item.New(event_key,cls,_Event_Types.SUB,func,*args,**kwargs)
             cls.Event_Children.append(item)
             return item
         return wrapper
 
     @classmethod
-    def Meta_Sub(cls,*args,**kwargs)->FunctionType:
+    def Meta_Sub(cls,event_key,*args,**kwargs)->FunctionType:
         ''' Produces a Wrapper that on Execution will attach to the Event_Router.New() source class. @Event.AutoRegister as a flag automatically attaches '''
         assert cls.Constructed
         def wrapper(func):
-            item = Event_Item.New(cls,_Event_Types.META_SUB,func,*args,**kwargs)
+            item = Event_Item.New(event_key,cls,_Event_Types.META_SUB,func,*args,**kwargs)
             cls.Event_Children.append(item)
             return item
         return wrapper
 
     @classmethod
-    def Schedule(cls,*args,**kwargs)->FunctionType:
+    def Schedule(cls,event_key,*args,**kwargs)->FunctionType:
         ''' Produces a Wrapper that on Execution will attach to the Event_Router.New() source class. @Event.AutoRegister as a flag automatically attaches '''
         assert cls.Constructed
         def wrapper(func):
-            item = Event_Item.New(cls,_Event_Types.SCHEDULE,func,*args,**kwargs)
+            item = Event_Item.New(event_key,cls,_Event_Types.SCHEDULE,func,*args,**kwargs)
             cls.Event_Children.append(item)
             return item
         return wrapper
 
     @classmethod
-    def Buffer(cls,*args,**kwargs)->FunctionType:
+    def Buffer(cls,event_key,*args,**kwargs)->FunctionType:
         assert cls.Constructed
         def wrapper(func):
-            item = Event_Item.New(cls,_Event_Types.BUFFER,func,*args,**kwargs)
+            item = Event_Item.New(event_key,cls,_Event_Types.BUFFER,func,*args,**kwargs)
             cls.Event_Children.append(item)
             return item
         return wrapper
 
-    def __init__(self,container,parent):
+    def __init__(self,container,parent=None):
+        assert self.Constructed is True
+        # print(dir(self))
+        print(self.__class__)
+        print(dir(self.__class__))
+        assert hasattr(self,'Event_Children')
+        
         self._container  = container
         self._parent     = parent
+        self.task_pool   = Scheduled_Task_Pool()
+
         if self._parent:
             self._parent.children_routers.append(self)
 
@@ -188,7 +195,7 @@ class Event_Router():
             if k.startswith('__'): continue
             v = getattr(self._container, k)
             if v in self.Event_Children:
-                setattr(k,v(self))
+                setattr(self._container,k,v(self._container,self))
         self._attach_readers()
     
     def _attach_readers(self):
@@ -196,10 +203,12 @@ class Event_Router():
             for reader in self.event_insts[_Event_Types.READER.value]:
                 if isinstance(buffer.__class__, reader.Parent_Buffer_Cls):
                     buffer.readers.append(reader)
-                    
+
+
     def attach_event(self, event):
         self.event_insts[event.Event_Type.value].append(event)
         
+
     def publish(self, key, event_container, housing_container, _first_level=False, *args, **kwargs):
         ''' 
         - walk, check local if first level publish 
@@ -210,7 +219,7 @@ class Event_Router():
         ...
 
         self._meta_event('event_publishing_started', key, event_container,housing_container, args, kwargs)
-        if event_container.local_only and (event_container in self.event_insts):
+        if event_container.Local_Only and (event_container in self.event_insts):
             ''' catch local-only and trigger locals '''
             return self.event(self,key,event_container,housing_container,args,kwargs,local_only=True)
         elif self._parent and _first_level:
@@ -222,19 +231,21 @@ class Event_Router():
             return self.event(self,key,event_container,housing_container,args,kwargs)
         self._meta_event('event_publishing_complete', key, event_container,housing_container, args, kwargs)
 
+
     def event(self,key,event_container, housing_container, args, kwargs, local_only = False):
         ''' Event occurance under key, local_only=False triggers all that are not local. 
         Also checks filter for each Sub
         '''
         self._meta_event('sub_posting_started', key, event_container,housing_container, args, kwargs)
         for sub in self.event_insts[_Event_Types.SUB.value]:
-            if (local_only or sub.local_only) and (self._container != housing_container): 
+            if (local_only or sub.Local_Only) and (self._container != housing_container): 
                 continue
-            if sub.filter:
-                if not sub.filter(key,event_container,housing_container,args,kwargs):
+            if sub.Filter:
+                if not sub.Filter(key,event_container,housing_container,args,kwargs):
                     continue
             sub(self._container,key,*args,*kwargs)
         self._meta_event('sub_posting_complete', key, event_container,housing_container, args, kwargs)
+
 
     def schedule(self, event_container, housing_container, func,*args,**kwargs)->FunctionType:
         ''' Schedule a function using asyncio and return a callback to cancel the scheduled func. Also append locally to close. Optional on-close hook? '''
@@ -243,24 +254,23 @@ class Event_Router():
         if '_schedule_kwargs' in kwargs.keys():
             del kwargs['_schedule_kwargs']
 
-        scheduled_task = Scheduled_Task(func,*args,**kwargs)
+        if isinstance(func, (partial, Event_Item)):
+            scheduled_task = Scheduled_Task(func,*args,**kwargs)
+            #Not exactly certain on this critera atm
+        else:
+            scheduled_task = Scheduled_Task(func,housing_container,*args,**kwargs)
          
-        self.attach_scheduled_task(scheduled_task,scheduled_task.task(**task_kwargs))
+        self.task_pool.attach_and_run(scheduled_task,*task_kwargs)
 
-    def attach_scheduled_task(self,taskio,task:CoroutineType):
-        
-        remove = lambda *args,**kwargs: taskio.close; try: self.attach_scheduled_task.remove(taskio)
-
-        self.active_scheduled_tasks.append(taskio, remove)
-        asyncio.create_task(task)
-
-        
-        # raise NotImplementedError('STILL WORKING ON IT')
+    def attach_task_generic(self,coroutine):
+        self.task_pool.run_task(coroutine)
 
     def _meta_event(self, meta_event_key, event_key, event_container, orignal_container, args, kwargs):
         for sub in self.event_insts[_Event_Types.META_SUB.value]:
             sub(event_key, event_container, orignal_container, args, kwargs)
-
+    
+    def on_container_close(self):
+        self.task_pool.close_all(reason='CONTAINER_CLOSING',finish_func=True)
 
 # class Eventable():
 #     #Number of child events, uses __init__ to register children.
