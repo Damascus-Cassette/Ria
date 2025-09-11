@@ -21,8 +21,11 @@ class Manager_Task_Settings(BaseModel):
 
 class Database_Settings(BaseModel):
     ''' Settings to expose the database through the manager '''
-    db_loc  : str = './filespace.db' 
-    storage : str = './filespace/'   
+    _io_strict_ = False
+
+    db_loc       : user_path = './filespace.db' 
+    db_standard  : str       = 'sqlite:///' 
+    storage      : user_path = './filespace/'   
 
     timeout_session  : user_time_str = 'MANUAL'
 
@@ -39,13 +42,20 @@ class Database_Settings(BaseModel):
         # Used in recovery
 
 class Job_DB_Settings(BaseModel):
-    db_loc   : user_path = './jobs.db'
-    storage  : user_path = './jobs/' 
+    _io_strict_ = False
+
+    db_loc       : user_path = './jobs.db'
+    db_standard  : str       = 'sqlite:///' 
+    storage      : user_path = './jobs/' 
 
 class Client_DB_Settings(BaseModel):
-    db_loc   : user_path = './clients.db'
+    _io_strict_ = False
+    db_loc      : user_path = './clients.db'
+    db_standard : str       = 'sqlite:///'
     
 class Manager_Settings(BaseModel):
+    _io_strict_ = False
+
     ''' Settings for Manager's Operations '''
     # cache     : Manager_Cache_Settings
     # security  : Manager_Sec_Settings
@@ -55,18 +65,24 @@ class Manager_Settings(BaseModel):
         #Absolute, or Relative to CURRENTDIR.default,
         #Atm default is os.cwdir
     
-    file_db   : Database_Settings
+    file_db   : Database_Settings 
     client_db : Client_DB_Settings
-    job_db    : Job_DB_Settings
+    job_db    : Job_DB_Settings   
 
     addr      : str  = '127.22.0.1'
     port      : str  = '4000'
     label     : str  = 'Ria Manager'
 
+    def __init__(self):
+        self.file_db   = Database_Settings() 
+        self.client_db = Client_DB_Settings()
+        self.job_db    = Job_DB_Settings()   
+        super().__init__()
 
     worker_timeout : user_time_str = '1m' 
 
 class Worker_Settings(BaseModel):
+    _io_strict_ = False
     ''' Settings for the Worker Entity '''
     _profile_path     : str = '' #Override path to a Worker_Env_Settings
     _log_level        : int = 0
@@ -79,6 +95,7 @@ class Worker_Settings(BaseModel):
     working_dir_ext   : user_frmt_str = '/{job_id}/{task_id}/'
 
 class Worker_Env_Settings(BaseModel):
+    _io_strict_ = False
     UUID  : str = ''
     Label : str = ''
 
@@ -87,5 +104,6 @@ class Worker_Env_Settings(BaseModel):
 
 
 class Client_Settings(BaseModel):
+    _io_strict_ = False
     ''' Interface to set settings through. May not use this directly, but we goforth '''
     ...

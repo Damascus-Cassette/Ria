@@ -99,17 +99,18 @@ class Local_Common():
     def load_settings(self,settings_loc):
         ''' Ensure settings exist, from calling directory if relative? '''
         if settings_loc.startswith('.'):
-            settings_loc = Path(settings_loc).relative_to(CURRENT_DIR.get())
+            settings_loc = Path(CURRENT_DIR.get() + settings_loc).resolve()
+
         
         if not Path(settings_loc).exists():
             settings = self.SettingsType()
             data = settings._export_()
             with open(settings_loc,'w') as f:
-                yaml.dump(data,f)
+                yaml.dump(data,f,sort_keys=False)
             self.settings = settings
         else:        
             with open(settings_loc,'r') as f:
-                data = yaml.load(f)
+                data = yaml.load(f, yaml.BaseLoader)
                 self.settings = self.SettingsType()
                 self.settings._import_(data)
 
@@ -142,7 +143,7 @@ class Manager_Local(Local_Common,Local_Entity_Base):
     Client_DB_Session : SessionType
     client_db_session : SessionType
 
-    def __init__(self, settings_loc:str='.manger_settings.yaml'):
+    def __init__(self, settings_loc:str='./manger_settings.yaml'):
         self.interface              = self.InterfaceType(self)
         self.manager_websocket_pool = Manager_Websocket_Pool()
         self.client_websocket_pool  = Client_Websocket_Pool()
@@ -158,13 +159,14 @@ class Manager_Local(Local_Common,Local_Entity_Base):
 
     def settup_client_db(self,):
         ''' Our 'relfective' database that handles foreign connections'''
-        db_url = self.settings.client_db.db_loc
-    
-        self.CLient_DB_Engine  = create_engine(db_url)
-        self.CLient_DB_Session = sessionmaker(bind=self.engine)
+        settings = self.settings.client_db
+        db_url = settings.db_standard + settings.db_loc._swapped_slash_dir
+        # raise Exception(db_url)
+        self.Client_DB_Engine  = create_engine(db_url)
+        self.Client_DB_Session = sessionmaker(bind=self.Client_DB_Engine)
         # self.file_db_session = self.Session()
 
-        Client_DB_Model.metadata.create_all(self.CLient_DB_Engine)
+        Client_DB_Model.metadata.create_all(self.Client_DB_Engine)
         #self.services_pool.Extend(Client_DB_Services)
         #self.event_handler.Extend(Client_DB_Events  )
 
@@ -173,10 +175,11 @@ class Manager_Local(Local_Common,Local_Entity_Base):
         self.settings.file_db.db_loc
         self.settings.file_db.storage
 
-        db_url = self.settings.client_db.db_loc
-    
+        settings = self.settings.file_db
+        db_url = settings.db_standard + settings.db_loc._swapped_slash_dir
+        
         self.File_DB_Engine  = create_engine(db_url)
-        self.File_DB_Session = sessionmaker(bind=self.engine)
+        self.File_DB_Session = sessionmaker(bind=self.File_DB_Engine)
         # self.file_db_session = self.Session()
 
         File_DB_Model.metadata.create_all(self.File_DB_Engine)
@@ -187,10 +190,11 @@ class Manager_Local(Local_Common,Local_Entity_Base):
         self.settings.job_db.db_loc
         self.settings.job_db.storage
 
-        db_url = self.settings.client_db.db_loc
+        settings = self.settings.job_db
+        db_url = settings.db_standard + settings.db_loc._swapped_slash_dir
     
         self.Job_DB_Engine  = create_engine(db_url)
-        self.Job_DB_Session = sessionmaker(bind=self.engine)
+        self.Job_DB_Session = sessionmaker(bind=self.Job_DB_Engine)
         # self.file_db_session = self.Session()
 
         Job_DB_Model.metadata.create_all(self.Job_DB_Engine)
@@ -201,7 +205,7 @@ class Worker_Local(Local_Common, Local_Entity_Base):
     SettingsType = Worker_Settings
     settings     : Worker_Settings
     
-    def __init__(self, settings_loc:str='.worker_settings.yaml'):
+    def __init__(self, settings_loc:str='./worker_settings.yaml'):
         self.interface              = self.InterfaceType(self)
         self.manager_websocket_pool = Manager_Websocket_Pool()
         self.client_websocket_pool  = Client_Websocket_Pool()
@@ -255,7 +259,7 @@ class Manager_Foreign(Foreign_Common,Foreign_Entity_Base, Client_DB_Model):
         #TODO: CHANGE LATER TO BE SECURE
 
 
-class Worker_Foreign(Foreign_Entity_Base, Client_DB_Model):
+class Worker_Foreign(Foreign_Common,Foreign_Entity_Base, Client_DB_Model):
     Entity_Type   = Entity_Types.WORKER
     __tablename__ = Entity_Types.WORKER.value
 

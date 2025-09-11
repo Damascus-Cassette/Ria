@@ -381,8 +381,8 @@ inst_a.session.commit()
 app_a  = inst_a.attach_to_app(FastAPI())
 
 
-db_url = 'sqlite:///database_B.db'
 inst_b = B_Local('TestEntityB',db_url)
+db_url = 'sqlite:///database_B.db'
 inst_b.session.merge(A_Foreign(
     unqiue_id= 'TestEntityA',
     host = '127.0.0.1',

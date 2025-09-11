@@ -4,7 +4,9 @@ from enum   import Enum
 from time   import time
 from string import Formatter
 from .EnvVars import CURRENT_DIR
+# from ...models.struct_file_io import BaseModel
 from pathlib import Path
+from datetime import datetime
 
 class user_time_enums(Enum):
     MANUAL = 'MANUAL'
@@ -23,7 +25,13 @@ class user_time_str():
         else:
             self._data = data
 
-    _data : time|user_time_enums
+    def _import_(self,data:str):
+        self._data = data
+    def _export_(self):
+        return self._data
+
+
+    _data : str|datetime|user_time_enums
 
     @property
     def data(self):
@@ -41,22 +49,39 @@ class user_frmt_str():
     def format(self,data:dict):
         ''' String formatter, typically dict produced from env & contextual variables. '''
         use_dict = {k:v for k,v in data if k in tuple(Formatter(data).parse())}
-        return self._data.format_map(use_dict) 
+        return self._data.format_map(use_dict)
+     
+    def _import_(self,data:str):
+        self._data = data
+    def _export_(self):
+        return self._data
 
 class user_path():
     ''' Possible relative path '''
     
-    def __init__(self,data:str):
+    def _import_(self,data:str):
         self._data = data
-    
     def _export_(self):
         return self._data
 
+    def __init__(self,data:str):
+        assert isinstance(data,str)
+        self._data = data
+    
     @property
     def data(self)->Path:
-        if self.data.startswith('.'):
-            return Path(Path(self._data).relative_to(CURRENT_DIR.get()))
+        if self._data.startswith('.'):
+            return Path(str(CURRENT_DIR.get()) + self._data).resolve()
+            # return Path(Path(CURRENT_DIR.get()) + Path(self._data)).resolve()
         return Path(self._data) 
+
+    def __fspath__(self):
+        return str(self.data)
     
     def __str__(self,):
         return str(self.data)
+    
+    @property
+    def _swapped_slash_dir(self):
+        ''' patch function for sqlalachemy, flipping backslashing '''
+        return str(self).replace('/','\\')
