@@ -1,0 +1,24 @@
+_log_level: 0
+root_dir: .
+file_db:
+  db_loc: ./filespace.db
+  db_standard: sqlite:///
+  storage: ./filespace/
+  timeout_session: MANUAL
+  timeout_export: MANUAL
+  timeout_import: 30d
+  timeout_view: 1h
+  timeout_space: 3d
+  timeout_file: 3d
+  timeout_metadata: 30d
+client_db:
+  db_loc: ./clients.db
+  db_standard: sqlite:///
+job_db:
+  db_loc: ./jobs.db
+  db_standard: sqlite:///
+  storage: ./jobs/
+addr: 127.22.0.1
+port: '4000'
+label: Ria Manager
+worker_timeout: 1m
