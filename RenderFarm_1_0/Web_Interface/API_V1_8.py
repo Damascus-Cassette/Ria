@@ -447,7 +447,7 @@ class Local_Entity_Base():
         ''' Ensure DB Connection, return foreign item '''
         raise NotImplementedError('Implament in Local_Class!')
 
-    async def Find_Entity_From_WsReq(self, request:Request):
+    async def Find_Entity_From_WsReq(self, request:WebSocket):
         ''' Ensure DB Connection in websocket context, return foreign item '''
         raise NotImplementedError('Implament in Local_Class!')
     

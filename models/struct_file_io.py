@@ -508,8 +508,8 @@ class BaseModel:
             if issubclass(existing.__class__,BaseModel) or hasattr(existing,'_import_'):
                     existing._import_(data[k])
 
-            elif existing:
-                raise Exception(f'Attempting to import ontop of existing structure that does not support import explicitly! {existing}')
+            # elif existing:
+                # raise Exception(f'Attempting to import ontop of existing structure that does not support import explicitly! {existing.__class__}')
 
             else:
                 setattr(self,k,v(data[k]))

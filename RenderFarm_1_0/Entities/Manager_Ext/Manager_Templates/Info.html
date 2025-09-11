@@ -12,7 +12,8 @@
         <ul id='messages'>
         </ul>
         <script>
-            var ws = new WebSocket("ws://127.0.0.1:4000/state-info");
+            // var host = window.location.protocol + "//" + 
+            var ws = new WebSocket(`ws://${window.location.host}/state-info`);
             ws.onmessage = function(event) {
                 var messages = document.getElementById('messages')
                 var message = document.createElement('li')

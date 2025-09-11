@@ -3,8 +3,8 @@
 from sqlalchemy     import (Column              ,
                             Boolean             ,
                             ForeignKey          ,
-                            Integer             ,
-                            List                ,
+                            Integer             ,                    
+                            # List                ,
                             String              ,
                             create_engine       ,
                             Table               ,
@@ -12,9 +12,12 @@ from sqlalchemy     import (Column              ,
                             Engine as EngineType,
                             )
 
+# from sqlalchemy.sql.sqltypes
+
 from sqlalchemy.orm import (declarative_base    , 
                             relationship        , 
                             sessionmaker        , 
+        
                             Mapped              , 
                             mapped_column       ,
                             Session as SessionType
@@ -69,7 +72,7 @@ class DB_Spaces(Base):
     
     space_key    = Column(String, primary_key=True)
     space_type   = Column(db_Enum(Space_Types))
-    users: Mapped[List["DB_Point_Of_Interest"]] = relationship(back_populates="cache")
+    users: Mapped[list["DB_Point_Of_Interest"]] = relationship(back_populates="cache")
 
 
 class DB_Memo(Base):
@@ -79,7 +82,7 @@ class DB_Memo(Base):
  
     space_key    = Column(String, primary_key=True)
     space_type   = Column(db_Enum(Space_Types))
-    users: Mapped[List["DB_Point_Of_Interest"]] = relationship(back_populates="memo")
+    users: Mapped[list["DB_Point_Of_Interest"]] = relationship(back_populates="memo")
 
 
 class DB_Point_Of_Interest(Base):
@@ -93,7 +96,7 @@ class DB_Point_Of_Interest(Base):
 
     type = Column(db_Enum(POI_Types))
     
-    task_data      : Mapped["DB_Task"] = relationship(back_populates="poi", default=None)
+    task_data      : Mapped["DB_Task"] = relationship(back_populates="poi")
     
     cache_id       : Mapped[str] = mapped_column(ForeignKey("ascociated_spaces.space_key" ), nullable=True)  
     cache          : Mapped['DB_Spaces'] = relationship(back_populates = 'users')
@@ -101,14 +104,14 @@ class DB_Point_Of_Interest(Base):
     memo_id        : Mapped[str] = mapped_column(ForeignKey("ascociated_memos.space_key"  ), nullable=True)  
     memo           : Mapped['DB_Memo']   = relationship(back_populates = 'users')
 
-    vis_parent_id  : Mapped[str] = mapped_column(ForeignKey("vis_zones.id"                ),nullable=True)
+    vis_parent_id  : Mapped[str] = mapped_column(ForeignKey("zones.id"                ),nullable=True)
     vis_parent     : Mapped['DB_Zone']   = relationship(back_populates = 'children')
 
     vis_zone_start = Column(Boolean, default=False)
     vis_zone_end   = Column(Boolean, default=False)
 
-    vis_links_left  :Mapped[List["Visual_Links"]]     = relationship(secondary='DB_Point_Of_Interest', back_populates='left' )
-    vis_links_right :Mapped[List["Visual_Links"]]     = relationship(secondary='DB_Point_Of_Interest', back_populates='right')
+    vis_links_left  :Mapped[list["Visual_Links"]]     = relationship(secondary='DB_Point_Of_Interest', back_populates='left' )
+    vis_links_right :Mapped[list["Visual_Links"]]     = relationship(secondary='DB_Point_Of_Interest', back_populates='right')
         #Prettty sure this is how it works
 
 
@@ -121,8 +124,8 @@ class DB_Task():
     task_state      = Column(db_Enum(Job_States))
     task_type       = Column(db_Enum(Task_Types))
 
-    depends_on_me   : Mapped[List["DB_Task"]] = relationship(secondary='DB_Task', back_populates='right')
-    depends_on      : Mapped[List["DB_Task"]] = relationship(secondary='DB_Task', back_populates='left' )
+    depends_on_me   : Mapped[list["DB_Task"]] = relationship(secondary='DB_Task', back_populates='right')
+    depends_on      : Mapped[list["DB_Task"]] = relationship(secondary='DB_Task', back_populates='left' )
     
     poi_id          : Mapped[int]                    = mapped_column(ForeignKey("points_of_interest.id"), nullable=True)
     poi             : Mapped['DB_Point_Of_Interest'] = relationship(back_populates='task_data')
@@ -152,15 +155,16 @@ class DB_task_pickups():
 
 class DB_Zone(Base):
     ''' Visual container class spawned by zones. (label,inst_id,meta_id) should be passed back by the zones in backwards context '''
+    __tablename__ = 'zones'
     id          = Column(Integer, autoincrement=True)
     label       = Column(String)
     meta_id     = Column(String , primary_key =True)
     inst_id     = Column(String , primary_key =True)
     
-    vis_parent_id  : Mapped['DB_Zone']  = mapped_column(ForeignKey("vis_zones.id"), nullable=True)
+    vis_parent_id  : Mapped['DB_Zone']  = mapped_column(ForeignKey("zones.id"), nullable=True)
 
-    poi_users      : Mapped[List["DB_Point_Of_Interest"]] = relationship(back_populates="vis_parent")
-    zone_users     : Mapped[List["DB_Zone"]]              = relationship(back_populates="vis_parent")
+    poi_users      : Mapped[list["DB_Point_Of_Interest"]] = relationship(back_populates="vis_parent")
+    zone_users     : Mapped[list["DB_Zone"]]              = relationship(back_populates="vis_parent")
 
 
 class Visual_Links():
