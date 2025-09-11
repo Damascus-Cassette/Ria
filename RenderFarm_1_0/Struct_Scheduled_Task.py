@@ -2,6 +2,8 @@ from types import CoroutineType, AsyncGeneratorType,GeneratorType
 from inspect import iscoroutinefunction, isasyncgenfunction, isasyncgen, iscoroutine, isgeneratorfunction
 import asyncio 
 
+class MaxIteratonsError(Exception):...
+
 class Scheduled_Task():
     def __init__(self,func,*args,**kwargs):
         self.func   = func
@@ -11,15 +13,16 @@ class Scheduled_Task():
     _timer : CoroutineType
     continue_execution: bool
     
-    def task(self, interval):
+    def task(self, interval,start_delay=None,max_iterations=None):
         self.interval = interval
+        self.max_iterations = max_iterations
         if not (isasyncgenfunction(self.func) or isgeneratorfunction(self.func)):
-            return self._consumer(self._loop())
+            return self._consumer(self._loop(),start_delay=start_delay,max_iterations=max_iterations)
         else:
             generator = self.func(self,*self.args,**self.kwargs)
-            return self._consumer(self._loop_through_generator(generator))
+            return self._consumer(self._loop_through_generator(generator),start_delay=start_delay,max_iterations=max_iterations)
             
-    async def _consumer(self,generator:AsyncGeneratorType, start_delay = None):
+    async def _consumer(self,generator:AsyncGeneratorType, start_delay = None, max_iterations=None):
         ''' Consumes the generator '''
         
         if start_delay:
@@ -29,8 +32,21 @@ class Scheduled_Task():
         except asyncio.CancelledError:
             print('EVENT CANCELED BEFORE INTIIAL DELAY FIRED')
             return
+        
+        try:    
+            i = 0        
+            async for x in generator: 
 
-        async for x in generator: ...
+                ...
+
+                if not (max_iterations is None):
+                    i = i+1
+                    if i >= max_iterations:
+                        raise MaxIteratonsError('')
+        
+        except MaxIteratonsError:
+            print('EVENT HAS HIT MAX ITERATIONS')
+        
         await generator.aclose()
 
 
@@ -121,7 +137,7 @@ class Scheduled_Task_Pool():
         self._created     = []
             #debug list, check on del if it has any unstarted or unattached.
 
-    def attach_and_run(self,scheduled_task,interval,start_delay=None,UID=None):
+    def attach_and_run(self,scheduled_task,interval,start_delay=None,UID=None, max_iterations=None):
         if scheduled_task in self.created:
             self._created.remove(scheduled_task)
         if UID:
@@ -130,7 +146,7 @@ class Scheduled_Task_Pool():
         else:
             self.anon_tasks.append(scheduled_task)
         
-        task = scheduled_task.task(interval = interval, start_delay=start_delay)
+        task = scheduled_task.task(interval = interval, start_delay=start_delay, max_iterations=max_iterations)
         
     def run_task(self, task:CoroutineType):
         asyncio.create_task(task)
