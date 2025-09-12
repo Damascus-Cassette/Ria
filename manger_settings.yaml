@@ -1,5 +1,5 @@
 _log_level: 0
-root_dir: .
+root_dir: ./_manager
 file_db:
   db_loc: ./filespace.db
   db_standard: sqlite:///

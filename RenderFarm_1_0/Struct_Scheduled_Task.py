@@ -27,11 +27,11 @@ class Scheduled_Task():
         
         if start_delay:
             self._timer = asyncio.create_task(asyncio.sleep())
-        try:
-            await self._timer
-        except asyncio.CancelledError:
-            print('EVENT CANCELED BEFORE INTIIAL DELAY FIRED')
-            return
+            try:
+                await self._timer
+            except asyncio.CancelledError:
+                print('EVENT CANCELED BEFORE INTIIAL DELAY FIRED')
+                return
         
         try:    
             i = 0        
@@ -138,7 +138,7 @@ class Scheduled_Task_Pool():
             #debug list, check on del if it has any unstarted or unattached.
 
     def attach_and_run(self,scheduled_task,interval,start_delay=None,UID=None, max_iterations=None):
-        if scheduled_task in self.created:
+        if scheduled_task in self._created:
             self._created.remove(scheduled_task)
         if UID:
             assert not (UID in self.unique_tasks.keys())
@@ -147,7 +147,8 @@ class Scheduled_Task_Pool():
             self.anon_tasks.append(scheduled_task)
         
         task = scheduled_task.task(interval = interval, start_delay=start_delay, max_iterations=max_iterations)
-        
+        self.run_task(task)
+
     def run_task(self, task:CoroutineType):
         asyncio.create_task(task)
 

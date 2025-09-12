@@ -69,7 +69,7 @@ class Websocket_Pool_Base():
                 return by_id[0]
             elif by_id:
                 raise Exception('COLLIDING WS-UID UNDER {foreign_entity.Entity_Type.value}:{foreign_entity.id}: {uid}}!')
-        view = Websocket_View(ws_item, foreign_entity.Entity_Type, foreign_entity.id, id, uid)
+        view = Websocket_View(ws_item, foreign_entity.Entity_Type, foreign_entity.uid, id, uid)
         self.data.append(view)
         return partial(self.data.remove,view)
 

@@ -180,11 +180,11 @@ class IO():
         @wraps(func)
         async def wrapper(container, this_entity, other_entity, raw_path,*args,**kwargs):   
             args, kwargs, path = self._format_path_consume(self._send_fmt_func, raw_path, args, kwargs, ignore_slice_start=5)
-            print('ARGS IS'   , args)
-            print('KWARGS IS' , kwargs)
+            # print('ARGS IS'   , args)
+            # print('KWARGS IS' , kwargs)
             headers = this_entity.export_header(other_entity) | other_entity.export_header(this_entity)
             res = await func(container,this_entity,other_entity,path,headers,*args,**kwargs)
-            print('RES IS:', res)
+            # print('RES IS:', res)
             return res
         return wrapper 
     
@@ -434,7 +434,13 @@ class Local_Entity_Base():
     def __init_subclass__(cls):
         assert hasattr(cls, 'Entity_Type'   )
         assert hasattr(cls, 'export_header' )
-    
+
+    @contextmanager
+    def Active(self):
+        t = _LOCAL_ENTITY.set(self)
+        yield
+        _LOCAL_ENTITY.reset(t)
+
     def __init__(self):
         Interface_Base._on_new(self)
 

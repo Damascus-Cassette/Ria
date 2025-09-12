@@ -1,7 +1,12 @@
 _profile_path: ''
 _log_level: 0
-addr: 127.22.0.1
+client_db:
+  db_loc: ./worker-clients.db
+  db_standard: sqlite:///
+manager:
+  addr: 127.0.0.1
+  port: '4000'
+  interval: 2
+addr: 127.00.0.1
 port: '4001'
-task_tags: !!python/tuple []
-working_dir: ./working/
-working_dir_ext: /{job_id}/{task_id}/
+root_dir: ./_worker

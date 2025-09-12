@@ -177,24 +177,26 @@ class AB_Interface(Interface_Base):
     
     @IO.Websocket(router1,'/ws')
     async def test_8b(self, this_e, other_e, websocket:WebSocket_Manager)->str:
-        ''' Local of example of https://fastapi.tiangolo.com/advanced/websockets/#in-production '''
-
+        from starlette.websockets import WebSocketDisconnect,WebSocketClose
         class custom_ws_class(Manager_Websocket_Wrapper_Base):
             async def run(self):
-                await self.accept()
-                while True:
-                    data = await self.receive_text()
-                    print(data)
-                    await self.send_text(f"Message text was: {data}")
-                    # await self.send_text(str(self.this_entity.websocket_as_manager_pool))
-                    if data == 'CLOSE':
-                        break
-                await self.send_text(f"CLOSING CONNECTION")
-                await self.close()
+                await self.websocket.accept()
+                try:
+                    while True:
+                        yield
+                        data = await self.websocket.receive_text()
+                        print(data)
+                        if data == 'CLOSE':
+                            await self.send_text(f"CLOSING CONNECTION")
+                            await self.close()
+                            break
+                        await self.websocket.send_text(f"Message text was: {data}")
+                except WebSocketDisconnect:
+                    ...
 
         app = custom_ws_class(this_e, other_e, websocket, id = 'test_connection', uid = 'single_test' )        
-
-        return await app.run_with_handler()
+        # app.accept()
+        return await app.run_handler()
         # Consider using asyncio.gather or similar for above.
 
     @test_8b.Client()
@@ -205,6 +207,8 @@ class AB_Interface(Interface_Base):
                 pool = other_e.client_websocket_pool
                 pool.attach(other_e, this_e, self,self.__class__.__name__)
                 self.send('GREETINGS!')
+                # self.close()
+                
 
             def closed(self, code, reason=None):
                 pool = other_e.client_websocket_pool
@@ -214,11 +218,13 @@ class AB_Interface(Interface_Base):
                 print('RECEIVED MESSAGE:', message)
                 self.send('GOODBYE!')
                 self.close()
-
-        ws = custom_ws_class(f'ws://{this_e.host}:{this_e.port}' + path, headers=headers.items())
+        fullpath = f'ws://{this_e.host}:{this_e.port}' + path
+        print('FULLPATH',fullpath)
+        ws = custom_ws_class(fullpath, headers=headers.items())
         ws.connect()
         ws.run_forever()
         return ws
+
         
 
 
@@ -375,7 +381,7 @@ inst_a = A_Local('TestEntityA',db_url)
 inst_a.session.merge(B_Foreign(
     unqiue_id = 'TestEntityB',
     host = '127.0.0.1',
-    port = '4001',
+    port = '4004',
 ))
 inst_a.session.commit()
 app_a  = inst_a.attach_to_app(FastAPI())
@@ -386,7 +392,7 @@ db_url = 'sqlite:///database_B.db'
 inst_b.session.merge(A_Foreign(
     unqiue_id= 'TestEntityA',
     host = '127.0.0.1',
-    port = '4000',
+    port = '4003',
 ))
 inst_b.session.commit()
 app_b  = inst_b.attach_to_app(FastAPI())
@@ -400,6 +406,8 @@ def get_all_urls():
     url_list = [{"path": route.path, "name": route.name} for route in app_b.routes]
     return url_list
 
-#python -m uvicorn Web_Interface.API_V1_8_test:app_a --port 4000 --reload
-#python -m uvicorn Web_Interface.API_V1_8_test:app_b --port 4001 --reload
+#cd C:\Users\siewe\projects\Processing_Nodes\RenderFarm_1_0
+#python -m uvicorn Web_Interface.API_V1_8_test:app_a --port 4003 --reload
+#python -m uvicorn Web_Interface.API_V1_8_test:app_b --port 4004 --reload
+
 

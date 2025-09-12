@@ -58,7 +58,7 @@ class Event_Item():
             case _Event_Types.SCHEDULE:
                 task = self.router.create_scheduled_task(self.func,container,*args,**kwargs)
                 if self.auto_run:
-                    self.router.attach_scheduled_task(task,interval=self.interval, start_delay=self.start_delay, scheduled_last_ran=self.scheduled_last_ran, UID=self.UID, GUID=self.GUID, max_iterations = self.max_iterations)
+                    self.router.attach_scheduled_task(task,interval=self.interval, start_delay=self.start_delay, scheduled_last_ran=self.scheduled_last_ran, uid=self.uid, guid=self.guid, max_iterations = self.max_iterations)
                 return task
 
             case _:
@@ -97,7 +97,7 @@ class Event_Router():
     @classmethod
     def Schedule(cls, /, event_key='', filter = None, local_only:bool=False, uid = None, guid = None, interval = None, start_delay = None, auto_run=False, attach_on_startup=False, scheduled_last_ran : FunctionType|int=None, scheduled_absolute=None,max_iterations=None ): 
         if auto_run: assert interval
-        return cls.create_factory_wrapper(_Event_Types.SCHEDULE, event_key='', UID = uid, GUID = guid, interval = interval, start_delay = start_delay, auto_run = auto_run, attach_on_startup=attach_on_startup, scheduled_absolute=scheduled_absolute, scheduled_last_ran = scheduled_last_ran, max_iterations=max_iterations )
+        return cls.create_factory_wrapper(_Event_Types.SCHEDULE, event_key='', uid = uid, guid = guid, interval = interval, start_delay = start_delay, auto_run = auto_run, attach_on_startup=attach_on_startup, scheduled_absolute=scheduled_absolute, scheduled_last_ran = scheduled_last_ran, max_iterations=max_iterations )
 
     @classmethod
     def create_factory_wrapper(cls,mode,event_key,*args,**kwargs):
@@ -117,7 +117,7 @@ class Event_Router():
     
     def schedule(self, /, event_key='', filter = None, local_only:bool=False, uid = None, guid = None, interval = None, start_delay = None, auto_run=False, attach_on_startup=False, scheduled_last_ran : FunctionType|int=None, scheduled_absolute=None,max_iterations=None ): 
         if auto_run: assert interval
-        return self.create_instance_wrapper(_Event_Types.SCHEDULE, event_key='', UID = uid, GUID = guid, interval = interval, start_delay = start_delay, auto_run = auto_run, attach_on_startup=attach_on_startup, scheduled_absolute=scheduled_absolute, scheduled_last_ran = scheduled_last_ran, max_iterations=max_iterations )
+        return self.create_instance_wrapper(_Event_Types.SCHEDULE, event_key='', uid = uid, guid = guid, interval = interval, start_delay = start_delay, auto_run = auto_run, attach_on_startup=attach_on_startup, scheduled_absolute=scheduled_absolute, scheduled_last_ran = scheduled_last_ran, max_iterations=max_iterations )
 
     def create_instance_wrapper(self,mode,event_key,*args,**kwargs):
         assert self.Constructed
@@ -135,7 +135,7 @@ class Event_Router():
         self.router_parent   = parent
         self.router_children = []
         self.event_children  = _def_dict_list()
-        self.scheduled_task_pool = Scheduled_Task_Pool
+        self.scheduled_task_pool = Scheduled_Task_Pool()
         self._format_container(container)
 
     def temp_attach_router_inst(self,router_inst):
@@ -198,7 +198,7 @@ class Event_Router():
     
     def create_scheduled_task(self,func, *args, **kwargs):
         task =  Scheduled_Task(func, *args, **kwargs)
-        self.scheduled_task_pool._created.append(task)
+        # self.scheduled_task_pool._created.append(task)
         return task
 
     def attach_scheduled_task(self, task, interval:int, start_delay=0, uid=None, guid=None, scheduled_absolute=None, scheduled_last_ran=None, max_iterations = None):
@@ -218,11 +218,12 @@ class Event_Router():
             #Resumption of a schedule if scheduled_last_ran is resolves
             start_delay = max(start_delay, (datetime.now() - scheduled_last_ran.timestamp() - interval))
         
-        if scheduled_absolute:
-            self.scheduled_task_pool.attach_and_run(task, interval=interval, start_delay=start_delay, uid=uid, max_iterations=max_iterations)
+        if not scheduled_absolute:
+        #     raise Exception(self.scheduled_task_pool)
+            return self.scheduled_task_pool.attach_and_run(task, interval=interval, start_delay=start_delay, UID=uid, max_iterations=max_iterations)
         else:
             raise NotImplementedError('TODO: Absolute scheduling that doesnt start after an intial delay.')
-            self.scheduled_task_pool.attach_and_run_absolute(task, uid=uid, date=scheduled_absolute, last_ran=last_ran)
+            return self.scheduled_task_pool.attach_and_run_absolute(task, UID=uid, date=scheduled_absolute, last_ran=last_ran)
             #Would like to fix so I can have set schedules that do *not* resolve at first optertunity in relation, but rather with absolute scheduling, cron-job style
 
     def container_removed(self):

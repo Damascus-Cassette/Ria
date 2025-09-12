@@ -42,7 +42,7 @@ class UNDEC_Foreign(Foreign_Entity_Base,Client_DB_Model):
         self.port = port
         # self.id  = host + ':' +port
 
-    id   = Column(Integer, primary_key=True)
+    uid  = Column(Integer, primary_key=True)
     host = Column(String)
     port = Column(String)
 
@@ -73,7 +73,10 @@ from starlette.websockets import WebSocketDisconnect as Manager_WebSocketDisconn
 class Websocket_State_Info(Manager_Websocket_Wrapper_Simul_Default):
     Events = Event_Router.New()
     events = None
-    
+
+    local_entity   : 'Manager_Local'
+    foreign_entity : 'UNDEC_Foreign'
+
     def pre_run(self, buffer_tick_rate = 2):
         self.buffer = []
         self.buffer_tick_rate = buffer_tick_rate
@@ -142,7 +145,7 @@ class Websocket_State_Info(Manager_Websocket_Wrapper_Simul_Default):
         self.buffer.append(('DELETE', container.__tablename__ , self.gather_item(container,['id','host','port'])))
 
 
-class Manager_Interface(Interface_Base):
+class Manager_Interface_Info(Interface_Base):
     router = APIRouter()
     @IO.Get(router,'/')
     def base_page(self, this_e, other_e, req, ):
@@ -166,6 +169,56 @@ class Manager_Interface(Interface_Base):
             await ws.close()
 
 
+from ws4py.client.threadedclient import WebSocketClient 
+
+class Manager_Worker_Interface(Interface_Base):
+    router = APIRouter()
+    
+    @IO.Get(router,'/test')
+    def test(self, this_e, other_e, req):
+        return True
+
+    @IO.Websocket(router,'/ws')
+    async def worker_websocket(self, this_e, other_e, websocket:WebSocket_Manager):
+        from starlette.websockets import WebSocketDisconnect,WebSocketClose
+        await websocket.accept()
+        await websocket.send_text('Hello')
+        await websocket.close()
+    @worker_websocket.Client()
+    async def worker_websocket_client(self,this_e:Foreign_Entity_Base, other_e:Local_Entity_Base, path, headers):
+
+        class custom_ws_class(WebSocketClient):
+            def opened(self):
+                pool = other_e.client_websocket_pool
+                pool.attach(other_e, this_e, self,self.__class__.__name__)
+                self.send('GREETINGS!')
+                # self.close()
+                
+            def closed(self, code, reason=None):
+                pool = other_e.client_websocket_pool
+                pool.remove(self)
+                print('WEBSOCKET CLOSED!')
+            
+            def received_message(self, message):
+                print('RECEIVED MESSAGE:', message)
+                self.send('GOODBYE!')
+                self.close()
+            
+            async def run_forever(self):
+                return super().run_forever()
+
+        fullpath = f'ws://{this_e.host}:{this_e.port}' + path
+        print(fullpath)
+
+        ws = custom_ws_class(fullpath, headers=headers.items())
+        try:
+            ws.connect()
+            asyncio.create_task(ws.run_forever())
+            return ws
+        except Exception as e:
+            print(f'Cound not connect! Reason: {e}')
+            return None
+
 class Worker_Interface(Interface_Base):
     ''' Worker interface is websocket msg : pub-sub based'''
     ...
@@ -174,11 +227,11 @@ class Local_Common():
 
     def export_header(self, to_entity:Foreign_Entity_Base)->dict:
         return {'Role': self.Entity_Type.value, 
-                'UID' : self.unique_id}
+                'UID' : self.uid}
 
     def export_header(self, to_entity:Foreign_Entity_Base)->dict:
         return {'Role': self.Entity_Type.value, 
-                'UID' : self.unique_id}
+                'UID' : self.uid}
 
     async def Find_Entity_From_Req(self, request:Request):
         ''' Ensure DB Connection, return foreign item '''
@@ -230,16 +283,14 @@ class Local_Common():
         from fastapi import FastAPI
         from fastapi.staticfiles import StaticFiles 
 
-        async def lifespan(app):
-            yield
-            FAPI_SHUTTING_DOWN.set(True)
-
-        app = FastAPI(lifespan=lifespan)
 
         inst  = cls(*args,**kwargs)
+        app = FastAPI(lifespan=inst.fapi_lifespan)
+
         from fastapi.templating import Jinja2Templates
-        inst.fapi_templates = Jinja2Templates(directory=inst._Fapi_Dep_Path)
-        app.mount("/static", StaticFiles(directory=inst._Fapi_Dep_Path), name="static")
+        static_path = f'{Path(__file__).parents[0]}/Manager_Statics' #HACK, rely on env vars for nuitka unpack  
+        inst.fapi_templates = Jinja2Templates(directory=static_path)
+        app.mount("/static", StaticFiles(directory=static_path), name="static")
 
         @app.get("/url-list")
         def get_all_urls():
@@ -247,6 +298,9 @@ class Local_Common():
             return url_list
 
         return  inst.attach_to_app(app)
+    
+    async def fapi_lifespan(self,app):
+        yield
 
     # def fapi_mount_static(self,app):
     #     from fastapi import StaticFiles
@@ -254,21 +308,21 @@ class Local_Common():
     #     ...
 
 class Manager_Local(Local_Common,Local_Entity_Base):
-    Entity_Type        = Entity_Types.MANAGER
-    SettingsType       = Manager_Settings
-    InterfaceType      = Manager_Interface
+    Entity_Type         = Entity_Types.MANAGER
+    SettingsType        = Manager_Settings
+    InterfaceType       = Manager_Interface_Info
+    WorkerInterfaceType = Manager_Worker_Interface
+    _Fapi_Dep_Path = '/Manager_Statics'
+
 
     Events             = Event_Router.New(readout=True)
 
-    interface              : Manager_Interface
+    interface              : Manager_Interface_Info
+    worker_interface       : Manager_Worker_Interface
+
     settings               : Manager_Settings
     manager_websocket_pool : Manager_Websocket_Pool
     client_websocket_pool  : Client_Websocket_Pool
-
-    @property
-    def _Fapi_Dep_Path(self):
-        #HACK make a root path argument that can change to unpack location when using NUITKA
-        return f'{Path(__file__).parents[0]}/Manager_Statics'
          
     # services_pool : ServicesPoolType
     # event_handler : EventHandlerType
@@ -288,6 +342,7 @@ class Manager_Local(Local_Common,Local_Entity_Base):
 
     def __init__(self, settings_loc:str='./manger_settings.yaml'):
         self.interface              = self.InterfaceType(self)
+        self.worker_interface       = self.WorkerInterfaceType(self)
         self.manager_websocket_pool = Manager_Websocket_Pool()
         self.client_websocket_pool  = Client_Websocket_Pool()
         self.events = self.Events(self)
@@ -306,6 +361,7 @@ class Manager_Local(Local_Common,Local_Entity_Base):
         ''' Our 'relfective' database that handles foreign connections'''
         settings = self.settings.client_db
         db_url = settings.db_standard + settings.db_loc._swapped_slash_dir
+        settings.db_loc.ensure_dir()
         # raise Exception(db_url)
         self.Client_DB_Engine  = create_engine(db_url)
         self.Client_DB_Session = sessionmaker(bind=self.Client_DB_Engine)
@@ -326,6 +382,7 @@ class Manager_Local(Local_Common,Local_Entity_Base):
 
         settings = self.settings.file_db
         db_url = settings.db_standard + settings.db_loc._swapped_slash_dir
+        settings.db_loc.ensure_dir()
         
         self.File_DB_Engine  = create_engine(db_url)
         self.File_DB_Session = sessionmaker(bind=self.File_DB_Engine)
@@ -341,6 +398,7 @@ class Manager_Local(Local_Common,Local_Entity_Base):
 
         settings = self.settings.job_db
         db_url = settings.db_standard + settings.db_loc._swapped_slash_dir
+        settings.db_loc.ensure_dir()
     
         self.Job_DB_Engine  = create_engine(db_url)
         self.Job_DB_Session = sessionmaker(bind=self.Job_DB_Engine)
@@ -357,24 +415,76 @@ class Manager_Local(Local_Common,Local_Entity_Base):
     #         asyncio.run(websocket.close())
 
 class Worker_Local(Local_Common, Local_Entity_Base):
+    _Fapi_Dep_Path = '/Worker_Statics'
+    Events = Event_Router.New()
     Entity_Type   = Entity_Types.WORKER
     SettingsType  = Worker_Settings
     InterfaceType = Worker_Interface
     settings      : Worker_Settings
     
     def __init__(self, settings_loc:str='./worker_settings.yaml'):
+        self.events = self.Events(self)
         self.interface              = self.InterfaceType(self)
         self.manager_websocket_pool = Manager_Websocket_Pool()
         self.client_websocket_pool  = Client_Websocket_Pool()
         self.load_settings(settings_loc)
+        # self.load_context_settings()
+            #TODO: Context settings, ie machine ID
+        self.uid = 'TestWorker'
         #self.services_pool = ServicesPoolType(self)
         #self.event_handler = EventHandlerType(self)
+        self.settup_client_db()
+        self.create_manager()
 
+    def settup_client_db(self,):
+        ''' Our 'relfective' database that handles foreign connections'''
+        settings = self.settings.client_db
+        db_url = settings.db_standard + settings.db_loc._swapped_slash_dir
+        settings.db_loc.ensure_dir()
+        self.Client_DB_Engine  = create_engine(db_url)
+        self.Client_DB_Session = sessionmaker(bind=self.Client_DB_Engine)
+        set_listeners_on_tables(list(Client_DB_Model.__subclasses__()), self.events)
+        Client_DB_Model.metadata.create_all(self.Client_DB_Engine)
+
+        self.session           = self.Client_DB_Session()
+        self.client_db_session = self.session
+        #HACK. Change to make contextual database sessions as per good practice
+
+    def create_manager(self):
+        self.client_db_session.merge(Manager_Foreign(
+            uid  = 'MANAGER_SINGLTON',
+            host = self.settings.manager.addr,
+            port = self.settings.manager.port,
+        ))
+        self.client_db_session.commit()
+
+    def fapi_lifespan(self, app):
         self.connect_to_manager()
+        yield
 
-    def connect_to_manager(self,):
-        ...
-
+    @Events.Schedule(auto_run = True, interval = 5)
+    async def connect_to_manager(task,self):
+        manager = self.client_db_session.query(Manager_Foreign).first()
+        manager : Manager_Foreign
+        try:
+            i = 0
+            while task.continue_execution:
+                print('ATTEMPTING TO CONNECT TO MANAGER')
+                i = i + 1
+                if  i > 4: 
+                    print('MAX ATTEMPTS EXCEEDED')
+                    break
+                with manager.Active(), self.Active():
+                    # sucess = manager.worker_interface.test()
+                    sucess = await manager.worker_interface.worker_websocket()
+                    if sucess is not None: 
+                        print('FOUND!')
+                        break 
+                yield
+        except GeneratorExit:
+            print('CANCLED ATTEMPTS TO CONNECT TO MANAGER')
+            ... #Should not hit in forever use case
+        
 
 class Foreign_Common():
     def __repr__(self):
@@ -394,7 +504,7 @@ class Foreign_Common():
         
     def matches_request(self,request:Request, headers:Request.headers):
         return all([headers.get('Role', default = '') == self.Entity_Type.value,
-                    headers.get('UID',  default = '') == self.id])
+                    headers.get('UID',  default = '') == self.uid])
 
     def export_auth(self,from_entity)->tuple:
         return tuple()
@@ -406,9 +516,9 @@ class Foreign_Common():
 class Client_Foreign(Foreign_Common,Foreign_Entity_Base, Client_DB_Model):
     Entity_Type   = Entity_Types.CLIENT
     __tablename__ = Entity_Types.CLIENT.value
-    interface     = Manager_Interface()
+    interface     = Manager_Interface_Info()
 
-    uid       = Column(Integer, primary_key=True)
+    uid       = Column(String, primary_key=True)
     host      = Column(String)
     port      = Column(String)
     con_state = Column(Sql_Enum(Connection_States), default = Connection_States.NEVER_CON)
@@ -416,11 +526,12 @@ class Client_Foreign(Foreign_Common,Foreign_Entity_Base, Client_DB_Model):
         #TODO: CHANGE LATER TO BE SECURE
 
 class Manager_Foreign(Foreign_Common,Foreign_Entity_Base, Client_DB_Model):
-    Entity_Type   = Entity_Types.MANAGER
-    __tablename__ = Entity_Types.MANAGER.value
-    interface     = Manager_Interface()
-
-    uid       = Column(Integer, primary_key=True)
+    Entity_Type      = Entity_Types.MANAGER
+    __tablename__    = Entity_Types.MANAGER.value
+    interface        = Manager_Interface_Info()
+    worker_interface = Manager_Worker_Interface()
+    
+    uid       = Column(String, primary_key=True)
     host      = Column(String)
     port      = Column(String)
     con_state = Column(Sql_Enum(Connection_States), default = Connection_States.NEVER_CON)
@@ -432,7 +543,7 @@ class Worker_Foreign(Foreign_Common,Foreign_Entity_Base, Client_DB_Model):
     __tablename__ = Entity_Types.WORKER.value
     Entity_Type   = Entity_Types.WORKER
     
-    uid       = Column(Integer, primary_key=True)
+    uid       = Column(String, primary_key=True)
     host      = Column(String)
     port      = Column(String)
     con_state = Column(Sql_Enum(Connection_States), default = Connection_States.NEVER_CON)

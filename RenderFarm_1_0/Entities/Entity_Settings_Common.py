@@ -8,6 +8,9 @@ from .EnvVars import CURRENT_DIR
 from pathlib import Path
 from datetime import datetime
 
+import os
+
+
 class user_time_enums(Enum):
     MANUAL = 'MANUAL'
 
@@ -81,6 +84,13 @@ class user_path():
     def __str__(self,):
         return str(self.data)
     
+    def ensure_dir(self):
+        path = self.data
+        if not path.is_dir():
+            path = Path(path.parents[0])
+        if not path.exists():
+            os.makedirs(path, exist_ok = True)
+
     @property
     def _swapped_slash_dir(self):
         ''' patch function for sqlalachemy, flipping backslashing '''

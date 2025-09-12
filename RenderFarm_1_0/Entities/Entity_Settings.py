@@ -48,7 +48,7 @@ class Job_DB_Settings(BaseModel):
     db_standard  : str       = 'sqlite:///' 
     storage      : user_path = './jobs/' 
 
-class Client_DB_Settings(BaseModel):
+class Manager_Client_DB_Settings(BaseModel):
     _io_strict_ = False
     db_loc      : user_path = './clients.db'
     db_standard : str       = 'sqlite:///'
@@ -61,40 +61,59 @@ class Manager_Settings(BaseModel):
     # security  : Manager_Sec_Settings
     _log_level: int = 0
 
-    root_dir  : user_path = '.'
+    root_dir  : user_path = './_manager'
         #Absolute, or Relative to CURRENTDIR.default,
         #Atm default is os.cwdir
     
     file_db   : Database_Settings 
-    client_db : Client_DB_Settings
+    client_db : Manager_Client_DB_Settings
     job_db    : Job_DB_Settings   
 
-    addr      : str  = '127.22.0.1'
+    addr      : str  = '127.00.0.1'
     port      : str  = '4000'
     label     : str  = 'Ria Manager'
 
     def __init__(self):
         self.file_db   = Database_Settings() 
-        self.client_db = Client_DB_Settings()
+        self.client_db = Manager_Client_DB_Settings()
         self.job_db    = Job_DB_Settings()   
         super().__init__()
 
     worker_timeout : user_time_str = '1m' 
 
-class Worker_Settings(BaseModel):
+class Manager_Reference_Settings(BaseModel):
+    ''' Find Manager, timout  '''
     _io_strict_ = False
+    addr     : str = '127.0.0.1'
+    port     : str = '4000'
+    interval : int = 2
+
+class Worker_Client_DB_Settings(BaseModel):
+    _io_strict_ = False
+    db_loc      : user_path = './worker-clients.db'
+    db_standard : str       = 'sqlite:///' #
+
+class Worker_Settings(BaseModel):
     ''' Settings for the Worker Entity '''
+    _io_strict_ = False
     _profile_path     : str = '' #Override path to a Worker_Env_Settings
     _log_level        : int = 0
 
-    addr              : str  = '127.22.0.1'
+    client_db : Worker_Client_DB_Settings
+    manager   : Manager_Reference_Settings
+
+    def __init__(self):
+        self.client_db = Worker_Client_DB_Settings()
+        self.manager   = Manager_Reference_Settings()
+    
+    addr              : str  = '127.00.0.1'
     port              : str  = '4001'
 
-    root_dir          : user_path = '.'
+    root_dir  : user_path = './_worker'
 
-    task_tags         : list = tuple() 
-    working_dir       : user_path = './working/'
-    working_dir_ext   : user_frmt_str = '/{job_id}/{task_id}/'
+    # task_tags         : list = tuple() 
+    # working_dir       : user_path = './working/'
+    # working_dir_ext   : user_frmt_str = '/{job_id}/{task_id}/'
 
 class Worker_Env_Settings(BaseModel):
     _io_strict_ = False
