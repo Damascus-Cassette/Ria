@@ -99,12 +99,11 @@ class Websocket_State_Info(Manager_Websocket_Wrapper_Base):
         
         # while ((self.websocket.client_state is not Manager_WebSocketState.DISCONNECTED) and (not FAPI_SHUTTING_DOWN)) :
 
-        while self.continue_execution:                
+        while self.continue_execution:
             if self.event_buffer:
                 event_buffer = copy(self.event_buffer)
                 self.event_buffer.clear()
                 for x in event_buffer:
-
                     await self.send_json(x)
             print('RUNNING')
 
