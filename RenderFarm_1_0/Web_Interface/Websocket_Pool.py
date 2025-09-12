@@ -154,12 +154,14 @@ class Manager_Websocket_Wrapper_Base():
 
     @wraps(Websocket_Manager.accept)
     async def accept(self):
+        self.continue_execution = True
         pool : Manager_Websocket_Pool = self.local_entity.manager_websocket_pool
         pool.attach(self.local_entity, self.foreign_entity, self,  self.id, self.uid)
         return await self.websocket.accept()
 
     @wraps(Websocket_Manager.close)
     async def close(self):
+        self.continue_execution = False
         await self.websocket.close()
         self.after_close()
 

@@ -99,16 +99,16 @@ class Websocket_State_Info(Manager_Websocket_Wrapper_Base):
         
         # while ((self.websocket.client_state is not Manager_WebSocketState.DISCONNECTED) and (not FAPI_SHUTTING_DOWN)) :
 
-        while True :                
+        while self.continue_execution:                
             if self.event_buffer:
                 event_buffer = copy(self.event_buffer)
                 self.event_buffer.clear()
                 for x in event_buffer:
-                    'Sending buffer item!'
+
                     await self.send_json(x)
+            print('RUNNING')
 
             await asyncio.sleep(1)
-            print ('.',FAPI_SHUTTING_DOWN.get())
 
         #This should send relevent db info on first call, then events take over. 
         #It may be a good idea to have a transient event_router
