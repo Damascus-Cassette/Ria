@@ -71,6 +71,7 @@ class Websocket_Pool_Base():
                 raise Exception('COLLIDING WS-UID UNDER {foreign_entity.Entity_Type.value}:{foreign_entity.id}: {uid}}!')
         view = Websocket_View(ws_item, foreign_entity.Entity_Type, foreign_entity.id, id, uid)
         self.data.append(view)
+        return partial(self.data.remove,view)
 
     def remove(self, websocket : Websocket_Client|Websocket_Manager|Websocket_View|Websocket_Pool_Slice):
         ''' Typically on closing, remove from data if item is still in self.data '''
@@ -129,55 +130,95 @@ class Websocket_Pool_Base():
         
         return base == check_value
 
+import asyncio
+
 class Manager_Websocket_Wrapper_Base():
-    ''' Async container for websocket that attaches and manages state/callbacks with related entity(s) '''
-    
-    local_entity    : Local_Entity_Base
-    foreign_entity  : Foreign_Entity_Base
-    websocket       : Websocket_Manager
-    
-    def __init__(self,local_entity, foreign_entity, websocket, id= None, uid=None):
-        self.local_entity   = local_entity
+    websocket:Websocket_Manager
+    def __init__(self,local_entity, foreign_entity, websocket, id, uid=None):
+        self.local_entity = local_entity
         self.foreign_entity = foreign_entity
-        self.websocket      = websocket
-        self.id             = id
-        self.uid            = uid
+        self.websocket = websocket
+        self.id  = id
+        self.uid = uid
 
-    def __getattr__(self, key):
-        if key not in dir(self):
-            return getattr(self.websocket, key)
-        return vars(self)[key]
-
-    async def run(self):
-        ''' Primary Event Loop '''
-        raise NotImplementedError('Implement in child Class!') 
-
-    @wraps(Websocket_Manager.accept)
     async def accept(self):
+        await self.websocket.accept()
+        pool = self.local_entity.manager_websocket_pool
+        pool : Manager_Websocket_Pool
+        self.close_callback = pool.attach(self.local_entity, self.foreign_entity, self,  self.id, self.uid)
+        
+    async def run_handler(self,*args,**kwargs):
+        task = asyncio.create_task(self.run_wrapper(*args,**kwargs))
+        self.current_task = task
+        return await task
+    
+    async def run_wrapper(self,*args,**kwargs):
         self.continue_execution = True
-        pool : Manager_Websocket_Pool = self.local_entity.manager_websocket_pool
-        pool.attach(self.local_entity, self.foreign_entity, self,  self.id, self.uid)
-        return await self.websocket.accept()
+        gen = self.run(*args, **kwargs)
+        async for x in gen:
+            if self.websocket.client_state.name != 'CONNECTED': await gen.aclose(); break
+            if not self.continue_execution: await gen.aclose(); break
 
-    @wraps(Websocket_Manager.close)
     async def close(self):
         self.continue_execution = False
-        await self.websocket.close()
-        self.after_close()
+        if self.current_task:
+            try: await self.current_task
+            except WebSocketDisconnect: ...
+        if self.close_callback:
+            self.close_callback()
+        # await self.current_task
 
-    def after_close(self):
+    async def run(self):
+        raise Exception('DEFINE ON CHILD CLASS')
+
+class Manager_Websocket_Wrapper_Simul_Default(Manager_Websocket_Wrapper_Base):
+    # Tick_Rate = 1
+    
+    async def recieve_json(self):
+        res = await self.websocket.recieve_json()
+        print(res)
+
+    def make_simul_tasks(self):
+        return [
+            asyncio.create_task(self.recieve_json())
+            # asyncio.create_task(self.websocket.recieve_json())
+                #At least one send or recieve is required for disconnect to be raised!!
+                #Can attach callbacks here as well
+        ]
+    
+    def after(self):
+        ...
+    def on_discon(self):
+        ...
+    def on_stopasync(self):
         ...
 
-    async def run_with_handler(self,*args,**kwargs):
+    async def run(self,*args,**kwargs):
+        self.pre_run(*args,**kwargs)
         try:
-            await self.run(*args,**kwargs)
-        except WebSocketDisconnect as e:
-            print('CLOSING OTHER SIDE!')
+            while True:
+                # wait = asyncio.create_task(asyncio.sleep(self.Tick_Rate))
+                complete, pending = await asyncio.wait(self.make_simul_tasks(), return_when=asyncio.FIRST_COMPLETED) 
+                for x in pending:
+                    x.cancel()
+                for c in complete:
+                    if e:=c.exception():
+                        raise e
+                yield   
+        except WebSocketDisconnect:
+            # print('HIT WebSocketDisconnect')
+            self.on_discon()
+            self.after()
+            raise
+        except StopAsyncIteration:
+            self.on_stopasync()
+            self.after()
         finally:
-            pool : Manager_Websocket_Pool = self.local_entity.manager_websocket_pool
-            pool.remove(self)
-            self.after_close()
-
+            ...
+            #Actionitive code here
+    
+    async def pre_run(self,*args,**kwargs):
+        ...
 
 class Manager_Websocket_Pool(Websocket_Pool_Base):
     Base_Type = Manager_Websocket_Wrapper_Base

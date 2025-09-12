@@ -67,88 +67,79 @@ class UNDEC_Foreign(Foreign_Entity_Base,Client_DB_Model):
         # raise Exception(f'UNKNOWN:{ra}')
         return cls(request.client.host, request.client.port)
 
-class Websocket_State_Info(Manager_Websocket_Wrapper_Base):
+from ..Web_Interface.Websocket_Pool import Manager_Websocket_Wrapper_Simul_Default
+from starlette.websockets import WebSocketDisconnect as Manager_WebSocketDisconnect 
+    
+class Websocket_State_Info(Manager_Websocket_Wrapper_Simul_Default):
     Events = Event_Router.New()
-    local_entity   : 'Manager_Local'
-    foreign_entity : 'UNDEC_Foreign'
+    events = None
+    
+    def pre_run(self, buffer_tick_rate = 2):
+        self.buffer = []
+        self.buffer_tick_rate = buffer_tick_rate
+        self.start_populate_buffer()
+        if not self.events:
+            self.events = self.Events(self)
+        self.events_callback = self.local_entity.events.temp_attach_router_inst(self.events)
 
-    # @Events.Sub(Events, Any)
-    # @Events.Sub('after_delete')
-    @Events.Sub('after_insert')
-    def test_update_client(self, event, event_key, container, mapper, connection):
-        self.event_buffer.append(('CREATE', 'clients' ,{'id':container.id, 'host':container.host, 'port':container.port,'label':getattr(container,'label')}))
-
-    @Events.Sub('after_update')
-    def test_update_client(self, event, event_key, container, mapper, connection):
-        self.event_buffer.append(('CREATE', 'clients' ,{'id':container.id, 'host':container.host, 'port':container.port,'label':getattr(container,'label')}))
+    def after(self,):
+        self.events_callback()
+    
+    def make_simul_tasks(self,):
+        ''' Re-creates tasks on each completion
+        TODO: Instead optionally make bellow a factory to re-queue each indv automatically '''
         
-    def __init__(self, local_entity, foreign_entity, websocket, id=None, uid=None):
-        super().__init__(local_entity, foreign_entity, websocket, id, uid)
-        self.event_buffer = [
-            ('BULK_CREATE','clients' , self.gather_all_undec()), #|self.gather_all_clients()
-            ('BULK_CREATE','workers' , self.gather_all_workers()),
-            ('BULK_CREATE','managers', self.gather_all_managers()),
-            # ('BULK_CREATE','jobs',    self.gather_all_jobs( this_e.))
-            # ('BULK_CREATE','tasks',   self.gather_all_tasks(this_e.))
+        return [
+            asyncio.create_task(self.send_buffer()),
+            asyncio.create_task(self.receive_json()),
         ]
 
-    async def run(self):
-        self.events = self.Events(self)
-        self.remove_callback = self.local_entity.events.temp_attach_router_inst(self.events)
-        # await self.accept()
-        
-        # while ((self.websocket.client_state is not Manager_WebSocketState.DISCONNECTED) and (not FAPI_SHUTTING_DOWN)) :
+    async def send_buffer(self):
+        while True:
+            if len(self.buffer):
+                buffer = copy(self.buffer)
+                self.buffer.clear()
+                for x in buffer:
+                    await self.websocket.send_json(x)
+            await asyncio.sleep(self.buffer_tick_rate)
 
-        while self.continue_execution:
-            if self.event_buffer:
-                event_buffer = copy(self.event_buffer)
-                self.event_buffer.clear()
-                for x in event_buffer:
-                    await self.send_json(x)
-            print('RUNNING')
+    async def receive_json(self):
+        val = await self.websocket.receive_json()
+        print('Got Val:', val)
 
-            await asyncio.sleep(1)
+    def start_populate_buffer(self,):
+        self.buffer.extend([
+            ('BULK_CREATE','workers'    , self.gather_intial_send(self.local_entity.client_db_session, Worker_Foreign  , ['id','host','port'] )),
+            ('BULK_CREATE','UNDECLARED' , self.gather_intial_send(self.local_entity.client_db_session, UNDEC_Foreign   , ['id','host','port'] )), #|self.gather_all_clients()
+            ('BULK_CREATE','managers'   , self.gather_intial_send(self.local_entity.client_db_session, Manager_Foreign , ['id','host','port'] )),
+            ('BULK_CREATE','clients'    , self.gather_intial_send(self.local_entity.client_db_session, Client_Foreign  , ['id','host','port'] )), #|self.gather_all_clients()
+            # ('BULK_CREATE','jobs',    self.gather_all_jobs( this_e.))
+        ])
 
-        #This should send relevent db info on first call, then events take over. 
-        #It may be a good idea to have a transient event_router
 
-    
-    def after_close(self):
-        if hasattr(self,'remove_callback'):
-            self.remove_callback()
-        
-
-    def gather_all_undec(self):
+    def gather_intial_send(self, session, table, attrs):
         res = []
-        for row in self.local_entity.client_db_session.query(UNDEC_Foreign).all():
-            res.append({'id':row.id, 'host':row.host, 'port':row.port })
+        for row in session.query(table).all():
+            res.append(self.gather_item(row,attrs))
         return res
 
-    def gather_all_clients(self):
-        res = []
-        for row in self.local_entity.client_db_session.query(UNDEC_Foreign).all():
-            res.append({'id':row.id, 'host':row.host, 'port':row.port })
-        return res
-    
-    def gather_all_workers(self):
-        res = []
-        for row in self.local_entity.client_db_session.query(Worker_Foreign).all():
-            res.append({'id':row.id, 'host':row.host, 'port':row.port })
-        return res
- 
-    def gather_all_managers(self):
-        res = []
-        for row in self.local_entity.client_db_session.query(Manager_Foreign).all():
-            res.append({'id':row.id, 'host':row.host, 'port':row.port })
-        return res
+    def gather_item(self,row, attrs):
+        item = {}
+        for attr in attrs:
+            item[attr] = getattr(row, attr, None)
+        return item        
 
-    # def gather_all_jobs(self):
-    #     res = []
-    #     for row in self.local_entity.client_db_session.query(Job_DB_Model).all():
-    #         res.append({'id':row.id, 'host':row.host, 'port':row.port })
-    #     return res
-    
+    @Events.Sub('after_insert')
+    def insert_client(self, event, event_key, container, mapper, connection):
+        self.buffer.append(('CREATE', container.__tablename__ , self.gather_item(container,['id','host','port'])))
 
+    @Events.Sub('after_update')
+    def update_client(self, event, event_key, container, mapper, connection):
+        self.buffer.append(('UPDATE', container.__tablename__ , self.gather_item(container,['id','host','port'])))
+
+    @Events.Sub('after_delete')
+    def delete_client(self, event, event_key, container, mapper, connection):
+        self.buffer.append(('DELETE', container.__tablename__ , self.gather_item(container,['id','host','port'])))
 
 
 class Manager_Interface(Interface_Base):
@@ -168,8 +159,12 @@ class Manager_Interface(Interface_Base):
     async def state_info(self, this_e, other_e, websocket:WebSocket_Manager):
         ws = Websocket_State_Info(this_e, other_e, websocket, 'state_info')
         await ws.accept()
-        await ws.run_with_handler()
-        await ws.close()
+        try:
+            await ws.run_handler()
+        except Manager_WebSocketDisconnect:
+            print('REACHED WEBSOCKET DISCON')
+            await ws.close()
+
 
 class Worker_Interface(Interface_Base):
     ''' Worker interface is websocket msg : pub-sub based'''
@@ -380,6 +375,7 @@ class Worker_Local(Local_Common, Local_Entity_Base):
     def connect_to_manager(self,):
         ...
 
+
 class Foreign_Common():
     def __repr__(self):
         return f'< {self.Entity_Type} | {self.host}:{self.port} @ row {self.uid} > '
@@ -407,6 +403,17 @@ class Foreign_Common():
     def New_From_Request(cls,local_entity, request):
         return cls(request.headers.get('UID'), request.client.host, request.client.port)
     
+class Client_Foreign(Foreign_Common,Foreign_Entity_Base, Client_DB_Model):
+    Entity_Type   = Entity_Types.CLIENT
+    __tablename__ = Entity_Types.CLIENT.value
+    interface     = Manager_Interface()
+
+    uid       = Column(Integer, primary_key=True)
+    host      = Column(String)
+    port      = Column(String)
+    con_state = Column(Sql_Enum(Connection_States), default = Connection_States.NEVER_CON)
+    _trust : Trust_States = Trust_States.TRUSTED
+        #TODO: CHANGE LATER TO BE SECURE
 
 class Manager_Foreign(Foreign_Common,Foreign_Entity_Base, Client_DB_Model):
     Entity_Type   = Entity_Types.MANAGER
