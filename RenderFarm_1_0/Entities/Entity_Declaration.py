@@ -2,6 +2,7 @@
 
 import os
 import yaml
+import asyncio
 from fastapi.responses import HTMLResponse
 from pathlib import Path
 from contextvars import ContextVar
@@ -17,9 +18,17 @@ from ..Web_Interface.API_V1_8       import Foreign_Entity_Base, Local_Entity_Bas
 from ..Web_Interface.Websocket_Pool import Client_Websocket_Pool,Manager_Websocket_Pool,Manager_Websocket_Wrapper_Base
 from .Entity_Settings               import Manager_Settings, Worker_Settings
 from .Entity_Settings_Common        import CURRENT_DIR
-from ..Struct_Pub_Sub               import Event_Router
+from ..Struct_Pub_Sub_v1_2          import Event_Router
+from ..Pub_Sub_Sql_Events_Factory   import set_listeners_on_tables
+
+from starlette.websockets import WebSocketState as Manager_WebSocketState 
+from copy import copy
+
+from typing import Any
 
 Client_DB_Model = declarative_base()
+
+FAPI_SHUTTING_DOWN = ContextVar('FAPI_SHUTTING_DOWN',default = False)
 
 class UNDEC_Foreign(Foreign_Entity_Base,Client_DB_Model):
     '''UNREGISTERED & UNTRUSTED CONNECTION, CLIENTS WILL BE DEFINED ELSEWHERE AND ALWAYS PASS IN UID + SEC KEY'''
@@ -58,13 +67,97 @@ class UNDEC_Foreign(Foreign_Entity_Base,Client_DB_Model):
         # raise Exception(f'UNKNOWN:{ra}')
         return cls(request.client.host, request.client.port)
 
+class Websocket_State_Info(Manager_Websocket_Wrapper_Base):
+    Events = Event_Router.New()
+    local_entity   : 'Manager_Local'
+    foreign_entity : 'UNDEC_Foreign'
+
+    # @Events.Sub(Events, Any)
+    # @Events.Sub('after_delete')
+    @Events.Sub('after_insert')
+    def test_update_client(self, event, event_key, container, mapper, connection):
+        self.event_buffer.append(('CREATE', 'clients' ,{'id':container.id, 'host':container.host, 'port':container.port,'label':getattr(container,'label')}))
+
+    @Events.Sub('after_update')
+    def test_update_client(self, event, event_key, container, mapper, connection):
+        self.event_buffer.append(('CREATE', 'clients' ,{'id':container.id, 'host':container.host, 'port':container.port,'label':getattr(container,'label')}))
+        
+    def __init__(self, local_entity, foreign_entity, websocket, id=None, uid=None):
+        super().__init__(local_entity, foreign_entity, websocket, id, uid)
+        self.event_buffer = [
+            ('BULK_CREATE','clients' , self.gather_all_undec()), #|self.gather_all_clients()
+            ('BULK_CREATE','workers' , self.gather_all_workers()),
+            ('BULK_CREATE','managers', self.gather_all_managers()),
+            # ('BULK_CREATE','jobs',    self.gather_all_jobs( this_e.))
+            # ('BULK_CREATE','tasks',   self.gather_all_tasks(this_e.))
+        ]
+
+    async def run(self):
+        self.events = self.Events(self)
+        self.remove_callback = self.local_entity.events.temp_attach_router_inst(self.events)
+        # await self.accept()
+        
+        # while ((self.websocket.client_state is not Manager_WebSocketState.DISCONNECTED) and (not FAPI_SHUTTING_DOWN)) :
+
+        while True :                
+            if self.event_buffer:
+                event_buffer = copy(self.event_buffer)
+                self.event_buffer.clear()
+                for x in event_buffer:
+                    'Sending buffer item!'
+                    await self.send_json(x)
+
+            await asyncio.sleep(1)
+            print ('.',FAPI_SHUTTING_DOWN.get())
+
+        #This should send relevent db info on first call, then events take over. 
+        #It may be a good idea to have a transient event_router
+
+    
+    def after_close(self):
+        if hasattr(self,'remove_callback'):
+            self.remove_callback()
+        
+
+    def gather_all_undec(self):
+        res = []
+        for row in self.local_entity.client_db_session.query(UNDEC_Foreign).all():
+            res.append({'id':row.id, 'host':row.host, 'port':row.port })
+        return res
+
+    def gather_all_clients(self):
+        res = []
+        for row in self.local_entity.client_db_session.query(UNDEC_Foreign).all():
+            res.append({'id':row.id, 'host':row.host, 'port':row.port })
+        return res
+    
+    def gather_all_workers(self):
+        res = []
+        for row in self.local_entity.client_db_session.query(Worker_Foreign).all():
+            res.append({'id':row.id, 'host':row.host, 'port':row.port })
+        return res
+ 
+    def gather_all_managers(self):
+        res = []
+        for row in self.local_entity.client_db_session.query(Manager_Foreign).all():
+            res.append({'id':row.id, 'host':row.host, 'port':row.port })
+        return res
+
+    # def gather_all_jobs(self):
+    #     res = []
+    #     for row in self.local_entity.client_db_session.query(Job_DB_Model).all():
+    #         res.append({'id':row.id, 'host':row.host, 'port':row.port })
+    #     return res
+    
+
+
 
 class Manager_Interface(Interface_Base):
     router = APIRouter()
     @IO.Get(router,'/')
     def base_page(self, this_e, other_e, req, ):
         return this_e.fapi_templates.TemplateResponse(
-            "/info/info.html",
+            "/info/info1.html",
             {   'request' : req, 
                 'Manager_Name':this_e.settings.label},
         )
@@ -74,7 +167,10 @@ class Manager_Interface(Interface_Base):
 
     @IO.Websocket(router,'/state-info')
     async def state_info(self, this_e, other_e, websocket:WebSocket_Manager):
-        await websocket.accept()
+        ws = Websocket_State_Info(this_e, other_e, websocket, 'state_info')
+        await ws.accept()
+        await ws.run_with_handler()
+        await ws.close()
 
 class Worker_Interface(Interface_Base):
     ''' Worker interface is websocket msg : pub-sub based'''
@@ -140,7 +236,11 @@ class Local_Common():
         from fastapi import FastAPI
         from fastapi.staticfiles import StaticFiles 
 
-        app = FastAPI()
+        async def lifespan(app):
+            yield
+            FAPI_SHUTTING_DOWN.set(True)
+
+        app = FastAPI(lifespan=lifespan)
 
         inst  = cls(*args,**kwargs)
         from fastapi.templating import Jinja2Templates
@@ -160,10 +260,11 @@ class Local_Common():
     #     ...
 
 class Manager_Local(Local_Common,Local_Entity_Base):
-    
-    Entity_Type   = Entity_Types.MANAGER
-    SettingsType  = Manager_Settings
-    InterfaceType = Manager_Interface
+    Entity_Type        = Entity_Types.MANAGER
+    SettingsType       = Manager_Settings
+    InterfaceType      = Manager_Interface
+
+    Events             = Event_Router.New(readout=True)
 
     interface              : Manager_Interface
     settings               : Manager_Settings
@@ -195,6 +296,8 @@ class Manager_Local(Local_Common,Local_Entity_Base):
         self.interface              = self.InterfaceType(self)
         self.manager_websocket_pool = Manager_Websocket_Pool()
         self.client_websocket_pool  = Client_Websocket_Pool()
+        self.events = self.Events(self)
+        
         self.load_settings(settings_loc)
         #self.services_pool = ServicesPoolType(self)
         #self.event_handler = EventHandlerType(self)
@@ -213,12 +316,13 @@ class Manager_Local(Local_Common,Local_Entity_Base):
         self.Client_DB_Engine  = create_engine(db_url)
         self.Client_DB_Session = sessionmaker(bind=self.Client_DB_Engine)
         # self.file_db_session = self.Session()
-
+        set_listeners_on_tables(list(Client_DB_Model.__subclasses__()), self.events)
         Client_DB_Model.metadata.create_all(self.Client_DB_Engine)
         #self.services_pool.Extend(Client_DB_Services)
         #self.event_handler.Extend(Client_DB_Events  )
 
-        self.session = self.Client_DB_Session()
+        self.session           = self.Client_DB_Session()
+        self.client_db_session = self.session
         #HACK. Change to make contextual database sessions as per good practice
 
     def settup_file_db(self,):
@@ -232,7 +336,7 @@ class Manager_Local(Local_Common,Local_Entity_Base):
         self.File_DB_Engine  = create_engine(db_url)
         self.File_DB_Session = sessionmaker(bind=self.File_DB_Engine)
         # self.file_db_session = self.Session()
-
+        set_listeners_on_tables(list(File_DB_Model.__subclasses__()), self.events)
         File_DB_Model.metadata.create_all(self.File_DB_Engine)
         
 
@@ -247,8 +351,16 @@ class Manager_Local(Local_Common,Local_Entity_Base):
         self.Job_DB_Engine  = create_engine(db_url)
         self.Job_DB_Session = sessionmaker(bind=self.Job_DB_Engine)
         # self.file_db_session = self.Session()
-
+        set_listeners_on_tables(list(Job_DB_Model.__subclasses__()), self.events)
         Job_DB_Model.metadata.create_all(self.Job_DB_Engine)
+
+    # @Events.Sub('after_insert')
+    # @Events.Sub('after_update')
+    # @Events.Sub('after_delete')
+    # def test_update_client(self,event, event_key, container, *args,**kwargs):
+    #     for websocket in self.manager_websocket_pool.slice(id='state_info'):
+    #         websocket : Manager_Websocket_Wrapper_Base
+    #         asyncio.run(websocket.close())
 
 class Worker_Local(Local_Common, Local_Entity_Base):
     Entity_Type   = Entity_Types.WORKER

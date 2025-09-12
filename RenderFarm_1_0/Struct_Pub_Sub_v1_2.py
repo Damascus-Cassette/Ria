@@ -39,6 +39,7 @@ class Event_Item():
     def __init__(self,router_inst):
         self.router = router_inst
         self.router.event_children[self.mode].append(self)
+        # print('ATTACHED TO EVENT CHILDREN:', self.router, self.mode,self)
         
         if isclass(self.func):
             if issubclass(self.func,Event_Item): 
@@ -78,31 +79,56 @@ class Event_Router():
     event_children  : _def_dict_list  # Children on instanciation add themselves to this dict[Enum|list]
 
     @classmethod
-    def New(cls):
+    def New(cls, filter = None, readout = False ,**extras):
         new = type(f'Constructed_Event_Router', (Event_Router,), {})
         new.Constructed     = True
+        new.Readout         = readout
         new.Event_Children  = _def_dict_list()
+        new.filter          = filter
+        new.extras = extras
         return new
 
     @classmethod
     def Pub(cls,event_key,/, filter = None, local_only:bool=False): 
-        return cls.create_wrapper(_Event_Types.PUB, event_key, filter=filter, local_only=local_only)
+        return cls.create_factory_wrapper(_Event_Types.PUB, event_key, filter=filter, local_only=local_only)
     @classmethod
     def Sub(cls,event_key,/, filter = None, local_only:bool=False): 
-        return cls.create_wrapper(_Event_Types.SUB, event_key, filter=filter, local_only=local_only)
+        return cls.create_factory_wrapper(_Event_Types.SUB, event_key, filter=filter, local_only=local_only)
     @classmethod
     def Schedule(cls, /, event_key='', filter = None, local_only:bool=False, uid = None, guid = None, interval = None, start_delay = None, auto_run=False, attach_on_startup=False, scheduled_last_ran : FunctionType|int=None, scheduled_absolute=None,max_iterations=None ): 
         if auto_run: assert interval
-        return cls.create_wrapper(_Event_Types.SCHEDULE, event_key='', UID = uid, GUID = guid, interval = interval, start_delay = start_delay, auto_run = auto_run, attach_on_startup=attach_on_startup, scheduled_absolute=scheduled_absolute, scheduled_last_ran = scheduled_last_ran, max_iterations=max_iterations )
+        return cls.create_factory_wrapper(_Event_Types.SCHEDULE, event_key='', UID = uid, GUID = guid, interval = interval, start_delay = start_delay, auto_run = auto_run, attach_on_startup=attach_on_startup, scheduled_absolute=scheduled_absolute, scheduled_last_ran = scheduled_last_ran, max_iterations=max_iterations )
 
     @classmethod
-    def create_wrapper(cls,mode,event_key,*args,**kwargs):
+    def create_factory_wrapper(cls,mode,event_key,*args,**kwargs):
         assert cls.Constructed
         def wrapper(func):
             new = Event_Item.New(cls, mode, func,event_key, *args,**kwargs)
             cls.Event_Children[mode].append(new)
             return new
         return wrapper
+
+
+    def pub(self,event_key,/, filter = None, local_only:bool=False): 
+        return self.create_instance_wrapper(_Event_Types.PUB, event_key, filter=filter, local_only=local_only)
+    
+    def sub(self,event_key,/, filter = None, local_only:bool=False): 
+        return self.create_instance_wrapper(_Event_Types.SUB, event_key, filter=filter, local_only=local_only)
+    
+    def schedule(self, /, event_key='', filter = None, local_only:bool=False, uid = None, guid = None, interval = None, start_delay = None, auto_run=False, attach_on_startup=False, scheduled_last_ran : FunctionType|int=None, scheduled_absolute=None,max_iterations=None ): 
+        if auto_run: assert interval
+        return self.create_instance_wrapper(_Event_Types.SCHEDULE, event_key='', UID = uid, GUID = guid, interval = interval, start_delay = start_delay, auto_run = auto_run, attach_on_startup=attach_on_startup, scheduled_absolute=scheduled_absolute, scheduled_last_ran = scheduled_last_ran, max_iterations=max_iterations )
+
+    def create_instance_wrapper(self,mode,event_key,*args,**kwargs):
+        assert self.Constructed
+        def wrapper(func):
+            new = Event_Item.New(self, mode, func, event_key, *args, **kwargs)(self)
+            self.event_children[mode].append(new)
+            return new
+        return wrapper
+    #TODO: Test these instance based ones better!
+    
+
 
     def __init__(self, container, parent=None):
         self._container      = container
@@ -112,18 +138,27 @@ class Event_Router():
         self.scheduled_task_pool = Scheduled_Task_Pool
         self._format_container(container)
 
+    def temp_attach_router_inst(self,router_inst):
+        print('temp_attach_router_inst') 
+        self.router_children.append(router_inst)
+        return lambda : self.router_children.remove(router_inst); print ('REMOVED TEMP ROUTER : ', router_inst)
+        
+
     def _format_container(self,container):
         ''' Ensure that all Event_Item children are instanciated '''
         for k in dir(container):
             if k.startswith('__'): continue
             v = getattr(container, k)
             # if v in self.Event_Children.any:
-            print(v,v.__class__.__bases__)
-            if getattr(v,'router_cls',None) is self.__class__: 
+            if getattr(v,'router_cls', None) is self.__class__: 
+                # print(v,v.__class__, id(getattr(v,'router_cls', None)), id(self.__class__))
                 setattr(container,k,partial(v(self),container))
         self._format_readers()
         self._auto_register_schedule()
     
+    def _auto_register_schedule(self):
+        ...
+
     def _format_readers(self):
         for buffer in self.event_children[_Event_Types.BUFFER]:
             for reader in self.event_children[_Event_Types.READER]:
@@ -131,18 +166,20 @@ class Event_Router():
                     buffer.readers.append(reader)
                     reader.buffer = buffer
     
-    def publish(self, event, event_key, container, filter=None, local_only=False):
+    def publish(self, event, event_key, container, /, is_local=True, filter=None, local_only=False, **kwargs):
+        if self.Readout: print('PUB CALLED',event)
         if filter is not None:
             if filter(self._container,event_key,container): 
                 return
         
         if self.router_parent and (not local_only):
-            self.publish(event,event_key,container)
+            self.router_parent.publish(event,event_key,container,**kwargs)
             return
 
-        self.call_subs(event, event_key, container, is_local=True, local_only=local_only)
+        self.call_subs(event, event_key, container, is_local=True, local_only=local_only, **kwargs)
 
-    def call_subs(self, event, event_key, container, is_local:bool=False, local_only=False):
+    def call_subs(self, event, event_key, container, /, is_local:bool=False, local_only=False, **kwargs):
+        if self.Readout: print('SUB CALLED',event,event_key,container,'THIS CONTAINER:',self._container, 'SELF CHILDREN:',self.router_children)
         for x in self.event_children[_Event_Types.SUB]:
             if x.event_key != event_key:
                 continue
@@ -151,11 +188,13 @@ class Event_Router():
             if x.filter is not None:
                 if not x.filter(self._container,event_key,container):
                     continue
-            x(self._container, event, event_key, container)
+            x(self._container, event, event_key, container, **kwargs)
 
-        if not local_only:
+        if (not local_only) or (is_local and local_only):
             for x in self.router_children:
-                x.call_subs(event,event_key,container)
+                print(f'CALLING CHILD: {x}')
+                # raise Exception('CALLING CHILDREN!')
+                x.call_subs(event,event_key,container, **kwargs)
     
     def create_scheduled_task(self,func, *args, **kwargs):
         task =  Scheduled_Task(func, *args, **kwargs)

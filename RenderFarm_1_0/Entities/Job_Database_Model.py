@@ -24,7 +24,6 @@ from sqlalchemy.orm import (declarative_base    ,
                             )
 from enum import Enum
 
-Base = declarative_base()
 
 class Space_Types(Enum):
     IMPORT = 'IMPORT'
@@ -55,7 +54,7 @@ class POI_Types(Enum):
     VIS_EXEC_GENERIC = 'VIS_EXEC_GENERIC'
 
 
-class DB_Job_Info(Base):
+class DB_Job_Info():
     ''' Metadata Container for this Graph, should only be one'''
     __tablename__ = 'job_info'
     source_graph = Column(String,primary_key=True)
@@ -66,7 +65,7 @@ class DB_Job_Info(Base):
     state        = Column(db_Enum(Job_States))
 
 
-class DB_Spaces(Base):
+class DB_Spaces():
     ''' Container for ascocated spaces, should contain method of affecting primary file db'''
     __tablename__ = 'ascociated_spaces'
     
@@ -75,7 +74,7 @@ class DB_Spaces(Base):
     users: Mapped[list["DB_Point_Of_Interest"]] = relationship(back_populates="cache")
 
 
-class DB_Memo(Base):
+class DB_Memo():
     ''' Container for asc-memo spaces, (Partial-override-caches) '''
     # Will have to be adjusted when I figure out the details of Memo in meta vs exec
     __tablename__ = 'ascociated_memos'
@@ -85,7 +84,7 @@ class DB_Memo(Base):
     users: Mapped[list["DB_Point_Of_Interest"]] = relationship(back_populates="memo")
 
 
-class DB_Point_Of_Interest(Base):
+class DB_Point_Of_Interest():
     ''' Working rep of all points of interest on a Graph, Used for Visual Interface '''
     __tablename__ = 'points_of_interest'
 
@@ -136,8 +135,8 @@ class DB_Task():
 
 class Dependency_Links():
     __tablename__ = 'dependency_links'
-    left  : Mapped[str] = mapped_column(ForeignKey("DB_Task.id"),nullable=True, primary_key=True)
-    right : Mapped[str] = mapped_column(ForeignKey("DB_Task.id"),nullable=True, primary_key=True)
+    left  : Mapped[str] = mapped_column(ForeignKey("tasks.id"),nullable=True, primary_key=True)
+    right : Mapped[str] = mapped_column(ForeignKey("tasks.id"),nullable=True, primary_key=True)
 
 
 class DB_task_pickups():
@@ -153,7 +152,7 @@ class DB_task_pickups():
         #Location on the manager's side.
 
 
-class DB_Zone(Base):
+class DB_Zone():
     ''' Visual container class spawned by zones. (label,inst_id,meta_id) should be passed back by the zones in backwards context '''
     __tablename__ = 'zones'
     id          = Column(Integer, autoincrement=True)
@@ -168,6 +167,26 @@ class DB_Zone(Base):
 
 
 class Visual_Links():
-    __tablename__ = 'dependency_links'
-    left  : Mapped[int] = mapped_column(ForeignKey("DB_Point_Of_Interest.id"),nullable=True, primary_key=True)
-    right : Mapped[int] = mapped_column(ForeignKey("DB_Point_Of_Interest.id"),nullable=True, primary_key=True)
+    __tablename__ = 'visual_links'
+    left  : Mapped[int] = mapped_column(ForeignKey("points_of_interest.id"),nullable=True, primary_key=True)
+    right : Mapped[int] = mapped_column(ForeignKey("points_of_interest.id"),nullable=True, primary_key=True)
+
+tables = [
+    DB_Job_Info,
+    DB_Spaces,
+    DB_Memo,
+    DB_Point_Of_Interest,
+    DB_Task,
+    Dependency_Links,
+    DB_task_pickups,
+    DB_Zone,
+    Visual_Links,
+    ]
+
+def factory(tables,mixins):
+    Base = declarative_base()
+    for x in tables:
+        type(x.__name__,(Base,), dict(vars(x))|mixins)
+    return Base
+
+Base = factory(tables,{})

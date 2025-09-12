@@ -209,7 +209,7 @@ class Event_Router():
         self.event_insts[event.Event_Type.value].append(event)
         
 
-    def publish(self, key, event_container, housing_container, _first_level=False, *args, **kwargs):
+    def publish(self, key, event_container, housing_container, _first_level=False, _locals_only=False, *args, **kwargs):
         ''' 
         - walk, check local if first level publish 
         - then push event key & args, kwargs to parent which should publish to root, 
@@ -219,9 +219,13 @@ class Event_Router():
         ...
 
         self._meta_event('event_publishing_started', key, event_container,housing_container, args, kwargs)
-        if event_container.Local_Only and (event_container in self.event_insts):
-            ''' catch local-only and trigger locals '''
+        if event_container is not None:
+            if event_container.Local_Only and (event_container in self.event_insts):
+                ''' catch local-only and trigger locals '''
+                return self.event(self,key,event_container,housing_container,args,kwargs,local_only=True)
+        if event_container is None and _locals_only:
             return self.event(self,key,event_container,housing_container,args,kwargs,local_only=True)
+
         elif self._parent and _first_level:
             self.event(self,key,event_container,housing_container,args,kwargs, local_only=True)
             self._parent.publish(key,event_container,housing_container,args,kwargs)
@@ -250,7 +254,11 @@ class Event_Router():
     def schedule(self, event_container, housing_container, func,*args,**kwargs)->FunctionType:
         ''' Schedule a function using asyncio and return a callback to cancel the scheduled func. Also append locally to close. Optional on-close hook? '''
         
-        task_kwargs = event_container.Kwargs | kwargs.get('_schedule_kwargs', {})
+        if event_container is not None:
+            task_kwargs = event_container.Kwargs | kwargs.get('_schedule_kwargs', {})
+        else:
+            task_kwargs = kwargs.get('_schedule_kwargs', {})
+        
         if '_schedule_kwargs' in kwargs.keys():
             del kwargs['_schedule_kwargs']
 

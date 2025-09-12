@@ -12,7 +12,7 @@
         <div style="display: flex; padding:1em;">
             <div style="border: thin solid black; padding:1em; width: 20%;">
                 <h2> Log </h2>
-                <ul id='log'> </ul>
+                <ul id='items'> </ul>
             </div>
             <div style="border: thin solid black; padding:1em; width: 20%;">
                 <h2> Clients </h2>
@@ -34,18 +34,40 @@
 </html>
 
 <template id = "generic-lineitem-template">
-    <div class="generic-lineitem"; style="display: flex; padding: .25em">
-        <p class="label"></p>
-        <p class="status"></p>
-        <p class="lastcon"></p>
+    <div class="template"; style="display: flex; border: thin solid black;">
+        <div class="template"; style="display: flex; padding: 2px ">
+            <p class="label"></p>
+        </div>
+        <!-- <ul class ='values'></ul> -->
+        <div class="template"; style="display: flex; padding: 2px ">
+            <p class="id"></p>
+        </div>
+        <div class="template"; style="display: flex; padding: 2px ">
+            <p class="host"></p>
+        </div>
+        <div class="template"; style="display: flex; padding: 2px ">
+            <p class="port"></p>
+        </div>
+        <div class="template"; style="display: flex; padding: 2px ">
+            <p class="status"></p>
+        </div>
+        <div class="template"; style="display: flex; padding: 2px ">
+            <p class="lastcon"></p>
+        </div>
     </div>
 </template>
 
-<template id = "log-lineitem-item">
+<!-- <template id = "lineitem-column-template">
+    <div class="lineitem-column"; style="display: flex; padding: 2px ">
+        <p class = 'text'> </p>
+    </div>
+</template> -->
+
+<!-- <template id = "log-lineitem-item">
     <div class="log-lineitem"; style="display: flex; padding: .25em">
         <p class="date"></p>
         <p class="entity"></p>
         <p class="type"></p>
         <p class="message"></p>
     </div>
-</template>
+</template> -->

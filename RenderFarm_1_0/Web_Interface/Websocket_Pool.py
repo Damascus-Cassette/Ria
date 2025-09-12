@@ -100,18 +100,18 @@ class Websocket_Pool_Base():
             if x in self.data:
                 self.data.remove(x)
 
-    def slice(self, entity_type:str=None, f_entity_id:str|None=None, id:str|None=Any, uid:str|None=Any):
-        return Websocket_Pool_Slice(self, filter = partial(self._filter, entity_type=entity_type, f_entity_id=f_entity_id, id=id, uid=uid))
+    def slice(self, entity_type:str=None, foreign_entity_id:str|None=None, id:str|None=Any, uid:str|None=Any):
+        return Websocket_Pool_Slice(self, filter = partial(self._filter, entity_type=entity_type, foreign_entity_id=foreign_entity_id, id=id, uid=uid))
 
     def _filter(self, websocket : Websocket_View, entity_type:str|None=Any, foreign_entity_id:str|None=None, id:str|None=Any, uid:str|None=Any ) -> bool:
-        return all(
+        return all([
             self._atomic_filter(websocket.entity_type, entity_type)    ,
             self._atomic_filter(websocket.foreign_entity_id, foreign_entity_id),
             self._atomic_filter(websocket.id, id)    ,
-            self._atomic_filter(websocket.uid, uid)  ,)
+            self._atomic_filter(websocket.uid, uid)  ,])
         
     @staticmethod
-    def _atomic_filter(websocket,base,check_value):
+    def _atomic_filter(base,check_value):
         if check_value is Any:
             return True
         
@@ -124,7 +124,7 @@ class Websocket_Pool_Base():
         elif isclass(base):
             return base is check_value #ie if enum
         
-        elif hasattr(check_value.__iter__) and not (hasattr(base.__iter__)):
+        elif hasattr(check_value,'__iter__') and not (hasattr(base,'__iter__')):
             return base in check_value
         
         return base == check_value
@@ -161,6 +161,10 @@ class Manager_Websocket_Wrapper_Base():
     @wraps(Websocket_Manager.close)
     async def close(self):
         await self.websocket.close()
+        self.after_close()
+
+    def after_close(self):
+        ...
 
     async def run_with_handler(self,*args,**kwargs):
         try:
@@ -170,6 +174,7 @@ class Manager_Websocket_Wrapper_Base():
         finally:
             pool : Manager_Websocket_Pool = self.local_entity.manager_websocket_pool
             pool.remove(self)
+            self.after_close()
 
 
 class Manager_Websocket_Pool(Websocket_Pool_Base):

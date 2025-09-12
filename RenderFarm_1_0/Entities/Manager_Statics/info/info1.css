@@ -1,0 +1,13 @@
+table, th, td {
+    border: 1px solid;
+    padding: 10px;
+}
+
+table {
+  border-collapse: collapse;
+}
+
+.primary-tables{
+    display: flex;
+    justify-content: space-evenly;
+}
