@@ -28,7 +28,7 @@ def make_message( id:str|None, topic:str|Message_Topics, action:str|Enum, payloa
     #     callback()
     #     ...
 
-def intake_message(router_inst:Event_Router, data:list,)->list:
+def intake_message(data:list,/,router_inst:Event_Router=None,)->list:
     ''' Convert message topic, action to types & return set callbacks? (maybe better via pub sub?) '''
     id, topic, action, *payload = data
 
