@@ -60,7 +60,7 @@ function Create(tableBody, payload){
     <td class="uid">${payload.uid}</td>
     <td class="host">${payload.host}</td>
     <td class="port">${payload.port}</td>
-    <td class="connection_state">${payload.connection_state}</td>
+    <td class="connection_state">${payload.con_state}</td>
     <td class="action_state">${payload.action_state}</td>
     `
 }

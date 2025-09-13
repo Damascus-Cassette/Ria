@@ -7,7 +7,8 @@ from ..Web_Interface.API_V1_8       import (Foreign_Entity_Base, Local_Entity_Ba
 from ..Web_Interface.Websocket_Pool import Manager_Websocket_Wrapper_Simul_Default
 from .Messsages import make_message, intake_message
 import asyncio
-
+from enum import EnumType,Enum
+from inspect import isclass
 from copy import copy
 
 
@@ -59,10 +60,10 @@ class Websocket_State_Info(Manager_Websocket_Wrapper_Simul_Default):
             #bad practice, this indicates a structural issue. consider splitting Foreign to secondary file
 
         self.buffer.extend([
-            make_message(None, 'CRUD', 'BULK_CREATE', ['workers'   , self.gather_intial_send(self.local_entity.client_db_session, Worker_Foreign  , ['uid','host','port'])] ),
-            make_message(None, 'CRUD', 'BULK_CREATE', ['UNDECLARED', self.gather_intial_send(self.local_entity.client_db_session, UNDEC_Foreign   , ['uid','host','port'])] ), #|self.gather_all_clients()
-            make_message(None, 'CRUD', 'BULK_CREATE', ['managers'  , self.gather_intial_send(self.local_entity.client_db_session, Manager_Foreign , ['uid','host','port'])] ),
-            make_message(None, 'CRUD', 'BULK_CREATE', ['clients'   , self.gather_intial_send(self.local_entity.client_db_session, Client_Foreign  , ['uid','host','port'])] ), #|self.gather_all_clients()
+            make_message(None, 'CRUD', 'BULK_CREATE', ['workers'   , self.gather_intial_send(self.local_entity.client_db_session, Worker_Foreign  , ['uid','host','port','con_state','action_state'])] ),
+            make_message(None, 'CRUD', 'BULK_CREATE', ['UNDECLARED', self.gather_intial_send(self.local_entity.client_db_session, UNDEC_Foreign   , ['uid','host','port','con_state','action_state'])] ), #|self.gather_all_clients()
+            make_message(None, 'CRUD', 'BULK_CREATE', ['managers'  , self.gather_intial_send(self.local_entity.client_db_session, Manager_Foreign , ['uid','host','port','con_state','action_state'])] ),
+            make_message(None, 'CRUD', 'BULK_CREATE', ['clients'   , self.gather_intial_send(self.local_entity.client_db_session, Client_Foreign  , ['uid','host','port','con_state','action_state'])] ), #|self.gather_all_clients()
             # ('BULK_CREATE','jobs',    self.gather_all_jobs( this_e.))
         ])
 
@@ -78,20 +79,24 @@ class Websocket_State_Info(Manager_Websocket_Wrapper_Simul_Default):
     def gather_item(self,row, attrs):
         item = {}
         for attr in attrs:
-            item[attr] = getattr(row, attr, None)
+            val = getattr(row, attr, None)
+            if issubclass(val.__class__,Enum):
+                item[attr] = val.value
+            else:
+                item[attr] = val
         return item
 
     @Events.Sub('after_insert')
     def insert_client(self, event, event_key, container, mapper, connection):
-        self.buffer.append(make_message(None, 'CRUD', 'CREATE', [container.__tablename__, self.gather_item(container, ['uid','host','port'])] ),)
+        self.buffer.append(make_message(None, 'CRUD', 'CREATE', [container.__tablename__, self.gather_item(container, ['uid','host','port','con_state','action_state'])] ),)
 
     @Events.Sub('after_update')
     def update_client(self, event, event_key, container, mapper, connection):
-        self.buffer.append(make_message(None, 'CRUD', 'UPDATE', [container.__tablename__, self.gather_item(container, ['uid','host','port'])] ),)
+        self.buffer.append(make_message(None, 'CRUD', 'UPDATE', [container.__tablename__, self.gather_item(container, ['uid','host','port','con_state','action_state'])] ),)
 
     @Events.Sub('after_delete')
     def delete_client(self, event, event_key, container, mapper, connection):
-        self.buffer.append(make_message(None, 'CRUD', 'DELETE', [container.__tablename__, self.gather_item(container, ['uid','host','port'])] ),)
+        self.buffer.append(make_message(None, 'CRUD', 'DELETE', [container.__tablename__, self.gather_item(container, ['uid','host','port','con_state','action_state'])] ),)
     
 
 

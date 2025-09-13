@@ -14,7 +14,7 @@ from sqlalchemy.orm                 import (declarative_base, relationship, sess
 from .Job_Database_Model            import Base as Job_DB_Model
 from ..File_Management              import Base as File_DB_Model
 
-from .Statics                       import Entity_Types, Trust_States, Connection_States
+from .Statics                       import Entity_Types, Trust_States, Connection_States, ActionState_Message_Actions
 
 from ..Web_Interface.API_V1_8       import Foreign_Entity_Base, Local_Entity_Base
 from ..Web_Interface.Websocket_Pool import Client_Websocket_Pool,Manager_Websocket_Pool
@@ -30,7 +30,7 @@ from .Interface_Worker  import Worker_Interface
 
 from .Manager_Worker_Websockets import (
     Message_Commands_Client  , Message_Commands_Manager , Message_Commands_Worker  ,
-    Message_Interface_Client , Message_Interface_Manager , Message_Interface_Worker ,
+    message_interface_common as Message_Interface_Client , message_interface_common as Message_Interface_Manager , message_interface_common as Message_Interface_Worker ,
     )
 
 from copy import copy
@@ -326,6 +326,7 @@ class Worker_Local(Local_Common, Local_Entity_Base):
 
 
 class Foreign_Common():
+
     def __repr__(self):
         return f'< {self.Entity_Type} | {self.host}:{self.port} @ row {self.uid} > '
 
@@ -365,6 +366,7 @@ class UNDEC_Foreign(Foreign_Common,Foreign_Entity_Base, Client_DB_Model):
     uid  = Column(Integer, primary_key=True)
     host = Column(String)
     port = Column(String)
+    con_state = Connection_States.NEVER_CON
 
     def matches_request(self, request:Request, headers:Request.headers):
         return all([
@@ -391,6 +393,7 @@ class Manager_Foreign(Foreign_Common,Foreign_Entity_Base, Client_DB_Model):
     host      = Column(String)
     port      = Column(String)
     con_state = Column(Sql_Enum(Connection_States), default = Connection_States.NEVER_CON)
+    action_state = Column(Sql_Enum(ActionState_Message_Actions), default = ActionState_Message_Actions.UNKNOWN)
     _trust : Trust_States = Trust_States.TRUSTED
         #TODO: CHANGE LATER TO BE SECURE
 
@@ -404,6 +407,7 @@ class Worker_Foreign(Foreign_Common,Foreign_Entity_Base, Client_DB_Model):
     host      = Column(String)
     port      = Column(String)
     con_state = Column(Sql_Enum(Connection_States), default = Connection_States.NEVER_CON)
+    action_state = Column(Sql_Enum(ActionState_Message_Actions), default = ActionState_Message_Actions.UNKNOWN)
     _trust : Trust_States = Trust_States.TRUSTED
         #TODO: CHANGE LATER TO BE SECURE
 
@@ -418,6 +422,7 @@ class Client_Foreign(Foreign_Common,Foreign_Entity_Base, Client_DB_Model):
     host      = Column(String)
     port      = Column(String)
     con_state = Column(Sql_Enum(Connection_States), default = Connection_States.NEVER_CON)
+    action_state = Column(Sql_Enum(ActionState_Message_Actions), default = ActionState_Message_Actions.UNKNOWN)
     _trust : Trust_States = Trust_States.TRUSTED
         #TODO: CHANGE LATER TO BE SECURE
 
