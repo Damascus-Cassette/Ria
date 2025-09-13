@@ -68,20 +68,21 @@ class Message_Topics(Desc_Enum):
     MANAGER_STATE  = 'MANAGER_STATE'
     WORKER_STATE   = 'WORKER_STATE' 
         
-    # JOB            = 'JOB'        # Request, Accept, Deny, Failed, Confirm ect 
-    # JOB_STATE      = 'JOB_STATE'  # Complete, Failed, Started, ect
+    JOB            = 'JOB'        # Request, Accept, Deny, Failed, Confirm ect 
+    JOB_STATE      = 'JOB_STATE'  # Complete, Failed, Started, ect
         # topic of {ITEM}       is actionable
         # topic of {ITEM}_State is observational
         # Observational (IE, disconnect w/ timeout) MAY also be actionable
         
-    # TASK           = 'TASK'       
-    # TASK_STATE     = 'TASK_STATE' 
+    TASK           = 'TASK'       
+    TASK_STATE     = 'TASK_STATE' 
 
-    # GRAPH          = 'GRAPH'
-    # GRAPH_STATE    = 'GRAPH_STATE'
+    GRAPH          = 'GRAPH'
+    GRAPH_STATE    = 'GRAPH_STATE'
 
-    # CACHE          = 'CACHE'
-    # CACHE_STATE    = 'CACHE_STATE'
+    CACHE          = 'CACHE'
+    CACHE_STATE    = 'CACHE_STATE'
+
 
 class Admin_Message_Actions(Desc_Enum):
     ''' Worker <-> Manager Websocket Actions '''
@@ -92,38 +93,59 @@ class Misc_Message_Actions(Desc_Enum):
     ECHO = 'ECHO'
     PING = 'PING'
 
-class State_Message_Actions(Desc_Enum):
+class VALUE_Message_Actions(Desc_Enum):
     ''' Worker <-> Manager Websocket Actions '''
     RESET = 'RESET'
     SET   = 'SET'
 
-class Task_Message_Actions(Desc_Enum):
+class CRUD_Message_Actions(Desc_Enum):
+    ''' CUD & REQUEST -> Worker; CONFIRM_HASH_RESULT -> Manager '''
+
+    CREATE      = 'CREATE'
+    BULK_CREATE = 'BULK_CREATE'
+
+    UPDATE      = 'UPDATE'
+    BULK_UPDATE = 'BULK_UPDATE'
+
+    DELETE      = 'DELETE'
+    BULK_DELETE = 'BULK_DELETE'
+
+    CONFIRM_ITEN_REQUEST  = ('CONFIRM_ITEN_REQUEST',  'Request Itenerary of items')
+    CONFIRM_ITEN_RESPONCE = ('CONFIRM_ITEN_RESPONCE', 'Return  Itenerary of items')
+
+    CONFIRM_HASH_REQUEST  = ('CONFIRM_HASH_REQUEST',  'Request uuid-hash of data-set with shared method')
+    CONFIRM_HASH_RESPONCE = ('CONFIRM_HASH_RESPONCE', 'Return  uuid-hash of data-set with shared method')
+
+class Action_Message_Actions(Desc_Enum):
     ''' Worker <-> Manager Websocket Actions that result in change '''
-    REQUEST             = ('REQUEST'          , "" )
-    ACCEPT              = ('ACCEPT'           , "" )
-    DENY                = ('DENY'             , "" )
-    FAILED              = ('FAILED'           , "" )
-    FAILED_REQ_RETRY    = ('FAILED_REQ_RETRY' , "" )
+    REQUEST             = ('REQUEST'          , "Request for Action" )
 
-    CONFIRMATION        = ('CONFIRMATION'     , "" )
+    ACCEPT              = ('ACCEPT'           , "Confirming action to start" )
+    DENY                = ('DENY'             , "Denying action" )
 
-class TaskState_Message_Actions(Desc_Enum):
-    ''' Worker <-> Manager Websocket Actions that Do NOT result in change '''
-    STARTED             = ('STARTED'          , "" )
-    PROCESSING          = ('PROCESSING'       , "" )
-    FINISHING           = ('FINISHING'        , "" )
-    SUBMITTING          = ('SUBMITTING'       , "" )
-    COMPLETED           = ('COMPLETED'        , "" )
+    COMPLETED           = ('COMPLETED'        , "Finished requested action, Note: Not the same as a tasks completion, as a task can discover dependent tasks and return early " )
 
-    FAILED_RETRY        = ('FAILED_RETRY'     , "" )
-    FAILED              = ('FAILED'           , "" )
+    FAILED              = ('FAILED'           , "Responce from a fully failed Task" )
+    FAILED_REQ_RETRY    = ('FAILED_REQ_RETRY' , "Responce from a partially failed Task")    
 
+class ActionState_Message_Actions(Desc_Enum):
+    ''' Worker <-> Manager Websocket Actions that DO-NOT result in action '''
+
+    UNKNOWN             = 'UNKNOWN'
+    STARTED             = ('STARTED'          , "Begining a job, such as setting up env" )
+    PROCESSING          = ('PROCESSING'       , "Processing a job" )
+    FINISHING           = ('FINISHING'        , "Completing a job, dumping to disc and evaluating hashes pre-upload as required" )
+    SUBMITTING          = ('SUBMITTING'       , "Submiting a job's files to the manager" )
+    COMPLETED           = ('COMPLETED'        , "Completion of a job and all submission to the manager" )
+
+    FAILED_RETRY        = ('FAILED_RETRY'     , "Failed a task will retry" )
+    FAILED              = ('FAILED'           , "Failed a task full stop" )
+
+    
 
 TOPIC_ACTION_MAP = {
     Message_Topics.ADMIN         : Admin_Message_Actions ,
     Message_Topics.MISC          : Misc_Message_Actions  ,
-    Message_Topics.MANAGER_STATE : State_Message_Actions ,
-    Message_Topics.WORKER_STATE  : State_Message_Actions ,
     # Message_Topics.JOB           : ,
     # Message_Topics.TASK          : ,
     # Message_Topics.GRAPH         : ,
