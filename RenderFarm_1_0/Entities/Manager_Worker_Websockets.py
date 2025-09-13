@@ -52,6 +52,7 @@ class message_websocket_common():
             case Message_Topics.TASK          : self.local_entity.bidi_commands.REACT_Action_Message(self, self.foreign_entity, topic, action, payload)
             case Message_Topics.GRAPH         : self.local_entity.bidi_commands.REACT_Action_Message(self, self.foreign_entity, topic, action, payload)
             case Message_Topics.CACHE         : self.local_entity.bidi_commands.REACT_Action_Message(self, self.foreign_entity, topic, action, payload)
+            case Message_Topics.FILE_DB       : self.local_entity.bidi_commands.REACT_Action_Message(self, self.foreign_entity, topic, action, payload)
 
             case Message_Topics.MANAGER_STATE : self.local_entity.bidi_commands.OBSERVE_Entity_State(self, self.foreign_entity, topic, action, payload)
             case Message_Topics.WORKER_STATE  : self.local_entity.bidi_commands.OBSERVE_Entity_State(self, self.foreign_entity, topic, action, payload)
@@ -64,11 +65,12 @@ class message_websocket_common():
             
             case _: raise Exception('') 
 
-    def closed(self, connection, reason):
+    async def closed(self, connection, reason):
         if str(reason).startswith('4'):
             self.local_entity.bidi_commands.OBSERVE_Entity_Con_State(self.foreign_entity,Connection_States.ERROR)
         else:
             self.local_entity.bidi_commands.OBSERVE_Entity_Con_State(self.foreign_entity,Connection_States.CLOSED)
+        self.local_entity.client_db_session.commit()
 
     def attach_message(self,*args,**kwargs):
         self.buffer.attach(make_message(*args,**kwargs))
@@ -80,12 +82,7 @@ class message_websocket_client(message_websocket_common  , Client_Websocket_Wrap
     #this looks strange as ws4py uses an inherited class with inbuilt hooks to do things, thus our intake needs to be a little bit different.
     def received_message(self, msg):
         topic, action, payload = intake_message(msg)
-        self.enact_message(topic,action,payload)
-
-
-    
-
-
+        self.enact_message(topic,action,payload)    
 
 
 class message_commands_common():

@@ -103,6 +103,59 @@ class CRUD_Message_Actions(Desc_Enum):
     CONFIRM_HASH_REQUEST  = ('CONFIRM_HASH_REQUEST',  'Request uuid-hash of data-set with shared method')
     CONFIRM_HASH_RESPONCE = ('CONFIRM_HASH_RESPONCE', 'Return  uuid-hash of data-set with shared method')
 
+
+class FILEDB_Message_Tables(Desc_Enum):
+    USER        = 'USER'
+    SESSION     = 'SESSION'
+
+    IMPORT      = 'IMPORT'
+    EXPORT      = 'EXPORT'
+    VIEW        = 'VIEW'
+
+    SPACE       = 'SPACE'
+    NAMED_SPACE = 'NAMED_SPACE'
+
+    FILE        = 'FILE'
+    NAMED_FILE  = 'NAMED_FILE'
+
+
+class FILEDB_Message_Actions(Desc_Enum):
+    ''' CUD & REQUEST -> Worker; CONFIRM_HASH_RESULT -> Manager '''
+
+    CREATE           = ('CREATE'            , 'Create DB Entry, must include info to populate' )
+    BULK_CREATE      = ('BULK_CREATE'       , '' )
+
+    UPDATE           = ('UPDATE'            , 'When applied to spaces/files, returns diffed structure.' )
+    BULK_UPDATE      = ('BULK_UPDATE'       , '' )
+
+    DELETE           = ('DELETE'            , 'N/A for files/spaces ' )
+    BULK_DELETE      = ('BULK_DELETE'       , '' )
+
+    OPEN             = ('OPEN'              , 'Only available for SESSION & VIEW') #When file/space, create withheld asc ID. When view, create and return view 
+    BULK_OPEN        = ('BULK_OPEN'         , '' )
+
+    CLOSE            = ('CLOSE'             , 'Only available for SESSION & VIEW' )
+    BULK_CLOSE       = ('BULK_CLOSE'        , '' )
+
+    CLEANUP          = ('CLEANUP'           , 'Forces an immediate cleanup operation on target objects children')
+    CLEANUP_BULK     = ('CLEANUP_BULK'      , '')
+
+    DIFF             = ('DIFF'              , 'Find if the manager contains the submitted hash in the target table' )
+    DIFF_BULK        = ('DIFF_BULK'         , 'same as DIFF, in tuples of `[hash,table]` ' )
+    
+    DIFF_STRUCT      = ('DIFF_STRUCT'       , 'Diff a space via analgous dict structure, Return filelist that must be uploaded' )
+    DIFF_STRUCT_BULK = ('DIFF_STRUCT_BULK'  , '' )
+    
+    QUERY            = ('QUERY'             , 'Find item id by asc information' )
+
+    EXPOSE           = ('EXPOSE'            , 'Expose/Create folder struct of space/file specified. Returns value')
+    UPLOAD           = ('UPLOAD'            , 'Upload a file, hash must be attached. ' )
+    BULK_UPLOAD      = ('BULK_UPLOAD'       , 'Upload files/spaces, hash must be mapped to data' )
+
+    DOWNLOAD         = ('DOWNLOAD'          , 'Download file/space ' )
+    BULK_DOWNLOAD    = ('BULK_DOWNLOAD'     , 'Download bulk files/spaces' )
+    
+
 class Action_Message_Actions(Desc_Enum):
     ''' Worker <-> Manager Websocket Actions that result in change '''
     REQUEST             = ('REQUEST'          , "Request for Action" )
@@ -136,6 +189,8 @@ class Message_Topics(Desc_Enum):
 
     DATA           = ('DATA'         ,'', VALUE_Message_Actions      ,True)
     CRUD           = ('CRUD'         ,'', CRUD_Message_Actions       ,True)
+
+    FILE_DB        = ('FILE_DB'      ,'', FILEDB_Message_Actions     ,True)
 
     MANAGER_STATE  = ('MANAGER_STATE','', STATE_Message_Actions )
     WORKER_STATE   = ('WORKER_STATE' ,'', STATE_Message_Actions ) 
