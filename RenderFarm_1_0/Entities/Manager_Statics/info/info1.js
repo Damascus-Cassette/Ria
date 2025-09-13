@@ -3,11 +3,15 @@ ws.onmessage = function(event) {
 
     var message = JSON.parse(event.data)
 
-    const command  = message[0]
-    const catagory = message[1]
-    const payload  = message[2]
+    const message_id = message[0]
+    const topic      = message[1]
+    const command    = message[2]
+    // const yet       = message[3]
 
-        console.warn(`Getting command: ${command} ${catagory} \n ... id: ${payload.id} \n ... label: ${payload.label}`)
+    const catagory   = message[3][0]
+    const payload    = message[3][1]
+
+    console.warn(`Getting command: ${JSON.stringify(message)}`)
     
     var tableBody = document.getElementById(`${catagory}-table`)
     if (!tableBody){
@@ -44,29 +48,32 @@ ws.onmessage = function(event) {
 };
 
 
-function Find(tableBody, id){
-    return tableBody.querySelector(`tr[data-id="${id}"]`)
+function Find(tableBody, uid){
+    return tableBody.querySelector(`tr[data-id="${uid}"]`)
 }
 
 
 function Create(tableBody, payload){
     const row = tableBody.insertRow()
-    row.dataset.id = payload.id
+    row.dataset.id = payload.uid
     row.innerHTML = `
-    <td class="id">${payload.id}</td>
-    <td class="label">${payload.label}</td>
+    <td class="uid">${payload.uid}</td>
+    <td class="host">${payload.host}</td>
+    <td class="port">${payload.port}</td>
+    <td class="connection_state">${payload.connection_state}</td>
+    <td class="action_state">${payload.action_state}</td>
     `
 }
 
 function Delete(tableBody,payload){
-    const item = Find(tableBody,payload.id)
+    const item = Find(tableBody,payload.uid)
     if ( item ){ item.remove() }
 }
 
 function Update(tableBody,payload){
-    const item = Find(tableBody,payload.id)
+    const item = Find(tableBody,payload.uid)
     if (! item){
-        console.warn(`Failure to find item to update: ... ${tableBody} \n ... ${payload.id}`)
+        console.warn(`Failure to find item to update: ... ${tableBody} \n ... ${payload.uid}`)
     }else{
         Object.entries(payload).forEach(([key,value]) => {
         if ( item ){

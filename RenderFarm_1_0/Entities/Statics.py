@@ -2,13 +2,12 @@ from enum import Enum
 from typing import Self, Annotated
 
 class Desc_Enum(Enum):
-    def __new__(cls, value, desc=None, user_desc=None)->Self:
+    def __new__(cls, value, desc=None, bound_follow:Enum=None)->Self:
         new = object.__new__(cls)
         new._value_     = value
 
-        new.desc      = desc
-        if user_desc: new.user_desc = user_desc
-        else:         new.user_desc = desc
+        new.desc         = desc
+        new.bound_follow = bound_follow
 
         return new
 
@@ -38,7 +37,6 @@ class Connection_States(Desc_Enum):
     CLOSED     = 'CLOSED'
     ERROR      = 'ERROR'
 
-
 class Worker_PrimaryShared_States(Desc_Enum):
     ''' Worker -> Manager Declared States '''
     UNKNOWN     = 'UNKNOWN'
@@ -57,31 +55,15 @@ class Manager_PrimaryShared_States(Desc_Enum):
     AVAILABLE   = 'AVAILABLE'
     UNAVAILABLE = 'UNAVAILABLE'
 
+class Client_PrimaryShared_States(Desc_Enum):
+    ''' Worker -> Manager Declared States '''
+    UNKNOWN     = 'UNKNOWN'
+    OTHER       = 'OTHER'
+    SUBMITTING  = 'SUBMITTING'
+    DOWNLOADING = 'DOWNLOADING'
 
 ######## MESSAGE DEFINITION ########
 
-class Message_Topics(Desc_Enum):
-    ''' Worker <-> Manager Websocket Topics '''
-    ADMIN          = 'ADMIN'
-    MISC           = 'MISC'
-
-    MANAGER_STATE  = 'MANAGER_STATE'
-    WORKER_STATE   = 'WORKER_STATE' 
-        
-    JOB            = 'JOB'        # Request, Accept, Deny, Failed, Confirm ect 
-    JOB_STATE      = 'JOB_STATE'  # Complete, Failed, Started, ect
-        # topic of {ITEM}       is actionable
-        # topic of {ITEM}_State is observational
-        # Observational (IE, disconnect w/ timeout) MAY also be actionable
-        
-    TASK           = 'TASK'       
-    TASK_STATE     = 'TASK_STATE' 
-
-    GRAPH          = 'GRAPH'
-    GRAPH_STATE    = 'GRAPH_STATE'
-
-    CACHE          = 'CACHE'
-    CACHE_STATE    = 'CACHE_STATE'
 
 
 class Admin_Message_Actions(Desc_Enum):
@@ -95,8 +77,9 @@ class Misc_Message_Actions(Desc_Enum):
 
 class VALUE_Message_Actions(Desc_Enum):
     ''' Worker <-> Manager Websocket Actions '''
-    RESET = 'RESET'
+    RET   = 'RET'
     SET   = 'SET'
+    RESET = 'RESET'
 
 class CRUD_Message_Actions(Desc_Enum):
     ''' CUD & REQUEST -> Worker; CONFIRM_HASH_RESULT -> Manager '''
@@ -141,7 +124,36 @@ class ActionState_Message_Actions(Desc_Enum):
     FAILED_RETRY        = ('FAILED_RETRY'     , "Failed a task will retry" )
     FAILED              = ('FAILED'           , "Failed a task full stop" )
 
-    
+class Message_Topics(Desc_Enum):
+    ''' Worker <-> Manager Websocket Topics. Third value is bound responce types '''
+
+    ADMIN          = ('ADMIN'        ,'', Admin_Message_Actions      )
+    MISC           = ('MISC'         ,'', Misc_Message_Actions       )
+
+    DATA           = ('DATA'         ,'', VALUE_Message_Actions      )
+    CRUD           = ('CRUD'         ,'', CRUD_Message_Actions       )
+
+    MANAGER_STATE  = ('MANAGER_STATE','',Manager_PrimaryShared_States)
+    WORKER_STATE   = ('WORKER_STATE' ,'',Worker_PrimaryShared_States ) 
+    CLIENT_STATE   = ('CLIENT_STATE' ,'',Client_PrimaryShared_States ) 
+        
+    JOB            = ('JOB'         ,'', Action_Message_Actions      ) # Request, Accept, Deny, Failed, Confirm ect 
+    JOB_STATE      = ('JOB_STATE'   ,'', ActionState_Message_Actions ) # Complete, Failed, Started, ect
+        
+    TASK           = ('TASK'        ,'', Action_Message_Actions      )
+    TASK_STATE     = ('TASK_STATE'  ,'', ActionState_Message_Actions )
+
+    GRAPH          = ('GRAPH'       ,'', Action_Message_Actions      )
+    GRAPH_STATE    = ('GRAPH_STATE' ,'', ActionState_Message_Actions )
+
+    CACHE          = ('CACHE'       ,'', Action_Message_Actions      )
+    CACHE_STATE    = ('CACHE_STATE' ,'', ActionState_Message_Actions )
+
+    # topic of {ITEM}       is actionable
+    # topic of {ITEM}_State is observational
+    # Observational (IE, disconnect w/ timeout) MAY also be actionable
+
+
 
 TOPIC_ACTION_MAP = {
     Message_Topics.ADMIN         : Admin_Message_Actions ,
