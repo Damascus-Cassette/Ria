@@ -207,7 +207,8 @@ class IO():
         assert issubclass(this_entity.__class__ ,Foreign_Entity_Base)
         assert issubclass(local_entity.__class__,Local_Entity_Base)
 
-        raw_path = container.get_path() + self.fapi_router.prefix + self.path
+        # raw_path = container.get_path() + self.fapi_router.prefix + self.path
+        raw_path = container.get_path() + self.path
         return self._send(container,this_entity,local_entity,raw_path,*args,**kwargs)
 
     @property

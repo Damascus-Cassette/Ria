@@ -2,12 +2,13 @@ from enum import Enum
 from typing import Self, Annotated
 
 class Desc_Enum(Enum):
-    def __new__(cls, value, desc=None, bound_follow:Enum=None)->Self:
+    def __new__(cls, value, desc=None, bound_follow:Enum=None, actionative = False)->Self:
         new = object.__new__(cls)
         new._value_     = value
 
         new.desc         = desc
         new.bound_follow = bound_follow
+        new.actionative  = actionative
 
         return new
 
@@ -64,8 +65,6 @@ class Client_PrimaryShared_States(Desc_Enum):
 
 ######## MESSAGE DEFINITION ########
 
-
-
 class Admin_Message_Actions(Desc_Enum):
     ''' Worker <-> Manager Websocket Actions '''
     VERIFY   = 'VERIFY'
@@ -80,6 +79,11 @@ class VALUE_Message_Actions(Desc_Enum):
     RET   = 'RET'
     SET   = 'SET'
     RESET = 'RESET'
+
+class STATE_Message_Actions(Desc_Enum):
+    ''' Worker <-> Manager Websocket State Declarations '''
+    DECLARE = 'DECLARE'
+
 
 class CRUD_Message_Actions(Desc_Enum):
     ''' CUD & REQUEST -> Worker; CONFIRM_HASH_RESULT -> Manager '''
@@ -127,27 +131,27 @@ class ActionState_Message_Actions(Desc_Enum):
 class Message_Topics(Desc_Enum):
     ''' Worker <-> Manager Websocket Topics. Third value is bound responce types '''
 
-    ADMIN          = ('ADMIN'        ,'', Admin_Message_Actions      )
-    MISC           = ('MISC'         ,'', Misc_Message_Actions       )
+    ADMIN          = ('ADMIN'        ,'', Admin_Message_Actions      ,True)
+    MISC           = ('MISC'         ,'', Misc_Message_Actions       ,True)
 
-    DATA           = ('DATA'         ,'', VALUE_Message_Actions      )
-    CRUD           = ('CRUD'         ,'', CRUD_Message_Actions       )
+    DATA           = ('DATA'         ,'', VALUE_Message_Actions      ,True)
+    CRUD           = ('CRUD'         ,'', CRUD_Message_Actions       ,True)
 
-    MANAGER_STATE  = ('MANAGER_STATE','',Manager_PrimaryShared_States)
-    WORKER_STATE   = ('WORKER_STATE' ,'',Worker_PrimaryShared_States ) 
-    CLIENT_STATE   = ('CLIENT_STATE' ,'',Client_PrimaryShared_States ) 
+    MANAGER_STATE  = ('MANAGER_STATE','', STATE_Message_Actions )
+    WORKER_STATE   = ('WORKER_STATE' ,'', STATE_Message_Actions ) 
+    CLIENT_STATE   = ('CLIENT_STATE' ,'', STATE_Message_Actions ) 
         
-    JOB            = ('JOB'         ,'', Action_Message_Actions      ) # Request, Accept, Deny, Failed, Confirm ect 
-    JOB_STATE      = ('JOB_STATE'   ,'', ActionState_Message_Actions ) # Complete, Failed, Started, ect
+    JOB            = ('JOB'          ,'', Action_Message_Actions      ,True) # Request, Accept, Deny, Failed, Confirm ect 
+    JOB_STATE      = ('JOB_STATE'    ,'', ActionState_Message_Actions ) # Complete, Failed, Started, ect
         
-    TASK           = ('TASK'        ,'', Action_Message_Actions      )
-    TASK_STATE     = ('TASK_STATE'  ,'', ActionState_Message_Actions )
+    TASK           = ('TASK'         ,'', Action_Message_Actions      ,True)
+    TASK_STATE     = ('TASK_STATE'   ,'', ActionState_Message_Actions )
 
-    GRAPH          = ('GRAPH'       ,'', Action_Message_Actions      )
-    GRAPH_STATE    = ('GRAPH_STATE' ,'', ActionState_Message_Actions )
+    GRAPH          = ('GRAPH'        ,'', Action_Message_Actions      ,True)
+    GRAPH_STATE    = ('GRAPH_STATE'  ,'', ActionState_Message_Actions )
 
-    CACHE          = ('CACHE'       ,'', Action_Message_Actions      )
-    CACHE_STATE    = ('CACHE_STATE' ,'', ActionState_Message_Actions )
+    CACHE          = ('CACHE'        ,'', Action_Message_Actions      ,True)
+    CACHE_STATE    = ('CACHE_STATE'  ,'', ActionState_Message_Actions )
 
     # topic of {ITEM}       is actionable
     # topic of {ITEM}_State is observational

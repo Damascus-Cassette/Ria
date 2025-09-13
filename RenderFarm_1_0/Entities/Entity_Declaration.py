@@ -28,6 +28,11 @@ from .EventSystem.Pub_Sub_Sql_Events_Factory   import set_listeners_on_tables
 from .Interface_Manager import Manager_Interface_Info, Manager_Worker_Interface
 from .Interface_Worker  import Worker_Interface
 
+from .Manager_Worker_Websockets import (
+    Message_Commands_Client  , Message_Commands_Manager , Message_Commands_Worker  ,
+    Message_Interface_Client , Message_Interface_Manager , Message_Interface_Worker ,
+    )
+
 from copy import copy
 
 from typing import Any
@@ -121,24 +126,28 @@ class Local_Common():
     #     ...
 
 class Manager_Local(Local_Common,Local_Entity_Base):
-    Entity_Type         = Entity_Types.MANAGER
-    SettingsType        = Manager_Settings
-    InterfaceType       = Manager_Interface_Info
-    WorkerInterfaceType = Manager_Worker_Interface
-    _Fapi_Dep_Path = '/Manager_Statics'
+    Entity_Type     = Entity_Types.MANAGER
+    Events          = Event_Router.New(readout=True)
+    _Fapi_Dep_Path  = '/Manager_Statics'
 
 
-    Events             = Event_Router.New(readout=True)
-
+    InterfaceType          = Manager_Interface_Info
     interface              : Manager_Interface_Info
+
+    WorkerInterfaceType    = Manager_Worker_Interface
     worker_interface       : Manager_Worker_Interface
 
+    BidiInterfaceType      = Message_Interface_Manager
+    bidi_interface         : Message_Interface_Manager
+
+    BidiCommandsType       = Message_Commands_Manager
+    bidi_commands          : Message_Commands_Manager
+
+    SettingsType           = Manager_Settings
     settings               : Manager_Settings
+
     manager_websocket_pool : Manager_Websocket_Pool
     client_websocket_pool  : Client_Websocket_Pool
-         
-    # services_pool : ServicesPoolType
-    # event_handler : EventHandlerType
 
     File_DB_Engine    : EngineType
     File_DB_Session   : SessionType
@@ -154,11 +163,14 @@ class Manager_Local(Local_Common,Local_Entity_Base):
     
 
     def __init__(self, settings_loc:str='./manger_settings.yaml'):
+        self.events = self.Events(self)
         self.interface              = self.InterfaceType(self)
         self.worker_interface       = self.WorkerInterfaceType(self)
+        self.bidi_interface         = self.BidiInterfaceType(self)
+        self.bidi_commands          = self.BidiCommandsType(self)
+
         self.manager_websocket_pool = Manager_Websocket_Pool()
         self.client_websocket_pool  = Client_Websocket_Pool()
-        self.events = self.Events(self)
         
         self.load_settings(settings_loc)
         #self.services_pool = ServicesPoolType(self)
@@ -219,27 +231,39 @@ class Manager_Local(Local_Common,Local_Entity_Base):
         set_listeners_on_tables(list(Job_DB_Model.__subclasses__()), self.events)
         Job_DB_Model.metadata.create_all(self.Job_DB_Engine)
 
-    # @Events.Sub('after_insert')
-    # @Events.Sub('after_update')
-    # @Events.Sub('after_delete')
-    # def test_update_client(self,event, event_key, container, *args,**kwargs):
-    #     for websocket in self.manager_websocket_pool.slice(id='state_info'):
-    #         websocket : Manager_Websocket_Wrapper_Base
-    #         asyncio.run(websocket.close())
+from fastapi import FastAPI
 
 class Worker_Local(Local_Common, Local_Entity_Base):
-    _Fapi_Dep_Path = '/Worker_Statics'
+    Entity_Type            = Entity_Types.WORKER
     Events = Event_Router.New()
-    Entity_Type   = Entity_Types.WORKER
-    SettingsType  = Worker_Settings
-    InterfaceType = Worker_Interface
-    settings      : Worker_Settings
+    _Fapi_Dep_Path = '/Worker_Statics'
+    
+
+    SettingsType           = Worker_Settings
+    settings               : Worker_Settings
+    
+
+    InterfaceType          = Worker_Interface
+    interface              : Worker_Interface
+
+    BidiInterfaceType      = Message_Interface_Worker
+    bidi_interface         : Message_Interface_Worker
+
+    BidiCommandsType       = Message_Commands_Worker
+    bidi_commands          : Message_Commands_Worker
+    
+    manager_websocket_pool : Manager_Websocket_Pool
+    client_websocket_pool  : Client_Websocket_Pool
     
     def __init__(self, settings_loc:str='./worker_settings.yaml'):
         self.events = self.Events(self)
         self.interface              = self.InterfaceType(self)
+        self.bidi_interface         = self.BidiInterfaceType(self)
+        self.bidi_commands          = self.BidiCommandsType(self)
+        
         self.manager_websocket_pool = Manager_Websocket_Pool()
         self.client_websocket_pool  = Client_Websocket_Pool()
+
         self.load_settings(settings_loc)
         # self.load_context_settings()
             #TODO: Context settings, ie machine ID
@@ -288,8 +312,7 @@ class Worker_Local(Local_Common, Local_Entity_Base):
                     print('MAX ATTEMPTS EXCEEDED')
                     break
                 with manager.Active(), self.Active():
-                    # sucess = manager.worker_interface.test()
-                    sucess = await manager.worker_interface.worker_websocket()
+                    sucess = await manager.bidi_interface.connection()
                     if sucess is not None: 
                         print('FOUND!')
                         break 
@@ -326,7 +349,7 @@ class Foreign_Common():
         return tuple()
     
     @classmethod
-    def New_From_Request(cls, local_entity, request, Foreign_Common):
+    def New_From_Request(cls, local_entity, request):
         return cls(request.headers.get('UID'), request.client.host, request.client.port)
     
 class UNDEC_Foreign(Foreign_Common,Foreign_Entity_Base, Client_DB_Model):
@@ -361,6 +384,8 @@ class Manager_Foreign(Foreign_Common,Foreign_Entity_Base, Client_DB_Model):
     __tablename__    = Entity_Types.MANAGER.value
     interface        = Manager_Interface_Info()
     worker_interface = Manager_Worker_Interface()
+    bidi_interface   = Message_Interface_Manager()
+
     
     uid       = Column(String, primary_key=True)
     host      = Column(String)
@@ -372,6 +397,8 @@ class Manager_Foreign(Foreign_Common,Foreign_Entity_Base, Client_DB_Model):
 class Worker_Foreign(Foreign_Common,Foreign_Entity_Base, Client_DB_Model):
     __tablename__ = Entity_Types.WORKER.value
     Entity_Type   = Entity_Types.WORKER
+    bidi_interface   = Message_Interface_Worker()
+
     
     uid       = Column(String, primary_key=True)
     host      = Column(String)
@@ -384,6 +411,8 @@ class Client_Foreign(Foreign_Common,Foreign_Entity_Base, Client_DB_Model):
     Entity_Type   = Entity_Types.CLIENT
     __tablename__ = Entity_Types.CLIENT.value
     interface     = Manager_Interface_Info()
+    bidi_interface   = Message_Interface_Client()
+
 
     uid       = Column(String, primary_key=True)
     host      = Column(String)

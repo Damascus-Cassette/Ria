@@ -10,6 +10,10 @@ import asyncio
 
 from copy import copy
 
+
+
+
+
 class Websocket_State_Info(Manager_Websocket_Wrapper_Simul_Default):
     Events = Event_Router.New()
     events = None
@@ -75,7 +79,7 @@ class Websocket_State_Info(Manager_Websocket_Wrapper_Simul_Default):
         item = {}
         for attr in attrs:
             item[attr] = getattr(row, attr, None)
-        return item        
+        return item
 
     @Events.Sub('after_insert')
     def insert_client(self, event, event_key, container, mapper, connection):
@@ -106,6 +110,7 @@ class Manager_Interface_Info(Interface_Base):
 
     @IO.Websocket(router,'/state-info')
     async def state_info(self, this_e, other_e, websocket:WebSocketManager):
+                
         ws = Websocket_State_Info(this_e, other_e, websocket, 'state_info')
         await ws.accept()
         try:
