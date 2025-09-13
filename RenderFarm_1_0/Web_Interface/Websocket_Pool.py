@@ -142,18 +142,23 @@ class Manager_Websocket_Wrapper_Base():
         self.uid = uid
 
     async def accept(self):
+        await self.pre_accept()
         await self.websocket.accept()
+        await self.post_accept()
         pool = self.local_entity.manager_websocket_pool
         pool : Manager_Websocket_Pool
         self.close_callback = pool.attach(self.local_entity, self.foreign_entity, self,  self.id, self.uid)
+
         
     async def run_handler(self,*args,**kwargs):
         task = asyncio.create_task(self.run_wrapper(*args,**kwargs))
         self.current_task = task
+        
         return await task
     
     async def run_wrapper(self,*args,**kwargs):
         self.continue_execution = True
+        await self.pre_run()
         gen = self.run(*args, **kwargs)
         async for x in gen:
             if self.websocket.client_state.name != 'CONNECTED': await gen.aclose(); break
@@ -166,38 +171,47 @@ class Manager_Websocket_Wrapper_Base():
             except WebSocketDisconnect: ...
         if self.close_callback:
             self.close_callback()
-        # await self.current_task
+        await self.closed(None,None)
+
+    async def pre_accept(self,*args,**kwargs):
+        ...
+
+    async def post_accept(self,*args,**kwargs):
+        ...
+        
+    async def pre_run(self,*args,**kwargs):
+        ...
+
+    async def closed(self,connection, reason):
+        ...
 
     async def run(self):
         raise Exception('DEFINE ON CHILD CLASS')
 
+
 class Manager_Websocket_Wrapper_Simul_Default(Manager_Websocket_Wrapper_Base):
     # Tick_Rate = 1
     
-    async def recieve_json(self):
+    async def received_message(self):
         res = await self.websocket.recieve_json()
         print(res)
 
     def make_simul_tasks(self):
         return [
-            asyncio.create_task(self.recieve_json())
+            asyncio.create_task(self.received_message())
             # asyncio.create_task(self.websocket.recieve_json())
                 #At least one send or recieve is required for disconnect to be raised!!
                 #Can attach callbacks here as well
         ]
     
-    def after(self):
+    async def post_discon(self):
         ...
-    def on_discon(self):
-        ...
-    def on_stopasync(self):
+    async def on_stopasync(self):
         ...
 
     async def run(self,*args,**kwargs):
-        self.pre_run(*args,**kwargs)
         try:
             while True:
-                # wait = asyncio.create_task(asyncio.sleep(self.Tick_Rate))
                 complete, pending = await asyncio.wait(self.make_simul_tasks(), return_when=asyncio.FIRST_COMPLETED) 
                 for x in pending:
                     x.cancel()
@@ -206,19 +220,52 @@ class Manager_Websocket_Wrapper_Simul_Default(Manager_Websocket_Wrapper_Base):
                         raise e
                 yield   
         except WebSocketDisconnect:
-            # print('HIT WebSocketDisconnect')
-            self.on_discon()
-            self.after()
+            await self.post_discon()
             raise
         except StopAsyncIteration:
-            self.on_stopasync()
-            self.after()
-        finally:
-            ...
-            #Actionitive code here
+            await self.on_stopasync()
+            try    : await self.close()
+            except : ...
     
+
+class Client_Websocket_Wrapper_Base(Websocket_Client):
+    ''' Provide an analgous IO interface to the websocket's process to add to the env'''
+
+
+    def __init__(self, local_entity, foreign_entity, id, uid, *args, **kwargs):
+        self.local_entity = local_entity
+        self.foreign_entity = foreign_entity
+        self.id  = id
+        self.uid = uid
+        super().__init__(*args,**kwargs)
+
+    async def connect(self):
+        await self.pre_accept()
+        super().connect()
+        await self.post_accept()
+        pool = self.local_entity.client_websocket_pool
+        pool : Manager_Websocket_Pool
+        self.close_callback = pool.attach(self.local_entity, self.foreign_entity, self,  self.id, self.uid)
+
+        
+    async def run_handler(self,*args,**kwargs):
+        await self.pre_run()
+        self.run_forever()
+        return self
+        
+    async def pre_accept(self,*args,**kwargs):
+        ...
+
+    async def post_accept(self,*args,**kwargs):
+        ...
+        
     async def pre_run(self,*args,**kwargs):
         ...
+
+    async def closed(self):
+        ...
+
+
 
 class Manager_Websocket_Pool(Websocket_Pool_Base):
     Base_Type = Manager_Websocket_Wrapper_Base

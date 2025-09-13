@@ -22,7 +22,7 @@ class Websocket_State_Info(Manager_Websocket_Wrapper_Simul_Default):
     local_entity   : 'Manager_Local'
     foreign_entity : 'UNDEC_Foreign'
 
-    def pre_run(self, buffer_tick_rate = 2):
+    async def pre_run(self, buffer_tick_rate = 2):
         self.buffer = []
         self.buffer_tick_rate = buffer_tick_rate
         self.start_populate_buffer()
