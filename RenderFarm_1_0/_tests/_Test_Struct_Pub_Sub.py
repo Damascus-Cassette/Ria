@@ -1,4 +1,4 @@
-from ..Struct_Pub_Sub_v1_1 import Event_Router
+from .EventSystem.Struct_Pub_Sub_v1_1 import Event_Router
 
 from contextvars import ContextVar
 

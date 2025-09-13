@@ -1,0 +1,157 @@
+from fastapi                        import (Request, Response, APIRouter, WebSocket as WebSocketManager)
+from starlette.websockets           import WebSocketDisconnect as WebSocketDisconnect_M 
+from ws4py.client.threadedclient    import WebSocketClient 
+
+from .EventSystem.Struct_Pub_Sub_v1_2          import Event_Router
+from ..Web_Interface.API_V1_8       import (Foreign_Entity_Base, Local_Entity_Base, Interface_Base, IO)
+from ..Web_Interface.Websocket_Pool import Manager_Websocket_Wrapper_Simul_Default
+
+import asyncio
+
+
+class Websocket_State_Info(Manager_Websocket_Wrapper_Simul_Default):
+    Events = Event_Router.New()
+    events = None
+
+    local_entity   : 'Manager_Local'
+    foreign_entity : 'UNDEC_Foreign'
+
+    def pre_run(self, buffer_tick_rate = 2):
+        self.buffer = []
+        self.buffer_tick_rate = buffer_tick_rate
+        self.start_populate_buffer()
+        if not self.events:
+            self.events = self.Events(self)
+        self.events_callback = self.local_entity.events.temp_attach_router_inst(self.events)
+
+    def after(self,):
+        self.events_callback()
+    
+    def make_simul_tasks(self,):
+        ''' Re-creates tasks on each completion
+        TODO: Instead optionally make bellow a factory to re-queue each indv automatically '''
+        
+        return [
+            asyncio.create_task(self.send_buffer()),
+            asyncio.create_task(self.receive_json()),
+        ]
+
+    async def send_buffer(self):
+        while True:
+            if len(self.buffer):
+                buffer = copy(self.buffer)
+                self.buffer.clear()
+                for x in buffer:
+                    await self.websocket.send_json(x)
+            await asyncio.sleep(self.buffer_tick_rate)
+
+    async def receive_json(self):
+        val = await self.websocket.receive_json()
+        print('Got Val:', val)
+
+    def start_populate_buffer(self,):
+        self.buffer.extend([
+            ('BULK_CREATE','workers'    , self.gather_intial_send(self.local_entity.client_db_session, Worker_Foreign  , ['id','host','port'] )),
+            ('BULK_CREATE','UNDECLARED' , self.gather_intial_send(self.local_entity.client_db_session, UNDEC_Foreign   , ['id','host','port'] )), #|self.gather_all_clients()
+            ('BULK_CREATE','managers'   , self.gather_intial_send(self.local_entity.client_db_session, Manager_Foreign , ['id','host','port'] )),
+            ('BULK_CREATE','clients'    , self.gather_intial_send(self.local_entity.client_db_session, Client_Foreign  , ['id','host','port'] )), #|self.gather_all_clients()
+            # ('BULK_CREATE','jobs',    self.gather_all_jobs( this_e.))
+        ])
+
+
+    def gather_intial_send(self, session, table, attrs):
+        res = []
+        for row in session.query(table).all():
+            res.append(self.gather_item(row,attrs))
+        return res
+
+    def gather_item(self,row, attrs):
+        item = {}
+        for attr in attrs:
+            item[attr] = getattr(row, attr, None)
+        return item        
+
+    @Events.Sub('after_insert')
+    def insert_client(self, event, event_key, container, mapper, connection):
+        self.buffer.append(('CREATE', container.__tablename__ , self.gather_item(container,['id','host','port'])))
+
+    @Events.Sub('after_update')
+    def update_client(self, event, event_key, container, mapper, connection):
+        self.buffer.append(('UPDATE', container.__tablename__ , self.gather_item(container,['id','host','port'])))
+
+    @Events.Sub('after_delete')
+    def delete_client(self, event, event_key, container, mapper, connection):
+        self.buffer.append(('DELETE', container.__tablename__ , self.gather_item(container,['id','host','port'])))
+
+
+class Manager_Interface_Info(Interface_Base):
+    router = APIRouter()
+    @IO.Get(router,'/')
+    def base_page(self, this_e, other_e, req, ):
+        return this_e.fapi_templates.TemplateResponse(
+            "/info/info1.html",
+            {   'request' : req, 
+                'Manager_Name':this_e.settings.label},
+        )
+        # return HTMLResponse(content=html_content)
+        # return 'HI!'
+        ...
+
+    @IO.Websocket(router,'/state-info')
+    async def state_info(self, this_e, other_e, websocket:WebSocketManager):
+        ws = Websocket_State_Info(this_e, other_e, websocket, 'state_info')
+        await ws.accept()
+        try:
+            await ws.run_handler()
+        except WebSocketDisconnect_M:
+            print('REACHED WEBSOCKET DISCON')
+            await ws.close()
+
+
+class Manager_Worker_Interface(Interface_Base):
+    router = APIRouter()
+    
+    @IO.Get(router,'/test')
+    def test(self, this_e, other_e, req):
+        return True
+
+    @IO.Websocket(router,'/ws')
+    async def worker_websocket(self, this_e, other_e, websocket:WebSocketManager):
+        from starlette.websockets import WebSocketDisconnect,WebSocketClose
+        await websocket.accept()
+        await websocket.send_text('Hello')
+        await websocket.close()
+    @worker_websocket.Client()
+    async def worker_websocketclient(self,this_e:Foreign_Entity_Base, other_e:Local_Entity_Base, path, headers):
+
+        class custom_ws_class(WebSocketClient):
+            def opened(self):
+                pool = other_e.client_websocket_pool
+                pool.attach(other_e, this_e, self,self.__class__.__name__)
+                self.send('GREETINGS!')
+                # self.close()
+                
+            def closed(self, code, reason=None):
+                pool = other_e.client_websocket_pool
+                pool.remove(self)
+                print('WEBSOCKET CLOSED!')
+            
+            def received_message(self, message):
+                print('RECEIVED MESSAGE:', message)
+                self.send('GOODBYE!')
+                self.close()
+            
+            async def run_forever(self):
+                return super().run_forever()
+
+        fullpath = f'ws://{this_e.host}:{this_e.port}' + path
+        print(fullpath)
+
+        ws = custom_ws_class(fullpath, headers=headers.items())
+        try:
+            ws.connect()
+            asyncio.create_task(ws.run_forever())
+            return ws
+        except Exception as e:
+            print(f'Cound not connect! Reason: {e}')
+            return None
