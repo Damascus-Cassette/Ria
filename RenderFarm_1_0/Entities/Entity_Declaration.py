@@ -27,7 +27,8 @@ from .EventSystem.Pub_Sub_Sql_Events_Factory   import set_listeners_on_tables
 
 from .Interface_Manager   import Manager_Interface_Info, Manager_Worker_Interface
 from .Interface_Worker    import Worker_Interface
-from .Interface_FileDB    import FileDB_Interface
+from .Interface_FileDB    import FileDB_Interface, file_utils as active_file_utils
+from .FileDB.FileHashing  import uuid_utils, file_utils
 
 
 from .Bidi_Websocket import (
@@ -175,13 +176,14 @@ class Manager_Local(Local_Common,Local_Entity_Base):
         self.filedb_interface       = self.FileDB_InterfaceType(self)
         self.bidi_interface         = self.BidiInterfaceType(self)
         self.bidi_commands          = self.BidiCommandsType(self)
-
+        
         self.manager_websocket_pool = Manager_Websocket_Pool()
         self.client_websocket_pool  = Client_Websocket_Pool()
         
         self.load_settings(settings_loc)
-        #self.services_pool = ServicesPoolType(self)
-        #self.event_handler = EventHandlerType(self)
+
+        active_file_utils.set(file_utils(self.settings.file_db))
+
         self.settup_dbs()
 
     def settup_dbs(self):
@@ -250,7 +252,6 @@ class Worker_Local(Local_Common, Local_Entity_Base):
     SettingsType           = Worker_Settings
     settings               : Worker_Settings
     
-
     InterfaceType          = Worker_Interface
     interface              : Worker_Interface
 
@@ -271,7 +272,7 @@ class Worker_Local(Local_Common, Local_Entity_Base):
         
         self.manager_websocket_pool = Manager_Websocket_Pool()
         self.client_websocket_pool  = Client_Websocket_Pool()
-
+        
         self.load_settings(settings_loc)
         # self.load_context_settings()
             #TODO: Context settings, ie machine ID
