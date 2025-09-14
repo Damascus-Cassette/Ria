@@ -172,8 +172,8 @@ class Manager_Local(Local_Common,Local_Entity_Base):
         self.events = self.Events(self)
         self.interface              = self.InterfaceType(self)
         self.worker_interface       = self.WorkerInterfaceType(self)
-        self.bidi_interface         = self.BidiInterfaceType(self)
         self.filedb_interface       = self.FileDB_InterfaceType(self)
+        self.bidi_interface         = self.BidiInterfaceType(self)
         self.bidi_commands          = self.BidiCommandsType(self)
 
         self.manager_websocket_pool = Manager_Websocket_Pool()
@@ -237,6 +237,7 @@ class Manager_Local(Local_Common,Local_Entity_Base):
         # self.file_db_session = self.Session()
         set_listeners_on_tables(list(Job_DB_Model.__subclasses__()), self.events)
         Job_DB_Model.metadata.create_all(self.Job_DB_Engine)
+
 
 from fastapi import FastAPI
 

@@ -21,8 +21,7 @@ class file_utils():
         self.settings = settings_inst
 
     def file_loc(self,data_hash):
-        self.
-        ...
+        raise NotImplementedError()
 
     async def dump_bytearray(self, data:bytearray, data_hash:str=None):
         if not data_hash:

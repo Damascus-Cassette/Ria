@@ -41,9 +41,9 @@ class _transaction():
         return self.func(inst, *args, **kwargs)
 
     @classmethod
-    def _wrapper(cls):
+    def _wrapper(cls, filter=None):
         def wrapper(func):
-            return cls(func)
+            return cls(func,filter=filter)
         return wrapper
     
 transaction = _transaction._wrapper
@@ -297,177 +297,11 @@ class _header_interface():
 header_interface = _header_interface()
 
 
-    
-class _generic_filedb_interface(Interface_Base):
-    Base   : None
-    router = APIRouter()       
-
-    #ALL:
-    # @IO.Get(router,'/raw_table')
-    # def raw_data(self, local_e, foreign_e, req_or_ws, uid):  #Get
-    #     with set_context(local_e):
-    #         self.parent.TableType._template_id #DEFER: Links to other tables by type? Websocket stream tables?
-
-    # @IO.Get(router,'/raw_data/{uid}')
-    # def raw_data(self, local_e, foreign_e, req_or_ws, uid):  #Get
-    #     with set_context(local_e):
-    #         return  header_interface.find(self.parent.TableType, uid)._as_link_dict() #DEFER: Links to other tables by type?
-
-    @IO.Get(router,'/query')
-    def query(self, local_e, foreign_e, req_or_ws, **payload):  #Get
-        with set_context(local_e):
-            return [x.uid for x in header_interface.query(self.parent.TableType,**payload)]
-    
-    @IO.Get(router,'/find')
-    def find(self, local_e, foreign_e, req_or_ws, **payload):  #Get
-        with set_context(local_e):
-            return header_interface.find(self.parent.TableType, **payload).uid
-
-    @IO.Get(router,'/table')
-    def data(self, local_e, foreign_e, req_or_ws, **payload):  #Get
-        with set_context(local_e):
-            return header_interface.data(self.parent.TableType, **payload)
-
-    @IO.Post(router,'/table')
-    def create(self, local_e, foreign_e, req_or_ws, **payload): #Post
-        with set_context(local_e):
-            return header_interface.create(self.parent.TableType, **payload)
-
-    @IO.Patch(router,'/table')
-    def update(self, local_e, foreign_e, req_or_ws, **payload): #Patch
-        with set_context(local_e):
-            return header_interface.update(self.parent.TableType, **payload)
-
-    @IO.Delete(router,'/table')
-    def delete(self, local_e, foreign_e, req_or_ws, **payload): #Delete
-        with set_context(local_e):
-            return header_interface.delete(self.parent.TableType, **payload)
-
-    #VIEW | EXPORT | SESSION
-    @IO.Post(router,'/open')
-    def open(self, local_e, foreign_e, req_or_ws, **payload): #post
-        with set_context(local_e):
-            return header_interface.open(self.parent.TableType, **payload)
-
-    @IO.Post(router,'/close')
-    def close(self, local_e, foreign_e, req_or_ws, **payload): #post
-        with set_context(local_e):
-            return header_interface.close(self.parent.TableType, **payload)
-            
-    #VIEW | EXPORT | SESSION -> FILE | SPACE
-    @IO.Post(router,'/cleanup')
-    def cleanup(self, local_e, foreign_e, req_or_ws, **payload): #post
-        with set_context(local_e):
-            return header_interface.cleanup(self.parent.TableType, **payload)
-
-    @IO.Post(router,'/expose')
-    def expose(self, local_e, foreign_e, req_or_ws, **payload): #post
-        with set_context(local_e):
-            return header_interface.expose(self.parent.TableType, **payload)
-
-    @IO.Get(router,'/diff')
-    def diff(self, local_e, foreign_e, req_or_ws, **payload): #get
-        with set_context(local_e):
-            return header_interface.diff(self.parent.TableType, **payload)
-
-    @IO.Get(router,'/diff_future_space')
-    def diff_future_space(self, local_e, foreign_e, req_or_ws, struct): #get
-        with set_context(local_e):
-            return header_interface.diff_future_space(self.parent.TableType, struct)
-
-    
-    @IO.Put(router,'/upload')
-    def upload_file(self, local_e, foreign_e, req_or_ws, file:UploadFile, metadata:dict={}): #get
-        assert self.parent.TableType is File
-        with set_context(local_e):
-            return header_interface.upload_file( file, metadata)
-
-    @IO.Put(router,'/upload_form')
-    def upload_file_with_form(self, local_e, foreign_e, req_or_ws, file : UploadFile, filename:str = None):        
-        assert self.parent.TableType is File
-
-
-        with set_context(local_e):
-            if filename:
-                return header_interface.upload_file(file, {'name':filename} )
-            else:
-                return header_interface.upload_file(file )
-        
-    @IO.Get(router,'/download')
-    def download(self, local_e, foreign_e, req_or_ws, id): #get
-        assert self.parent.TableType in [File,asc_Space_NamedFile]
-        with set_context(local_e):
-            res_row = header_interface.find(self.parent.TableType, id)
-            if not res_row: return 404
-
-            if isinstance(res_row, File):
-                path=file_utils.get().file_on_disc(res_row.id)
-                return FileResponse(path=path, filename=path, media_type='binary/blob')
-            
-            if isinstance(res_row, asc_Space_NamedFile):
-                path=file_utils.get().file_on_disc(res_row.cFile.id)
-                return FileResponse(path=path, filename=res_row.cName, media_type='binary/blob')
-
-            # res = header_interface.download(self.parent.TableType, id)
-
-        
-    # @IO.Put(router,'/upload')
-    # def upload(self, local_e, foreign_e, req_or_ws, file:UploadFile, **payload): #get
-    #     with set_context(local_e):
-    #         return header_interface.upload(self.parent.TableType, **payload)
-
-
-
-class USER_interface(Interface_Base):
-    TableType = User
-    router = APIRouter('/USER')       
-    cmds   = _generic_filedb_interface
-class SESSION_interface(Interface_Base):
-    TableType = Session
-    router = APIRouter('/SESSION')    
-    cmds   = _generic_filedb_interface
-class IMPORT_interface(Interface_Base):
-    TableType = Import
-    router = APIRouter('/IMPORT')     
-    cmds   = _generic_filedb_interface
-class EXPORT_interface(Interface_Base):
-    TableType = Export
-    router = APIRouter('/EXPORT')     
-    cmds   = _generic_filedb_interface
-class VIEW_interface(Interface_Base):
-    TableType = View
-    router = APIRouter('/VIEW')       
-    cmds   = _generic_filedb_interface
-class SPACE_interface(Interface_Base):
-    TableType = Space
-    router = APIRouter('/SPACE')      
-    cmds   = _generic_filedb_interface
-class NAMED_SPACE_interface(Interface_Base):
-    TableType = asc_Space_NamedSpace
-    router = APIRouter('/NAMED_SPACE')
-    cmds   = _generic_filedb_interface
-class FILE_interface(Interface_Base):
-    TableType = File
-    router = APIRouter('/FILE')       
-    cmds   = _generic_filedb_interface
-class NAMED_FILE_interface(Interface_Base):
-    TableType = asc_Space_NamedFile
-    router = APIRouter('/NAMED_FILE') 
-    cmds   = _generic_filedb_interface
 
 class  FileDB_Interface(Interface_Base):
-    '''Duel purpose header interface. Utakes Aboserv_Action_State quirries and passes them into functions, as well as the direct interface '''
-    router = APIRouter('/FileDB')
-    
-    USER        = USER_interface
-    SESSION     = SESSION_interface
-    IMPORT      = IMPORT_interface
-    EXPORT      = EXPORT_interface
-    VIEW        = VIEW_interface
-    SPACE       = SPACE_interface
-    NAMED_SPACE = NAMED_SPACE_interface
-    FILE        = FILE_interface
-    NAMED_FILE  = NAMED_FILE_interface
+    '''Duel purpose header interface. intakes Aboserved_Action_State quirries and passes them into functions, as well as the direct interface '''
+    Route_Subpath = '/FileDB'
+    router = APIRouter()
 
     def REACT_ws_action(self, websocket, other_e:Foreign_Entity_Base, id:str, topic: Message_Topics.FILE_DB, action:FILEDB_Message_Actions, payload): 
         assert topic is Message_Topics.FILE_DB
@@ -479,6 +313,151 @@ class  FileDB_Interface(Interface_Base):
         interface = getattr(self, table_enum.value)
         interface.REACT_ws_action(self,websocket,other_e,id,topic,action,payload)
 
+
+    get_table = {
+        '/USER': User,
+        '/SESSION': Session,
+        '/IMPORT': Import,
+        '/EXPORT': Export,
+        '/VIEW': View,
+        '/SPACE': Space,
+        '/NAMED_SPACE': asc_Space_NamedSpace,
+        '/FILE': File,
+        '/NAMED_FILE': asc_Space_NamedFile
+    }
+
+    #ALL:
+    # @IO.Get(router,'/{TABLENAME}/raw_table')
+    # def raw_data(self, local_e, foreign_e, req_or_ws, TABLENAME, uid):  #Get
+        # table=self.get_table[TABLENAME]
+    #     with set_context(local_e):
+    #         self.parent.TableType._template_id #DEFER: Links to other tables by type? Websocket stream tables?
+
+    # @IO.Get(router,'/{TABLENAME}/raw_data/{uid}')
+    # def raw_data(self, local_e, foreign_e, req_or_ws, TABLENAME, uid):  #Get
+        # table=self.get_table[TABLENAME]
+    #     with set_context(local_e):
+    #         return  header_interface.find(table, uid)._as_link_dict() #DEFER: Links to other tables by type?
+
+
+    @IO.Get(router,'/{TABLENAME}/query')
+    def query(self, local_e, foreign_e, req_or_ws, TABLENAME, **payload):  #Get
+        table=self.get_table[TABLENAME]
+        with set_context(local_e):
+            return [x.uid for x in header_interface.query(table,**payload)]
+    
+    @IO.Get(router,'/{TABLENAME}/find')
+    def find(self, local_e, foreign_e, req_or_ws, TABLENAME, **payload):  #Get
+        table=self.get_table[TABLENAME]
+        with set_context(local_e):
+            return header_interface.find(table, **payload).uid
+
+    @IO.Get(router,'/{TABLENAME}/table')
+    def data(self, local_e, foreign_e, req_or_ws, TABLENAME, **payload):  #Get
+        table=self.get_table[TABLENAME]
+        with set_context(local_e):
+            return header_interface.data(table, **payload)
+
+    @IO.Post(router,'/{TABLENAME}/table')
+    def create(self, local_e, foreign_e, req_or_ws, TABLENAME, **payload): #Post
+        table=self.get_table[TABLENAME]
+        with set_context(local_e):
+            return header_interface.create(table, **payload)
+
+    @IO.Patch(router,'/{TABLENAME}/table')
+    def update(self, local_e, foreign_e, req_or_ws, TABLENAME, **payload): #Patch
+        table=self.get_table[TABLENAME]
+        with set_context(local_e):
+            return header_interface.update(table, **payload)
+
+    @IO.Delete(router,'/{TABLENAME}/table')
+    def delete(self, local_e, foreign_e, req_or_ws, TABLENAME, **payload): #Delete
+        table=self.get_table[TABLENAME]
+        with set_context(local_e):
+            return header_interface.delete(table, **payload)
+
+    #VIEW | EXPORT | SESSION
+    @IO.Post(router,'/{TABLENAME}/open')
+    def open(self, local_e, foreign_e, req_or_ws, TABLENAME, **payload): #post
+        table=self.get_table[TABLENAME]
+        with set_context(local_e):
+            return header_interface.open(table, **payload)
+
+    @IO.Post(router,'/{TABLENAME}/close')
+    def close(self, local_e, foreign_e, req_or_ws, TABLENAME, **payload): #post
+        table=self.get_table[TABLENAME]
+        with set_context(local_e):
+            return header_interface.close(table, **payload)
+            
+    #VIEW | EXPORT | SESSION -> FILE | SPACE
+    @IO.Post(router,'/{TABLENAME}/cleanup')
+    def cleanup(self, local_e, foreign_e, req_or_ws, TABLENAME, **payload): #post
+        table=self.get_table[TABLENAME]
+        with set_context(local_e):
+            return header_interface.cleanup(table, **payload)
+
+    @IO.Post(router,'/{TABLENAME}/expose')
+    def expose(self, local_e, foreign_e, req_or_ws, TABLENAME, **payload): #post
+        table=self.get_table[TABLENAME]
+        with set_context(local_e):
+            return header_interface.expose(table, **payload)
+
+    @IO.Get(router,'/{TABLENAME}/diff')
+    def diff(self, local_e, foreign_e, req_or_ws, TABLENAME, **payload): #get
+        table=self.get_table[TABLENAME]
+        with set_context(local_e):
+            return header_interface.diff(table, **payload)
+
+    @IO.Get(router,'/{TABLENAME}/diff_future_space')
+    def diff_future_space(self, local_e, foreign_e, TABLENAME, req_or_ws, struct): #get
+        table=self.get_table[TABLENAME]
+        with set_context(local_e):
+            return header_interface.diff_future_space(table, struct)
+
+    
+    @IO.Put(router,'/{TABLENAME}/upload')
+    def upload_file(self, local_e, foreign_e, TABLENAME, req_or_ws, file:UploadFile, metadata:dict={}): #get
+        table=self.get_table[TABLENAME]
+        assert self.parent.TableType is File
+        with set_context(local_e):
+            return header_interface.upload_file( file, metadata)
+
+    @IO.Put(router,'/{TABLENAME}/upload_form')
+    def upload_file_with_form(self, local_e, TABLENAME, foreign_e, req_or_ws, file : UploadFile, filename:str = None):        
+        table=self.get_table[TABLENAME]
+        assert self.parent.TableType is File
+
+
+        with set_context(local_e):
+            if filename:
+                return header_interface.upload_file(file, {'name':filename} )
+            else:
+                return header_interface.upload_file(file )
+        
+    @IO.Get(router,'/{TABLENAME}/download')
+    def download(self, local_e, foreign_e, req_or_ws, TABLENAME, id): #get
+        table=self.get_table[TABLENAME]
+        assert table in [File,asc_Space_NamedFile]
+        with set_context(local_e):
+            res_row = header_interface.find(table, id)
+            if not res_row: return 404
+
+            if isinstance(res_row, File):
+                path=file_utils.get().file_on_disc(res_row.id)
+                return FileResponse(path=path, filename=path, media_type='binary/blob')
+            
+            if isinstance(res_row, asc_Space_NamedFile):
+                path=file_utils.get().file_on_disc(res_row.cFile.id)
+                return FileResponse(path=path, filename=res_row.cName, media_type='binary/blob')
+
+            # res = header_interface.download(table, id)
+
+        
+    # @IO.Put(router,'/{TABLENAME}/upload')
+    # def upload(self, local_e, foreign_e, req_or_ws, TABLENAME, file:UploadFile, **payload): #get
+    # table=self.get_table[TABLENAME]
+    #     with set_context(local_e):
+    #         return header_interface.upload(table, **payload)
 
 
 

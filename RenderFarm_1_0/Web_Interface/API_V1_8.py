@@ -2,12 +2,14 @@
 from fastapi     import APIRouter, Response, Request, Depends, FastAPI, WebSocket, WebSocketDisconnect
 from enum        import Enum
 from functools   import partial
-from inspect     import signature, isclass, iscoroutinefunction, _empty
+from inspect     import signature, isclass, iscoroutinefunction, _empty, Parameter
 from string      import Formatter
 from types       import FunctionType
 from contextlib  import contextmanager
 from contextvars import ContextVar
 import requests
+
+
 from functools import wraps
 
 
@@ -120,12 +122,16 @@ class IO():
         params = signature(wrapped).parameters
         wrapped.__name__      = func.__name__
 
-        o_args   = [x for x in list(sig.parameters.values())[4:] if x.POSITIONAL_OR_KEYWORD] 
-        o_kwargs = [x for x in list(sig.parameters.values())[4:] if (not x.POSITIONAL_OR_KEYWORD) and x.KEYWORD_ONLY]
+
+        o_args   = [x for x in list(sig.parameters.values())[4:] if x.kind is Parameter.POSITIONAL_OR_KEYWORD] 
+        o_kwargs = [x for x in list(sig.parameters.values())[4:] if (x.kind is not x.POSITIONAL_OR_KEYWORD) and (x.kind is x.KEYWORD_ONLY)]
 
         parameters        = (params['request'], *o_args, params['_foreign_entity'], *o_kwargs)
         return_annotation = sig.return_annotation
 
+        #Need to place **kwargs at end.
+
+        print('WRAPPING:', self.func, 'parameters', parameters, 'return_annotation' , return_annotation)
         wrapped.__signature__ = sig.replace(
             parameters        = parameters,
             return_annotation = return_annotation,)
@@ -324,7 +330,9 @@ class Interface_Base():
             v = getattr(inst,k)
             if isclass(v): continue
             if issubclass(v.__class__,Interface_Base) or (v.__class__ is Interface_Base):
+                print('ITER INTERFACE FOUND:', v)
                 yield v
+
 
     def _register(self,local_entity,p_router:APIRouter):
         # applicable = [v for k,v in self.__dict__.items() if (not k.startswith('_')) and (isinstance(v,IO))]
@@ -336,7 +344,10 @@ class Interface_Base():
             v = getattr(self.__class__,k,None)
             if isinstance(v,IO):
                 v._register(self,local_entity)
-
+        
+        for v in Interface_Base._iter_insts(self):
+            print('registering',v)
+            v._register(local_entity,self.router)
 
         for k in dir(self):
             if isinstance(v:=getattr(self,k), APIRouter):
