@@ -25,10 +25,12 @@ from .Entity_Settings_Common        import CURRENT_DIR
 from .EventSystem.Struct_Pub_Sub_v1_2          import Event_Router
 from .EventSystem.Pub_Sub_Sql_Events_Factory   import set_listeners_on_tables
 
-from .Interface_Manager import Manager_Interface_Info, Manager_Worker_Interface
-from .Interface_Worker  import Worker_Interface
+from .Interface_Manager   import Manager_Interface_Info, Manager_Worker_Interface
+from .Interface_Worker    import Worker_Interface
+from .Interface_FileDB    import FileDB_Interface
 
-from .Iterface_Common_DataWS import (
+
+from .Bidi_Websocket import (
     Message_Commands_Client  , Message_Commands_Manager , Message_Commands_Worker  ,
     message_interface_common as Message_Interface_Client , message_interface_common as Message_Interface_Manager , message_interface_common as Message_Interface_Worker ,
     )
@@ -38,7 +40,6 @@ from copy import copy
 from typing import Any
 
 Client_DB_Model = declarative_base()
-
 
 
 class Local_Common():
@@ -137,17 +138,22 @@ class Manager_Local(Local_Common,Local_Entity_Base):
     WorkerInterfaceType    = Manager_Worker_Interface
     worker_interface       : Manager_Worker_Interface
 
+    FileDB_InterfaceType   = FileDB_Interface
+    filedb_interface       : FileDB_Interface
+
     BidiInterfaceType      = Message_Interface_Manager
     bidi_interface         : Message_Interface_Manager
 
-    BidiCommandsType       = Message_Commands_Manager
-    bidi_commands          : Message_Commands_Manager
+    BidiCommandsType       = Message_Commands_Manager   # This one handles porting messages/commands
+    bidi_commands          : Message_Commands_Manager   
 
     SettingsType           = Manager_Settings
     settings               : Manager_Settings
 
     manager_websocket_pool : Manager_Websocket_Pool
     client_websocket_pool  : Client_Websocket_Pool
+
+
 
     File_DB_Engine    : EngineType
     File_DB_Session   : SessionType
@@ -167,6 +173,7 @@ class Manager_Local(Local_Common,Local_Entity_Base):
         self.interface              = self.InterfaceType(self)
         self.worker_interface       = self.WorkerInterfaceType(self)
         self.bidi_interface         = self.BidiInterfaceType(self)
+        self.filedb_interface       = self.FileDB_InterfaceType(self)
         self.bidi_commands          = self.BidiCommandsType(self)
 
         self.manager_websocket_pool = Manager_Websocket_Pool()

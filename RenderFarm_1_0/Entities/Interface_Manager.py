@@ -5,14 +5,11 @@ from ws4py.client.threadedclient    import WebSocketClient
 from .EventSystem.Struct_Pub_Sub_v1_2          import Event_Router
 from ..Web_Interface.API_V1_8       import (Foreign_Entity_Base, Local_Entity_Base, Interface_Base, IO)
 from ..Web_Interface.Websocket_Pool import Manager_Websocket_Wrapper_Simul_Default
-from .Messsages import make_message, intake_message
+from .Websocket_Messsage import make_message, intake_message
 import asyncio
 from enum import EnumType,Enum
 from inspect import isclass
 from copy import copy
-
-
-
 
 
 class Websocket_State_Info(Manager_Websocket_Wrapper_Simul_Default):
