@@ -38,30 +38,30 @@ class message_websocket_common():
 
     async def receive_message(self):
         msg = await self.websocket.receive_json()
-        topic, action, payload = intake_message(msg)
-        self.enact_message(topic,action,payload)
+        id, topic, action, payload = intake_message(msg)
+        self.enact_message(id,topic,action,payload)
 
-    def enact_message(self, topic, action, payload): 
+    def enact_message(self, id, topic, action, payload): 
         match topic:
-            case Message_Topics.ADMIN         : self.local_entity.bidi_commands.REACT_Admin_Message (self, self.foreign_entity, topic, action, payload)
-            case Message_Topics.MISC          : self.local_entity.bidi_commands.REACT_Misc_Message  (self, self.foreign_entity, topic, action, payload)
-            case Message_Topics.DATA          : self.local_entity.bidi_commands.REACT_Data_Message  (self, self.foreign_entity, topic, action, payload)
-            case Message_Topics.CRUD          : self.local_entity.bidi_commands.REACT_Crud_Message  (self, self.foreign_entity, topic, action, payload)     
+            case Message_Topics.ADMIN         : self.local_entity.bidi_commands.REACT_Admin_Message (self, self.foreign_entity, id, topic, action, payload)
+            case Message_Topics.MISC          : self.local_entity.bidi_commands.REACT_Misc_Message  (self, self.foreign_entity, id, topic, action, payload)
+            case Message_Topics.DATA          : self.local_entity.bidi_commands.REACT_Data_Message  (self, self.foreign_entity, id, topic, action, payload)
+            case Message_Topics.CRUD          : self.local_entity.bidi_commands.REACT_Crud_Message  (self, self.foreign_entity, id, topic, action, payload)     
 
-            case Message_Topics.JOB           : self.local_entity.bidi_commands.REACT_Action_Message(self, self.foreign_entity, topic, action, payload)        
-            case Message_Topics.TASK          : self.local_entity.bidi_commands.REACT_Action_Message(self, self.foreign_entity, topic, action, payload)
-            case Message_Topics.GRAPH         : self.local_entity.bidi_commands.REACT_Action_Message(self, self.foreign_entity, topic, action, payload)
-            case Message_Topics.CACHE         : self.local_entity.bidi_commands.REACT_Action_Message(self, self.foreign_entity, topic, action, payload)
-            case Message_Topics.FILE_DB       : self.local_entity.bidi_commands.REACT_Action_Message(self, self.foreign_entity, topic, action, payload)
+            case Message_Topics.JOB           : self.local_entity.bidi_commands.REACT_Action_Message(self, self.foreign_entity, id, topic, action, payload)        
+            case Message_Topics.TASK          : self.local_entity.bidi_commands.REACT_Action_Message(self, self.foreign_entity, id, topic, action, payload)
+            case Message_Topics.GRAPH         : self.local_entity.bidi_commands.REACT_Action_Message(self, self.foreign_entity, id, topic, action, payload)
+            case Message_Topics.CACHE         : self.local_entity.bidi_commands.REACT_Action_Message(self, self.foreign_entity, id, topic, action, payload)
+            case Message_Topics.FILE_DB       : self.local_entity.bidi_commands.REACT_Action_Message(self, self.foreign_entity, id, topic, action, payload)
 
-            case Message_Topics.MANAGER_STATE : self.local_entity.bidi_commands.OBSERVE_Entity_State(self, self.foreign_entity, topic, action, payload)
-            case Message_Topics.WORKER_STATE  : self.local_entity.bidi_commands.OBSERVE_Entity_State(self, self.foreign_entity, topic, action, payload)
-            case Message_Topics.CLIENT_STATE  : self.local_entity.bidi_commands.OBSERVE_Entity_State(self, self.foreign_entity, topic, action, payload)
+            case Message_Topics.MANAGER_STATE : self.local_entity.bidi_commands.OBSERVE_Entity_State(self, self.foreign_entity, id, topic, action, payload)
+            case Message_Topics.WORKER_STATE  : self.local_entity.bidi_commands.OBSERVE_Entity_State(self, self.foreign_entity, id, topic, action, payload)
+            case Message_Topics.CLIENT_STATE  : self.local_entity.bidi_commands.OBSERVE_Entity_State(self, self.foreign_entity, id, topic, action, payload)
 
-            case Message_Topics.JOB_STATE     : self.local_entity.bidi_commands.OBSERVE_Action_State(self, self.foreign_entity, topic, action, payload)
-            case Message_Topics.TASK_STATE    : self.local_entity.bidi_commands.OBSERVE_Action_State(self, self.foreign_entity, topic, action, payload)
-            case Message_Topics.GRAPH_STATE   : self.local_entity.bidi_commands.OBSERVE_Action_State(self, self.foreign_entity, topic, action, payload)
-            case Message_Topics.CACHE_STATE   : self.local_entity.bidi_commands.OBSERVE_Action_State(self, self.foreign_entity, topic, action, payload)
+            case Message_Topics.JOB_STATE     : self.local_entity.bidi_commands.OBSERVE_Action_State(self, self.foreign_entity, id, topic, action, payload)
+            case Message_Topics.TASK_STATE    : self.local_entity.bidi_commands.OBSERVE_Action_State(self, self.foreign_entity, id, topic, action, payload)
+            case Message_Topics.GRAPH_STATE   : self.local_entity.bidi_commands.OBSERVE_Action_State(self, self.foreign_entity, id, topic, action, payload)
+            case Message_Topics.CACHE_STATE   : self.local_entity.bidi_commands.OBSERVE_Action_State(self, self.foreign_entity, id, topic, action, payload)
             
             case _: raise Exception('') 
 
@@ -91,13 +91,13 @@ class message_commands_common():
         self.local_entity = local_entity
         self.events       = self.Events(self, local_entity.events)
 
-    def REACT_Admin_Message (self, websocket, other_e:Foreign_Entity_Base, topic:Message_Topics.ADMIN , action:Admin_Message_Actions       , payload): ...
-    def REACT_Misc_Message  (self, websocket, other_e:Foreign_Entity_Base, topic:Message_Topics.MISC  , action:Misc_Message_Actions        , payload): ...
-    def REACT_Data_Message  (self, websocket, other_e:Foreign_Entity_Base, topic:Message_Topics.DATA  , action:VALUE_Message_Actions       , payload): ...
-    def REACT_Crud_Message  (self, websocket, other_e:Foreign_Entity_Base, topic:Message_Topics.CRUD  , action:CRUD_Message_Actions        , payload): ...
-    def OBSERVE_Entity_State(self, websocket, other_e:Foreign_Entity_Base, topic:Entity_Enums         , action:STATE_Message_Actions       , payload): ... 
-    def REACT_Action_Message(self, websocket, other_e:Foreign_Entity_Base, topic:Action_Enums         , action:Action_Message_Actions      , payload): ...
-    def OBSERVE_Action_State(self, websocket, other_e:Foreign_Entity_Base, topic:Action_State_Enums   , action:ActionState_Message_Actions , payload): ...
+    def REACT_Admin_Message (self, websocket, other_e:Foreign_Entity_Base, id:str, topic:Message_Topics.ADMIN , action:Admin_Message_Actions       , payload): ...
+    def REACT_Misc_Message  (self, websocket, other_e:Foreign_Entity_Base, id:str, topic:Message_Topics.MISC  , action:Misc_Message_Actions        , payload): ...
+    def REACT_Data_Message  (self, websocket, other_e:Foreign_Entity_Base, id:str, topic:Message_Topics.DATA  , action:VALUE_Message_Actions       , payload): ...
+    def REACT_Crud_Message  (self, websocket, other_e:Foreign_Entity_Base, id:str, topic:Message_Topics.CRUD  , action:CRUD_Message_Actions        , payload): ...
+    def OBSERVE_Entity_State(self, websocket, other_e:Foreign_Entity_Base, id:str, topic:Entity_Enums         , action:STATE_Message_Actions       , payload): ... 
+    def REACT_Action_Message(self, websocket, other_e:Foreign_Entity_Base, id:str, topic:Action_Enums         , action:Action_Message_Actions      , payload): ...
+    def OBSERVE_Action_State(self, websocket, other_e:Foreign_Entity_Base, id:str, topic:Action_State_Enums   , action:ActionState_Message_Actions , payload): ...
         #Websocket passed in to allow for immediate or bufferred events.
 
     def OBSERVE_Entity_Con_State(self, other_e, value):
@@ -120,13 +120,9 @@ class message_interface_common(Interface_Base):
     ClientType  = message_websocket_client
     ManagerType = message_websocket_manager
 
-    # @IO.Websocket(router,'/bidi-data-stream')
-    # async def connection(self, this_e:Foreign_Entity_Base, other_e:Local_Entity_Base, websocket:Websocket_Manager):
     @IO.Websocket(router,'/bidi-data-stream')
     async def connection(self, this_e, other_e, websocket:WebSocket_Manager)->str:
         print('HIT WEBSOCKET')
-        # await websocket.accept()
-        # await websocket.close()
 
         app = self.ManagerType(this_e,other_e,websocket,id='bidi-data-stream')
         await app.accept()
@@ -141,8 +137,8 @@ class message_interface_common(Interface_Base):
         app = self.ClientType(other_e,this_e,'bidi-data-stream',None, fullpath, headers=headers.items())
         
         try:
-            # asyncio.create_task(app.run_forever())
             await app.connect()
+            asyncio.create_task(app.run_forever())
             return app
         except Exception as e:
             print(f'Cound not connect! Reason: {e.__class__} {e.__traceback__.tb_lasti} {e}')

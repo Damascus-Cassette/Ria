@@ -28,7 +28,7 @@ from .EventSystem.Pub_Sub_Sql_Events_Factory   import set_listeners_on_tables
 from .Interface_Manager import Manager_Interface_Info, Manager_Worker_Interface
 from .Interface_Worker  import Worker_Interface
 
-from .Manager_Worker_Websockets import (
+from .Iterface_Common_DataWS import (
     Message_Commands_Client  , Message_Commands_Manager , Message_Commands_Worker  ,
     message_interface_common as Message_Interface_Client , message_interface_common as Message_Interface_Manager , message_interface_common as Message_Interface_Worker ,
     )
