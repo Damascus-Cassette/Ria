@@ -29,6 +29,8 @@ class User(Base):
 
 class Session(Base):
     __tablename__ = 'sessions'
+    _ext_create_allowable_ = ['hid']
+    _ext_update_allowable_ = ['hid']
     id  = Column(Integer, primary_key=True)
     hid = Column(String)    
 
@@ -70,6 +72,8 @@ class Session(Base):
 
 class Import(Base):
     __tablename__ = 'imports'
+    _ext_create_allowable_ = ['hid','location']
+    _ext_update_allowable_ = ['hid','onDisk']
     id  = Column(Integer, primary_key=True)
     hid = Column(String)    
     
@@ -99,9 +103,11 @@ class Import(Base):
 
 class Export(Base):
     __tablename__ = 'exports'
+    _ext_create_allowable_ = ['hid','location']
+    _ext_update_allowable_ = ['hid','onDisk']
+
     id  = Column(Integer, primary_key=True)
     hid = Column(String)    
-    
     #### Parents ####
     mySessionId : Mapped[int]       = mapped_column(ForeignKey('sessions.id', ondelete="CASCADE"))
     mySession   : Mapped[Session]   = relationship(back_populates = 'myExports') 
@@ -142,6 +148,8 @@ class View(Base):
     Invalidated views 
     '''
     __tablename__ = 'views'
+    _ext_create_allowable_ = ['hid']
+    _ext_update_allowable_ = ['hid']
     id  = Column(Integer, primary_key=True)
     hid = Column(String)    
 

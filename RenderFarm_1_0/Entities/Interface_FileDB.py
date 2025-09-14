@@ -54,7 +54,7 @@ def Active_Session_As(engine):
     yield
     Active_Session.reset(t)    
 
-class header_interface():
+class _header_interface():
     #ALL:
 
     def _update(self,table,row_item,data:dict):
@@ -137,27 +137,28 @@ class header_interface():
 
     #SESSION
     @transaction(filter = lambda x: x is Session)
-    def open(self, table, target_row): #post
+    def open(self, table, target_row):
         target_row.isOpen = True
 
     @transaction(filter = lambda x: x is Session)
-    def close(self, table, target_row): #post
+    def close(self, table, target_row):
         target_row.isFalse = True
+
 
     #VIEW | IMPORT | EXPORT | NAMEDSPACE | NAMEDFILE -> SPACE | FILE
 
     @transaction(filter = lambda x: x in [Import,Export,View,asc_Space_NamedSpace,asc_Space_NamedFile,Space,File])
-    def expose(self, table, target_row, **payload): #post
-        ...
+    def expose(self, table, target_row, **payload): 
+        raise NotImplementedError('TODO: PORT FROM ORIGINAL')
 
-    def cleanup(self, table, target_row, **payload): #post
+    def cleanup(self, table, target_row, **payload): 
         raise NotImplementedError('Settup Intial routine first!')
+
 
     #VIEW | IMPORT | EXPORT | NAMEDSPACE | NAMEDFILE -> SPACE
     # @transaction(filter = lambda x: x in [Import,Export,View,asc_Space_NamedSpace,asc_Space_NamedFile,Space,File])
     def diff_future_space(self,table, **payload): #get
-        ...
-
+        raise NotImplementedError('TODO: PORT FROM ORIGINAL')
     
     def upload_file(self, data:dict, file:bytearray)->File:
         raise NotImplementedError('TODO: PORT FROM ORIGINAL')
@@ -200,8 +201,7 @@ class header_interface():
         #CASE: NAMEDSPACE | NAMEDFILE  : Download file named
         ...
 
-
-
+header_interface = _header_interface()
 
 
 class _generic_filedb_interface(Interface_Base):
@@ -209,10 +209,20 @@ class _generic_filedb_interface(Interface_Base):
     router = APIRouter()       
 
     #ALL:
+    # @IO.Get(router,'/raw_table')
+    # def raw_data(self, local_e, foreign_e, req_or_ws, uid):  #Get
+    #     with Active_Session_As(local_e.get_file_db_session):
+    #         self.parent.TableType._template_id #DEFER: Links to other tables by type? Websocket stream tables?
+
+    # @IO.Get(router,'/raw_data/{uid}')
+    # def raw_data(self, local_e, foreign_e, req_or_ws, uid):  #Get
+    #     with Active_Session_As(local_e.get_file_db_session):
+    #         return  header_interface.find(self.parent.TableType, uid)._as_link_dict() #DEFER: Links to other tables by type?
+
     @IO.Get(router,'/query')
     def query(self, local_e, foreign_e, req_or_ws, **payload):  #Get
         with Active_Session_As(local_e.get_file_db_session):
-            return [x.uid for x in header_interface.query(**payload)]
+            return [x.uid for x in header_interface.query(self.parent.TableType,**payload)]
     
     @IO.Get(router,'/find')
     def find(self, local_e, foreign_e, req_or_ws, **payload):  #Get
@@ -277,10 +287,11 @@ class _generic_filedb_interface(Interface_Base):
         with Active_Session_As(local_e.get_file_db_session):
             return header_interface.upload(self.parent.TableType, **payload)
 
-    @IO.Get(router,'/file')
+    @IO.Get(router,'/download')
     def download(self, local_e, foreign_e, req_or_ws, **payload): #get
         with Active_Session_As(local_e.get_file_db_session):
             return header_interface.download(self.parent.TableType, **payload)
+
 
 class USER_interface(Interface_Base):
     TableType = User
@@ -323,6 +334,16 @@ class  FileDB_Interface(Interface_Base):
     '''Duel purpose header interface. Utakes Aboserv_Action_State quirries and passes them into functions, as well as the direct interface '''
     router = APIRouter('/FileDB')
     
+    USER        = USER_interface
+    SESSION     = SESSION_interface
+    IMPORT      = IMPORT_interface
+    EXPORT      = EXPORT_interface
+    VIEW        = VIEW_interface
+    SPACE       = SPACE_interface
+    NAMED_SPACE = NAMED_SPACE_interface
+    FILE        = FILE_interface
+    NAMED_FILE  = NAMED_FILE_interface
+
     def REACT_ws_action(self, websocket, other_e:Foreign_Entity_Base, id:str, topic: Message_Topics.FILE_DB, action:FILEDB_Message_Actions, payload): 
         assert topic is Message_Topics.FILE_DB
         assert isinstance(action, FILEDB_Message_Actions)
