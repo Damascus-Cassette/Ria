@@ -16,7 +16,7 @@ from .Statics import Message_Topics, Admin_Message_Actions, FILEDB_Message_Actio
 
 from ..File_Management.db_repo_V1_1 import file_utils
 from ..File_Management.db_struct import User,Session,Import,Export,View,asc_Space_NamedSpace,asc_Space_NamedFile,Space,File
-from ..File_Management.FileHashing import uuid_utils, file_utils, files_in_server
+from ..File_Management.FileHashing import uuid_utils, file_utils as _file_utils
 from typing import TypeAlias
 
 AnyTableType : TypeAlias = User|Session|Import|Export|View|asc_Space_NamedSpace|asc_Space_NamedFile|Space|File
@@ -51,7 +51,14 @@ from contextlib  import contextmanager
 from contextvars import ContextVar
 
 Active_Session = ContextVar('active_file_db_session',default = None)
-Active_settings=
+
+file_utils : _file_utils = ContextVar('active_file_utilities_inst', default= None)
+
+@contextmanager
+def Active_file_utils_As(utils:_file_utils):
+    t = file_utils.set(utils)
+    yield
+    file_utils.reset(t)    
 
 @contextmanager
 def Active_Session_As(engine):
@@ -60,8 +67,6 @@ def Active_Session_As(engine):
     Active_Session.reset(t)    
 
 class _header_interface():
-    #ALL:
-
     def _update(self,table,row_item,data:dict):
         for k,v in data.items():
             if k in table._ext_allowable_:
@@ -223,7 +228,7 @@ class _header_interface():
 
         if data_hash:=metadata.get('data_hash'):
             if filerow:=self.find(File,data_hash):
-                if fp:=file_utils.file_on_server(filerow):
+                if fp:=file_utils.get().file_on_server(filerow):
                     print(f'WARNING! FILE WITH DATA_HASH {data_hash} ALREADY UPLOADED AND ON DISC AT {fp}, DUMPING AND RETURING ON_DISC')
                     del file
                     return filerow
@@ -239,23 +244,19 @@ class _header_interface():
                 
 
         if (filerow:=self.find(File,data_hash)) is None: filerow = File()
-        elif fp:=file_utils.file_on_server(filerow): 
+        elif fp:=file_utils.get().file_on_server(filerow): 
             print(f'WARNING! FILE WITH DATA_HASH {data_hash} ALREADY UPLOADED AND ON DISC AT {fp}, DUMPING AND RETURING ON_DISC')
             return filerow
         
         if isinstance(file, UploadFile):
-            await file_utils.dump_bytearray(file.file, data_hash=data_hash)
+            await file_utils.get().dump_bytearray(file.file, data_hash=data_hash)
         else:
-            await file_utils.dump_bytearray(file,      data_hash=data_hash)
+            await file_utils.get().dump_bytearray(file,      data_hash=data_hash)
 
         filerow.id = data_hash
 
         return filerow
-
-        
-
     
-
     # def upload_import_export(self, table, space_id, session_id, user_id, **container_data,):
     #     container = self._create_import_export(table, session_id, user_id, container_data)
     #     container.mySpaceId = space_id
@@ -285,7 +286,7 @@ class _header_interface():
     def download(self,table, **payload)->bytearray|tuple[bytearray]: #get
         #CASE: VIEW | IMPORT | EXPORT  : Download space via compressed folder  
         #CASE: NAMEDSPACE | NAMEDFILE  : Download file named
-        ...
+        raise Exception('TRYING HERE')
 
 header_interface = _header_interface()
 

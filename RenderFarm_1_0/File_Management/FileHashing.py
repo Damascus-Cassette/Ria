@@ -11,11 +11,17 @@ import uuid
 import shutil
 import asyncio
 
+from typing import Any
 
 class file_utils():
-    ''' Contextual File movment, in relation to settings defined structures '''
+    ''' Statefull fule_utilts instancce'''
+    settings : Any 
+    
+    def __init__(self, settings_inst):
+        self.settings = settings_inst
 
-    def __init__(self, settings):
+    def file_loc(self,data_hash):
+        self.
         ...
 
     async def dump_bytearray(self, data:bytearray, data_hash:str=None):
