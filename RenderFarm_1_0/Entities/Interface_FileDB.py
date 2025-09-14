@@ -1,4 +1,4 @@
-from fastapi                        import (Request, Response, APIRouter, WebSocket as WebSocketManager)
+from fastapi                        import (Request, Response, APIRouter, WebSocket as WebSocketManager, UploadFile)
 from starlette.websockets           import WebSocketDisconnect as WebSocketDisconnect_M 
 from ws4py.client.threadedclient    import WebSocketClient 
 
@@ -16,6 +16,10 @@ from .Statics import Message_Topics, Admin_Message_Actions, FILEDB_Message_Actio
 
 from ..File_Management.db_repo_V1_1 import file_utils
 from ..File_Management.db_struct import User,Session,Import,Export,View,asc_Space_NamedSpace,asc_Space_NamedFile,Space,File
+from ..File_Management.FileHashing import uuid_utils, file_utils, files_in_server
+from typing import TypeAlias
+
+AnyTableType : TypeAlias = User|Session|Import|Export|View|asc_Space_NamedSpace|asc_Space_NamedFile|Space|File
 
 class _transaction():
     ''' Placeholder for future complex use. I dont remember exactly why I wanted this before'''
@@ -47,6 +51,7 @@ from contextlib  import contextmanager
 from contextvars import ContextVar
 
 Active_Session = ContextVar('active_file_db_session',default = None)
+Active_settings=
 
 @contextmanager
 def Active_Session_As(engine):
@@ -64,7 +69,7 @@ class _header_interface():
             else:
                 raise KeyError(f'K:V {k}:{v} IS NOT ALLOWED TO BE SET ON {table}')
 
-    def find(self, table, item_id:str):  #Get
+    def find[T:AnyTableType](self, table:T, item_id:str)->T:  #Get
         return Active_Session.get().query(table).first(id=item_id)
 
     def query(self,table, **defintions):  #Get
@@ -157,28 +162,109 @@ class _header_interface():
 
     #VIEW | IMPORT | EXPORT | NAMEDSPACE | NAMEDFILE -> SPACE
     # @transaction(filter = lambda x: x in [Import,Export,View,asc_Space_NamedSpace,asc_Space_NamedFile,Space,File])
-    def diff_future_space(self,table, **payload): #get
-        raise NotImplementedError('TODO: PORT FROM ORIGINAL')
-    
-    def upload_file(self, data:dict, file:bytearray)->File:
-        raise NotImplementedError('TODO: PORT FROM ORIGINAL')
-    def upload_named_file(self, name, metadata, **payload)->asc_Space_NamedFile:
-        raise NotImplementedError('TODO: PORT FROM ORIGINAL')
 
-    def upload_space(self, structure, data:dict, files:bytearray)->Space:
-        raise NotImplementedError('TODO: PORT FROM ORIGINAL')
-    def upload_named_space(self, name, **payload)->asc_Space_NamedSpace:
-        raise NotImplementedError('TODO: PORT FROM ORIGINAL')
-    
-    def upload_import_export(self, table, space_data, session_id, user_id, container_data={}, **payload):
-        container = self._create_import_export(table, session_id, user_id, container_data)
-        container.mySpace = self._upload_space(**space_data)
-        Active_Session.get().append(container)
+    def diff_future(self, files:list[str], spaces:list[str])->list: #get
+        ''' Determine elements that need to be uploaded by hash diff'''
+        elem:dict
+        need_hashes  = []
+        for elem in files:
+            if self.find(File ,elem['data_hash']) is None:
+                need_hashes.append(elem['data_hash'])
+        for elem in spaces:
+            if self.find(Space,elem['data_hash']) is None:
+                need_hashes.append(elem['data_hash'])
+        return need_hashes
 
-    def upload_view(self, table, space_data, session_id, container_data={}):
-        container = self._create_import_export(table, session_id, container_data)
-        container.mySpace = self._upload_space(**space_data)
-        Active_Session.get().append(container)
+    @transaction()
+    def create_named_file_from_structure(self,structure:dict):
+        if (nspace:=self.find(File, structure['full_hash'])) is not None: return nspace
+        nfile = asc_Space_NamedFile()
+
+        if (file:=self.find(File,structure['data_hash'])) is None:
+            raise Exception('FILE DOES NOT EXIST ON DB! Delayed upload not yet supported!!:',structure['data_hash'], 'of', structure)
+            
+        nspace.cFile = file
+        return nspace
+
+    @transaction()
+    def create_named_space_from_structure(self,structure:dict)->asc_Space_NamedSpace:
+        if (nspace:=self.find(structure['full_hash'])) is not None: return nspace
+        nspace = asc_Space_NamedSpace()
+
+        if (space:=self.find(structure['data_hash'])) is None:
+            space = self.create_space_from_structure(structure)
+        nspace.cSpace = space
+        return nspace
+
+    @transaction()
+    def create_space_from_structure(self, structure):
+        ''' Requires that all files to already be uploaded !!! '''
+        file_children  = []
+        space_children = []
+
+        if (space:=self.find(Space, structure['data_hash'])) is not None: return space
+
+        space = Space()
+        for elem_data in structure['children']:
+            if elem_data['_type']   == 'NAMEDFILE':
+                space.myFiles.append(self.create_named_file_from_structure(elem_data))
+
+            elif elem_data['_type'] == 'NAMEDSPACE':
+                space.mySpaces.self.space_children.append(self.create_named_space_from_structure(elem_data))
+            
+            else: raise Exception(f'DONT RECOGNIZE TYPE: {elem_data["_type"]}')
+        
+        space.id = structure['data_hash']
+        
+        return space
+    
+    @transaction()
+    async def upload_file(self, file:UploadFile|bytearray, metadata:dict={})->File:
+
+        if data_hash:=metadata.get('data_hash'):
+            if filerow:=self.find(File,data_hash):
+                if fp:=file_utils.file_on_server(filerow):
+                    print(f'WARNING! FILE WITH DATA_HASH {data_hash} ALREADY UPLOADED AND ON DISC AT {fp}, DUMPING AND RETURING ON_DISC')
+                    del file
+                    return filerow
+        
+        if isinstance(file, UploadFile):
+            data_hash = uuid_utils.get_bytearray_hash(file.file)
+        else:
+            data_hash = uuid_utils.get_bytearray_hash(file)
+        
+        if _mdata_hash:= metadata.get('data_hash',None):
+            if data_hash != _mdata_hash:
+                print(f'MANAGER DID NOT GET THE SAME BYTE HASH:',data_hash,  metadata['data_hash'], metadata)
+                
+
+        if (filerow:=self.find(File,data_hash)) is None: filerow = File()
+        elif fp:=file_utils.file_on_server(filerow): 
+            print(f'WARNING! FILE WITH DATA_HASH {data_hash} ALREADY UPLOADED AND ON DISC AT {fp}, DUMPING AND RETURING ON_DISC')
+            return filerow
+        
+        if isinstance(file, UploadFile):
+            await file_utils.dump_bytearray(file.file, data_hash=data_hash)
+        else:
+            await file_utils.dump_bytearray(file,      data_hash=data_hash)
+
+        filerow.id = data_hash
+
+        return filerow
+
+        
+
+    
+
+    # def upload_import_export(self, table, space_id, session_id, user_id, **container_data,):
+    #     container = self._create_import_export(table, session_id, user_id, container_data)
+    #     container.mySpaceId = space_id
+    #     Active_Session.get().append(container)
+
+    # def upload_view(self, table, space_id, session_id, **container_data):
+    #     container = self._create_import_export(table, session_id, container_data)
+    #     container.mySpaceId = space_id
+    #     Active_Session.get().append(container)
         
     
     @transaction(filter = lambda x: x in [Import,Export,View,asc_Space_NamedSpace,asc_Space_NamedFile,Space,File])
@@ -283,7 +369,13 @@ class _generic_filedb_interface(Interface_Base):
 
     
     @IO.Put(router,'/upload')
-    def upload(self, local_e, foreign_e, req_or_ws, **payload): #get
+    def upload_file(self, local_e, foreign_e, req_or_ws, file:UploadFile, **payload): #get
+        assert self.parent.TableType in [File, asc_Space_NamedFile]
+        with Active_Session_As(local_e.get_file_db_session):
+            return header_interface.upload(self.parent.TableType, **payload)
+        
+    @IO.Put(router,'/upload')
+    def upload(self, local_e, foreign_e, req_or_ws, file:UploadFile, **payload): #get
         with Active_Session_As(local_e.get_file_db_session):
             return header_interface.upload(self.parent.TableType, **payload)
 
