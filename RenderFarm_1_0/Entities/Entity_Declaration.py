@@ -12,7 +12,7 @@ from sqlalchemy                     import (Column, Boolean, ForeignKey, Integer
 from sqlalchemy.orm                 import (declarative_base, relationship, sessionmaker, Mapped, mapped_column ,Session as SessionType)
 
 from .Job_Database_Model            import Base as Job_DB_Model
-from ..File_Management              import Base as File_DB_Model
+from .FileDB                        import Base as File_DB_Model
 
 from .Statics                       import Entity_Types, Trust_States, Connection_States, ActionState_Message_Actions
 

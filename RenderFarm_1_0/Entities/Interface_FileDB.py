@@ -1,23 +1,24 @@
-from fastapi                        import (Request, Response, APIRouter, WebSocket as WebSocketManager, UploadFile)
-from starlette.websockets           import WebSocketDisconnect as WebSocketDisconnect_M 
-from ws4py.client.threadedclient    import WebSocketClient 
+from fastapi                           import (Request, Response, APIRouter, WebSocket as WebSocketManager, UploadFile, Form, File as fapi_File)
+from fastapi.responses                 import FileResponse, HTMLResponse
+# from starlette.websockets              import WebSocketDisconnect as WebSocketDisconnect_M 
+# from ws4py.client.threadedclient       import WebSocketClient 
 
-from .EventSystem.Struct_Pub_Sub_v1_2          import Event_Router
-from ..Web_Interface.API_V1_8       import (Foreign_Entity_Base, Local_Entity_Base, Interface_Base, IO)
-from ..Web_Interface.Websocket_Pool import Manager_Websocket_Wrapper_Simul_Default
-from .Messsages import make_message, intake_message
+from .EventSystem.Struct_Pub_Sub_v1_2  import Event_Router
+from ..Web_Interface.API_V1_8          import (Foreign_Entity_Base, Local_Entity_Base, Interface_Base, IO)
+from ..Web_Interface.Websocket_Pool    import Manager_Websocket_Wrapper_Simul_Default
+
+from .Messsages                        import make_message, intake_message
+from .Statics                          import Message_Topics, Admin_Message_Actions, FILEDB_Message_Actions, FILEDB_Message_Tables
+
+from .FileDB.db_repo_V1_1              import file_utils
+from .FileDB.db_struct                 import User,Session,Import,Export,View,asc_Space_NamedSpace,asc_Space_NamedFile,Space,File
+from .FileDB.FileHashing               import uuid_utils, file_utils as _file_utils
+
+from functools  import partial
+from typing     import TypeAlias
+
 import asyncio
-from enum import EnumType,Enum
-from inspect import isclass
-from copy import copy
-from functools import partial
 
-from .Statics import Message_Topics, Admin_Message_Actions, FILEDB_Message_Actions, FILEDB_Message_Tables
-
-from ..File_Management.db_repo_V1_1 import file_utils
-from ..File_Management.db_struct import User,Session,Import,Export,View,asc_Space_NamedSpace,asc_Space_NamedFile,Space,File
-from ..File_Management.FileHashing import uuid_utils, file_utils as _file_utils
-from typing import TypeAlias
 
 AnyTableType : TypeAlias = User|Session|Import|Export|View|asc_Space_NamedSpace|asc_Space_NamedFile|Space|File
 
@@ -50,9 +51,8 @@ transaction = _transaction._wrapper
 from contextlib  import contextmanager
 from contextvars import ContextVar
 
-Active_Session = ContextVar('active_file_db_session',default = None)
-
-file_utils : _file_utils = ContextVar('active_file_utilities_inst', default= None)
+file_utils      : _file_utils = ContextVar('active_file_utilities_inst', default= None)
+Active_Session                = ContextVar('active_file_db_session',default = None)
 
 @contextmanager
 def Active_file_utils_As(utils:_file_utils):
@@ -65,6 +65,12 @@ def Active_Session_As(engine):
     t = Active_Session.set(engine)
     yield
     Active_Session.reset(t)    
+
+@contextmanager
+def set_context(local_e):
+    with Active_Session_As(local_e.get_file_db_session), Active_file_utils_As(local_e.settings.FileDBSettings.fileutils):
+        yield
+
 
 class _header_interface():
     def _update(self,table,row_item,data:dict):
@@ -230,13 +236,11 @@ class _header_interface():
             if filerow:=self.find(File,data_hash):
                 if fp:=file_utils.get().file_on_server(filerow):
                     print(f'WARNING! FILE WITH DATA_HASH {data_hash} ALREADY UPLOADED AND ON DISC AT {fp}, DUMPING AND RETURING ON_DISC')
-                    del file
+                    if isinstance(file, UploadFile): await file.close()
                     return filerow
         
-        if isinstance(file, UploadFile):
-            data_hash = uuid_utils.get_bytearray_hash(file.file)
-        else:
-            data_hash = uuid_utils.get_bytearray_hash(file)
+        if isinstance(file, UploadFile): data_hash = uuid_utils.get_bytearray_hash(file.file)
+        else:                            data_hash = uuid_utils.get_bytearray_hash(file)
         
         if _mdata_hash:= metadata.get('data_hash',None):
             if data_hash != _mdata_hash:
@@ -245,11 +249,13 @@ class _header_interface():
 
         if (filerow:=self.find(File,data_hash)) is None: filerow = File()
         elif fp:=file_utils.get().file_on_server(filerow): 
+            if isinstance(file, UploadFile): await file.close()
             print(f'WARNING! FILE WITH DATA_HASH {data_hash} ALREADY UPLOADED AND ON DISC AT {fp}, DUMPING AND RETURING ON_DISC')
             return filerow
         
         if isinstance(file, UploadFile):
             await file_utils.get().dump_bytearray(file.file, data_hash=data_hash)
+            await file.close()
         else:
             await file_utils.get().dump_bytearray(file,      data_hash=data_hash)
 
@@ -291,6 +297,7 @@ class _header_interface():
 header_interface = _header_interface()
 
 
+    
 class _generic_filedb_interface(Interface_Base):
     Base   : None
     router = APIRouter()       
@@ -298,92 +305,117 @@ class _generic_filedb_interface(Interface_Base):
     #ALL:
     # @IO.Get(router,'/raw_table')
     # def raw_data(self, local_e, foreign_e, req_or_ws, uid):  #Get
-    #     with Active_Session_As(local_e.get_file_db_session):
+    #     with set_context(local_e):
     #         self.parent.TableType._template_id #DEFER: Links to other tables by type? Websocket stream tables?
 
     # @IO.Get(router,'/raw_data/{uid}')
     # def raw_data(self, local_e, foreign_e, req_or_ws, uid):  #Get
-    #     with Active_Session_As(local_e.get_file_db_session):
+    #     with set_context(local_e):
     #         return  header_interface.find(self.parent.TableType, uid)._as_link_dict() #DEFER: Links to other tables by type?
 
     @IO.Get(router,'/query')
     def query(self, local_e, foreign_e, req_or_ws, **payload):  #Get
-        with Active_Session_As(local_e.get_file_db_session):
+        with set_context(local_e):
             return [x.uid for x in header_interface.query(self.parent.TableType,**payload)]
     
     @IO.Get(router,'/find')
     def find(self, local_e, foreign_e, req_or_ws, **payload):  #Get
-        with Active_Session_As(local_e.get_file_db_session):
+        with set_context(local_e):
             return header_interface.find(self.parent.TableType, **payload).uid
 
     @IO.Get(router,'/table')
     def data(self, local_e, foreign_e, req_or_ws, **payload):  #Get
-        with Active_Session_As(local_e.get_file_db_session):
+        with set_context(local_e):
             return header_interface.data(self.parent.TableType, **payload)
 
     @IO.Post(router,'/table')
     def create(self, local_e, foreign_e, req_or_ws, **payload): #Post
-        with Active_Session_As(local_e.get_file_db_session):
+        with set_context(local_e):
             return header_interface.create(self.parent.TableType, **payload)
 
     @IO.Patch(router,'/table')
     def update(self, local_e, foreign_e, req_or_ws, **payload): #Patch
-        with Active_Session_As(local_e.get_file_db_session):
+        with set_context(local_e):
             return header_interface.update(self.parent.TableType, **payload)
 
     @IO.Delete(router,'/table')
     def delete(self, local_e, foreign_e, req_or_ws, **payload): #Delete
-        with Active_Session_As(local_e.get_file_db_session):
+        with set_context(local_e):
             return header_interface.delete(self.parent.TableType, **payload)
 
     #VIEW | EXPORT | SESSION
     @IO.Post(router,'/open')
     def open(self, local_e, foreign_e, req_or_ws, **payload): #post
-        with Active_Session_As(local_e.get_file_db_session):
+        with set_context(local_e):
             return header_interface.open(self.parent.TableType, **payload)
 
     @IO.Post(router,'/close')
     def close(self, local_e, foreign_e, req_or_ws, **payload): #post
-        with Active_Session_As(local_e.get_file_db_session):
+        with set_context(local_e):
             return header_interface.close(self.parent.TableType, **payload)
             
     #VIEW | EXPORT | SESSION -> FILE | SPACE
     @IO.Post(router,'/cleanup')
     def cleanup(self, local_e, foreign_e, req_or_ws, **payload): #post
-        with Active_Session_As(local_e.get_file_db_session):
+        with set_context(local_e):
             return header_interface.cleanup(self.parent.TableType, **payload)
 
     @IO.Post(router,'/expose')
     def expose(self, local_e, foreign_e, req_or_ws, **payload): #post
-        with Active_Session_As(local_e.get_file_db_session):
+        with set_context(local_e):
             return header_interface.expose(self.parent.TableType, **payload)
 
     @IO.Get(router,'/diff')
     def diff(self, local_e, foreign_e, req_or_ws, **payload): #get
-        with Active_Session_As(local_e.get_file_db_session):
+        with set_context(local_e):
             return header_interface.diff(self.parent.TableType, **payload)
 
     @IO.Get(router,'/diff_future_space')
     def diff_future_space(self, local_e, foreign_e, req_or_ws, struct): #get
-        with Active_Session_As(local_e.get_file_db_session):
+        with set_context(local_e):
             return header_interface.diff_future_space(self.parent.TableType, struct)
 
     
     @IO.Put(router,'/upload')
-    def upload_file(self, local_e, foreign_e, req_or_ws, file:UploadFile, **payload): #get
-        assert self.parent.TableType in [File, asc_Space_NamedFile]
-        with Active_Session_As(local_e.get_file_db_session):
-            return header_interface.upload(self.parent.TableType, **payload)
-        
-    @IO.Put(router,'/upload')
-    def upload(self, local_e, foreign_e, req_or_ws, file:UploadFile, **payload): #get
-        with Active_Session_As(local_e.get_file_db_session):
-            return header_interface.upload(self.parent.TableType, **payload)
+    def upload_file(self, local_e, foreign_e, req_or_ws, file:UploadFile, metadata:dict={}): #get
+        assert self.parent.TableType is File
+        with set_context(local_e):
+            return header_interface.upload_file( file, metadata)
 
+    @IO.Put(router,'/upload_form')
+    def upload_file_with_form(self, local_e, foreign_e, req_or_ws, file : UploadFile, filename:str = None):        
+        assert self.parent.TableType is File
+
+
+        with set_context(local_e):
+            if filename:
+                return header_interface.upload_file(file, {'name':filename} )
+            else:
+                return header_interface.upload_file(file )
+        
     @IO.Get(router,'/download')
-    def download(self, local_e, foreign_e, req_or_ws, **payload): #get
-        with Active_Session_As(local_e.get_file_db_session):
-            return header_interface.download(self.parent.TableType, **payload)
+    def download(self, local_e, foreign_e, req_or_ws, id): #get
+        assert self.parent.TableType in [File,asc_Space_NamedFile]
+        with set_context(local_e):
+            res_row = header_interface.find(self.parent.TableType, id)
+            if not res_row: return 404
+
+            if isinstance(res_row, File):
+                path=file_utils.get().file_on_disc(res_row.id)
+                return FileResponse(path=path, filename=path, media_type='binary/blob')
+            
+            if isinstance(res_row, asc_Space_NamedFile):
+                path=file_utils.get().file_on_disc(res_row.cFile.id)
+                return FileResponse(path=path, filename=res_row.cName, media_type='binary/blob')
+
+            # res = header_interface.download(self.parent.TableType, id)
+
+        
+    # @IO.Put(router,'/upload')
+    # def upload(self, local_e, foreign_e, req_or_ws, file:UploadFile, **payload): #get
+    #     with set_context(local_e):
+    #         return header_interface.upload(self.parent.TableType, **payload)
+
 
 
 class USER_interface(Interface_Base):
