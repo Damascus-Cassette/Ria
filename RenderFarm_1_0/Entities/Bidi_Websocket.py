@@ -8,6 +8,9 @@ from .Websocket_Messsage import make_message, intake_message
 from ..Web_Interface.API_V1_8 import Interface_Base, IO
 import asyncio
 
+from .ClientDB_Common import ClientDb_c_Engine, ClientDb_c_session, ClientDb_c_savepoint, ClientDB_Transaction, ClientDB_Session_CM 
+
+
 Entity_Enums       : TypeAlias = None # Message_Topics.MANAGER_STATE|Message_Topics.WORKER_STATE|Message_Topics.CLIENT_STATE
 Action_Enums       : TypeAlias = None # Message_Topics.JOB|Message_Topics.TASK|Message_Topics.GRAP|Message_Topics.CACHE
 Action_State_Enums : TypeAlias = None # Message_Topics.JOB_STATE|Message_Topics.TASK_STATE|Message_Topics.GRAPH_STATE|Message_Topics.CACHE_STATE 
@@ -65,12 +68,13 @@ class message_websocket_common():
             
             case _: raise Exception('') 
 
-    async def closed(self, connection, reason):
+    @ClientDB_Transaction()
+    async def closed(self, session, connection, reason):
         if str(reason).startswith('4'):
             self.local_entity.bidi_commands.OBSERVE_Entity_Con_State(self.foreign_entity,Connection_States.ERROR)
         else:
             self.local_entity.bidi_commands.OBSERVE_Entity_Con_State(self.foreign_entity,Connection_States.CLOSED)
-        self.local_entity.client_db_session.commit()
+        session.commit()
 
     def attach_message(self,*args,**kwargs):
         self.buffer.attach(make_message(*args,**kwargs))
@@ -100,10 +104,11 @@ class message_commands_common():
     def OBSERVE_Action_State(self, websocket, other_e:Foreign_Entity_Base, id:str, topic:Action_State_Enums   , action:ActionState_Message_Actions , payload): ...
         #Websocket passed in to allow for immediate or bufferred events.
 
-    def OBSERVE_Entity_Con_State(self, other_e, value):
+    @ClientDB_Transaction()
+    def OBSERVE_Entity_Con_State(self,session, other_e, value):
         assert isinstance(value, Connection_States)
         other_e.con_state = value
-        self.local_entity.client_db_session.commit()
+        session.commit()
 
 class Message_Commands_Manager(message_commands_common):...
 class Message_Commands_Client(message_commands_common ):...

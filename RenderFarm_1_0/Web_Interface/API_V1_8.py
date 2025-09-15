@@ -343,6 +343,7 @@ class Interface_Base():
             if k.startswith('_'): continue
             v = getattr(self.__class__,k,None)
             if isinstance(v,IO):
+                print('registering',v,v.func)
                 v._register(self,local_entity)
         
         for v in Interface_Base._iter_insts(self):

@@ -1,6 +1,10 @@
 
 from sqlalchemy.orm import Session
 
+from contextlib import contextmanager
+from contextvars import ContextVar
+from functools import partial, wraps
+
 @contextmanager
 def session_cm(c_engine,c_session:ContextVar, c_savepoint:ContextVar, commit = True):
     #Note: With a continuous connection this becomes in mem only!
@@ -22,7 +26,7 @@ def session_cm(c_engine,c_session:ContextVar, c_savepoint:ContextVar, commit = T
 
         else:
             print('Creating New Session!')
-            session = Session(bind=engine.get(), expire_on_commit = False)
+            session = Session(bind=c_engine.get(), expire_on_commit = False)
             token_1 = c_session.set(session)
             
             yield session
@@ -48,7 +52,7 @@ def session_cm(c_engine,c_session:ContextVar, c_savepoint:ContextVar, commit = T
             c_session.reset(token_1)
             c_session.set(None)
 
-class _transaction(c_session):
+class _transaction():
     ''' Placeholder for future complex use. I dont remember exactly why I wanted this before'''
     def __init__(self,func, c_engine, c_session_var,c_savepoint_var, filter=None):
         self.func   = func
@@ -60,15 +64,15 @@ class _transaction(c_session):
     def __get__(self,inst,inst_cls):
         if inst is None:
             return self
-        return partial(self, inst)
-        # return wraps(self.func)(partial(self, inst))
+        # return partial(self, inst)
+        return wraps(self.func)(partial(self, inst))
     
     def __call__(self, inst, *args, **kwargs):
         with session_cm(self.c_engine, self.c_session_var, self.c_savepoint_var) as session:
             return self.func(inst, session, *args, **kwargs)
 
     @classmethod
-    def _wrapper(cls, c_engine, c_session_var:ContextVar, c_savepoint_var:ContextVar, filter=None):
+    def _wrapper(cls, c_engine:ContextVar, c_session_var:ContextVar, c_savepoint_var:ContextVar, filter=None):
         def wrapper(func):
             return cls(func, c_engine, c_session_var, c_savepoint_var, filter=filter)
         return wrapper

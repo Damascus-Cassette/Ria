@@ -42,14 +42,13 @@ from typing import Any
 
 Client_DB_Model = declarative_base()
 
-from .DB_Interface_Common import _transaction
+from functools import partial
+from contextvars import ContextVar
 
+from .ClientDB_Common import ClientDb_c_Engine, ClientDb_c_session, ClientDb_c_savepoint, ClientDB_Transaction, ClientDB_Session_CM 
 
-ClientDb_c_Engine    = ContextVar('ClientDb_c_Engine' , default = None) 
-ClientDb_c_session   = ContextVar('JobDb_c_session'   , default = None) 
-ClientDb_c_savepoint = ContextVar('JobDb_c_savepoint' , default = None)     
-ClientDB_Transaction = partial(_transaction._wrapper, ClientDb_c_Engine, FileDB_c_session, FileDB_c_savepoint)
-
+from .Interface_FileDB   import FileDB_c_Engine
+from .Job_Database_Model import JobDb_c_Engine
 
 class Local_Common():
 
@@ -69,11 +68,11 @@ class Local_Common():
             print('GOT ROLE:', incoming_role)
         else:
             table = UNDEC_Foreign
-        rows = self.session.query(table).all()
+        rows = session.query(table).all()
         for row in rows:
             if row.matches_request(request, request.headers):
                 row.intake_request(request, request.headers)
-                self.session.commit()
+                session.commit()
                 return row
             
         new_row = table.New_From_Request(self,request)
@@ -166,17 +165,17 @@ class Manager_Local(Local_Common,Local_Entity_Base):
 
 
 
-    File_DB_Engine    : EngineType
-    File_DB_Session   : SessionType
-    file_db_session   : SessionType
+    # File_DB_Engine    : EngineType
+    # File_DB_Session   : SessionType
+    # file_db_session   : SessionType
 
-    Job_DB_Engine     : EngineType
-    Job_DB_Session    : SessionType
-    job_db_session    : SessionType
+    # Job_DB_Engine     : EngineType
+    # Job_DB_Session    : SessionType
+    # job_db_session    : SessionType
 
-    Client_DB_Engine  : EngineType
-    Client_DB_Session : SessionType
-    client_db_session : SessionType
+    # Client_DB_Engine  : EngineType
+    # Client_DB_Session : SessionType
+    # client_db_session : SessionType
     
 
     def __init__(self, settings_loc:str='./manger_settings.yaml'):
@@ -206,18 +205,10 @@ class Manager_Local(Local_Common,Local_Entity_Base):
         settings = self.settings.client_db
         db_url = settings.db_standard + settings.db_loc._swapped_slash_dir
         settings.db_loc.ensure_dir()
-        # raise Exception(db_url)
-        self.Client_DB_Engine  = create_engine(db_url)
-        self.Client_DB_Session = sessionmaker(bind=self.Client_DB_Engine)
-        # self.file_db_session = self.Session()
+        ClientDb_c_Engine.set(create_engine(db_url))
         set_listeners_on_tables(list(Client_DB_Model.__subclasses__()), self.events)
-        Client_DB_Model.metadata.create_all(self.Client_DB_Engine)
-        #self.services_pool.Extend(Client_DB_Services)
-        #self.event_handler.Extend(Client_DB_Events  )
+        Client_DB_Model.metadata.create_all(ClientDb_c_Engine.get())
 
-        self.session           = self.Client_DB_Session()
-        self.client_db_session = self.session
-        #HACK. Change to make contextual database sessions as per good practice
 
     def settup_file_db(self,):
         ''' The database-storage that handles Files and similar '''
@@ -228,14 +219,11 @@ class Manager_Local(Local_Common,Local_Entity_Base):
         db_url = settings.db_standard + settings.db_loc._swapped_slash_dir
         settings.db_loc.ensure_dir()
         
-        self.File_DB_Engine  = create_engine(db_url)
-        self.File_DB_Session = sessionmaker(bind=self.File_DB_Engine)
-        # self.file_db_session = self.Session()
+        FileDB_c_Engine.set(create_engine(db_url))
+
         set_listeners_on_tables(list(File_DB_Model.__subclasses__()), self.events)
-        File_DB_Model.metadata.create_all(self.File_DB_Engine)
-        from .Interface_FileDB import c_session
-        self.file_db_session = self.File_DB_Session()        
-        Active_Session.set(self.file_db_session)
+        File_DB_Model.metadata.create_all(FileDB_c_Engine.get())
+
 
     def settup_job_db(self,):
         ''' The local Job database-storage that handles each task and working files. '''
@@ -246,13 +234,11 @@ class Manager_Local(Local_Common,Local_Entity_Base):
         db_url = settings.db_standard + settings.db_loc._swapped_slash_dir
         settings.db_loc.ensure_dir()
     
-        self.Job_DB_Engine  = create_engine(db_url)
-        self.Job_DB_Session = sessionmaker(bind=self.Job_DB_Engine)
-        # self.file_db_session = self.Session()
-        set_listeners_on_tables(list(Job_DB_Model.__subclasses__()), self.events)
-        Job_DB_Model.metadata.create_all(self.Job_DB_Engine)
+        JobDb_c_Engine.set(create_engine(db_url))
         
-        self.job_db_session = self.Job_DB_Session()        
+
+        set_listeners_on_tables(list(Job_DB_Model.__subclasses__()), self.events)
+        Job_DB_Model.metadata.create_all(JobDb_c_Engine.get())
 
 from fastapi import FastAPI
 

@@ -191,8 +191,13 @@ def factory(tables,mixins):
 
 Base = factory(tables,{})
 
+from contextvars import ContextVar
+from functools import partial
+
+JobDb_c_Engine    = ContextVar('JobDb_c_Engine',   default = None) 
 JobDb_c_session   = ContextVar('JobDb_c_session'  ,default = None) 
 JobDb_c_savepoint = ContextVar('JobDb_c_savepoint',default = None) 
     
-from .DB_Interface_Common import _transaction
-transaction = partial(Base, _transaction._wrapper, FileDB_c_session, FileDB_c_savepoint)
+from .DB_Interface_Common import _transaction, session_cm
+JobDb_c_transaction = partial(_transaction._wrapper, JobDb_c_Engine, JobDb_c_session, JobDb_c_savepoint)
+JobDb_Session_CM    = partial(session_cm, JobDb_c_Engine, JobDb_c_session, JobDb_c_savepoint)

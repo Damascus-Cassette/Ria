@@ -28,15 +28,15 @@ AnyTableType : TypeAlias = User|Session|Import|Export|View|asc_Space_NamedSpace|
 from contextlib  import contextmanager
 from contextvars import ContextVar
 
+from .DB_Interface_Common import _transaction, session_cm
 
 FileDB_c_Engine    = ContextVar('FileDB_c_Engine'  ,default = None) 
 FileDB_c_session   = ContextVar('FileDB_c_session'  ,default = None) 
 FileDB_c_savepoint = ContextVar('FileDB_c_savepoint',default = None) 
 file_utils         = ContextVar('FileDB_c_file_utils', default= None)
     
-from .DB_Interface_Common import _transaction
-transaction = partial(_transaction._wrapper, FileDB_c_Engine, FileDB_c_session, FileDB_c_savepoint)
-
+FileDB_transaction = partial(_transaction._wrapper, FileDB_c_Engine, FileDB_c_session, FileDB_c_savepoint)
+FileDB_Session_CM  = partial(session_cm, FileDB_c_Engine ,FileDB_c_session ,FileDB_c_savepoint)
 
 class _header_interface():
     def _update(self,table,row_item,data:dict):
@@ -46,11 +46,11 @@ class _header_interface():
             else:
                 raise KeyError(f'K:V {k}:{v} IS NOT ALLOWED TO BE SET ON {table}')
 
-    @transaction()
+    @FileDB_transaction()
     def find[T:AnyTableType](self,session, table:T, item_id:str)->T:  #Get
         return session.query(table).filter(table.id == item_id).first()
 
-    @transaction()
+    @FileDB_transaction()
     def query(self,session, table, **defintions):  #Get
         return session.query(table).all(**defintions)
 
@@ -87,7 +87,7 @@ class _header_interface():
         return new
     
 
-    @transaction()
+    @FileDB_transaction()
     def create(self,session, table, **payload): #Post 
         if   table is Import:
             val = self._create_import_export(table,**payload)
@@ -102,11 +102,11 @@ class _header_interface():
         session.add(val)
         return val
     
-    @transaction()
+    @FileDB_transaction()
     def update(self,session, table, target_row, **payload): #Patch
         self._update(target_row,payload)
     
-    @transaction()
+    @FileDB_transaction()
     def delete(self,session, table, target_row, **payload): #Delete
         session.remove(target_row)
 
@@ -120,18 +120,18 @@ class _header_interface():
 
 
     #SESSION
-    @transaction(filter = lambda x: x is Session)
+    @FileDB_transaction(filter = lambda x: x is Session)
     def open(self, table, target_row):
         target_row.isOpen = True
 
-    @transaction(filter = lambda x: x is Session)
+    @FileDB_transaction(filter = lambda x: x is Session)
     def close(self, table, target_row):
         target_row.isFalse = True
 
 
     #VIEW | IMPORT | EXPORT | NAMEDSPACE | NAMEDFILE -> SPACE | FILE
 
-    @transaction(filter = lambda x: x in [Import,Export,View,asc_Space_NamedSpace,asc_Space_NamedFile,Space,File])
+    @FileDB_transaction(filter = lambda x: x in [Import,Export,View,asc_Space_NamedSpace,asc_Space_NamedFile,Space,File])
     def expose(self, table, target_row, **payload): 
         raise NotImplementedError('TODO: PORT FROM ORIGINAL')
 
@@ -140,7 +140,7 @@ class _header_interface():
 
 
     #VIEW | IMPORT | EXPORT | NAMEDSPACE | NAMEDFILE -> SPACE
-    # @transaction(filter = lambda x: x in [Import,Export,View,asc_Space_NamedSpace,asc_Space_NamedFile,Space,File])
+    # @FileDB_transaction(filter = lambda x: x in [Import,Export,View,asc_Space_NamedSpace,asc_Space_NamedFile,Space,File])
 
     def diff_future(self, files:list[str], spaces:list[str])->list: #get
         ''' Determine elements that need to be uploaded by hash diff'''
@@ -154,7 +154,7 @@ class _header_interface():
                 need_hashes.append( key)
         return need_hashes
 
-    # @transaction()
+    # @FileDB_transaction()
     def create_named_file_from_structure(self,session, structure:dict, pspace_id):  #requered for search.
         ''' Non-Transactional as it requires a parent '''
         if (nfile:=self.find(File, structure['full_hash'])) is not None: return nfile
@@ -166,7 +166,7 @@ class _header_interface():
         nfile.cFile = file
         return nfile
 
-    @transaction()
+    @FileDB_transaction()
     def create_named_space_from_structure(self,session, structure:dict, pspace_id)->asc_Space_NamedSpace:
         ''' Non-Transactional as it requires a parent '''
         if (nspace:=self.find(asc_Space_NamedSpace, structure['full_hash'])) is not None: return nspace
@@ -178,7 +178,7 @@ class _header_interface():
         session.add(nspace)
         return nspace
 
-    @transaction()
+    @FileDB_transaction()
     def create_space_from_structure(self,session, structure):
         ''' Requires that all files to already be uploaded !!! '''
         file_children  = []
@@ -200,7 +200,7 @@ class _header_interface():
         session.add(space)
         return space
     
-    @transaction()
+    @FileDB_transaction()
     async def upload_file(self,session, file:UploadFile|bytearray, metadata:dict={})->File:
         if data_hash:=metadata.get('data_hash'):
             if filerow:=self.find(File,data_hash):
@@ -250,7 +250,7 @@ class _header_interface():
     #     Active_Session.get().append(container)
         
     
-    @transaction(filter = lambda x: x in [Import,Export,View,asc_Space_NamedSpace,asc_Space_NamedFile,Space,File])
+    @FileDB_transaction(filter = lambda x: x in [Import,Export,View,asc_Space_NamedSpace,asc_Space_NamedFile,Space,File])
     def upload(self,table, **payload): #Put
         #CASE: VIEW | IMPORT | EXPORT | NAMEDSPACE | NAMEDFILE: Create and then upload to container entity types
         if   table is File:
@@ -411,15 +411,15 @@ class  FileDB_Interface(Interface_Base):
         assert table in [File,asc_Space_NamedFile]
         res_row = header_interface.find(table, id)
         
-            if not res_row: return 404
+        if not res_row: return 404
 
-            if isinstance(res_row, File):
-                path=file_utils.get().file_on_disc(res_row.id)
-                return FileResponse(path=path, filename=path, media_type='binary/blob')
-            
-            if isinstance(res_row, asc_Space_NamedFile):
-                path=file_utils.get().file_on_disc(res_row.cFile.id)
-                return FileResponse(path=path, filename=res_row.cName, media_type='binary/blob')
+        if isinstance(res_row, File):
+            path=file_utils.get().file_on_disc(res_row.id)
+            return FileResponse(path=path, filename=path, media_type='binary/blob')
+        
+        if isinstance(res_row, asc_Space_NamedFile):
+            path=file_utils.get().file_on_disc(res_row.cFile.id)
+            return FileResponse(path=path, filename=res_row.cName, media_type='binary/blob')
 
             # res = header_interface.download(table, id)
 
