@@ -36,6 +36,8 @@ c_savepoint = ContextVar('FileDB_c_savepoint',default = None)
 
 @contextmanager
 def session_cm(commit = True):
+    #Note: With a continuous connection this becomes in mem only!
+    #Need to make a factory and distributed across interfaces
 
     ongoing_session = Active_Session.get()
 
@@ -64,8 +66,6 @@ def session_cm(commit = True):
             else: 
                 session.rollback()
                 
-                
-            
     except:
         if ongoing_session:
             _savepoint.rollback() 
@@ -287,7 +287,6 @@ class _header_interface():
     
     @transaction()
     async def upload_file(self,session, file:UploadFile|bytearray, metadata:dict={})->File:
-
         if data_hash:=metadata.get('data_hash'):
             if filerow:=self.find(File,data_hash):
                 if fp:=file_utils.get().file_on_server(filerow):

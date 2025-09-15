@@ -169,12 +169,22 @@ class Folder_Object():
             if isinstance(x,File_Object):
                 yield x
 
+    def iter_all_first_matching_files(self,filter):
+        yielded = []
+        for x in self.iter_all_unique_files():
+            dh = x.data_hash
+            if (dh in filter) and (dh not in yielded):
+                yielded.append(x.data_hash)
+                yield x
+            
+
     def iter_all_unique_folders(self):
         assert hasattr(self, 'real_path_dedup') #is root object
         for x in self.real_path_dedup.values():
             if isinstance(x,Folder_Object):
                 yield x
             
+    
 
 
 class File_Object():

@@ -163,8 +163,27 @@ class Manager_Interface_Info(Interface_Base):
         
         unheld = header_interface.diff_future(struct.get_unique_file_datahash_list(),[])
         return unheld
+    
+    @IO.Get(router,'/tests/teste')
+    def test_e(self, this_e, other_e, req,):
+        dp = this_e.settings._test_upload_files.data
+        from .FileDB.FileHashing import uuid_utils
+        
+        struct = uuid_utils.create_structure(dp)        
+        struct.calculate_file_hashes()
+        from .Interface_FileDB import header_interface
 
-                
+        from .FileDB.db_struct import File,Space,asc_Space_NamedFile, asc_Space_NamedSpace
+        
+        unheld = header_interface.diff_future(struct.get_unique_file_datahash_list(),[])
+        
+        new_rows = []
+        for x in struct.iter_all_first_matching_files(unheld):
+            with open(x.real_path,'rb') as f:
+                new_rows.append(asyncio.run(header_interface.upload_file(f, metadata = {'data_hash' : x.data_hash})).id)
+        return new_rows
+
+    
         
     
 
