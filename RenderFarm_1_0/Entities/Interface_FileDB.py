@@ -469,13 +469,6 @@ class  FileDB_Interface(Interface_Base):
         table=self.get_table[TABLENAME]
         with set_context(local_e):
             return header_interface.diff(table, **payload)
-
-    @IO.Get(router,'/{TABLENAME}/diff_future_space')
-    def diff_future_space(self, local_e, foreign_e, req_or_ws, TABLENAME, struct): #get
-        table=self.get_table[TABLENAME]
-        with set_context(local_e):
-            return header_interface.diff_future_space(table, struct)
-
     
     @IO.Put(router,'/{TABLENAME}/upload')
     async def upload_data_indv(self, local_e, foreign_e, req_or_ws, TABLENAME, file:UploadFile, metadata:dict={}): #get

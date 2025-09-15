@@ -161,7 +161,7 @@ class Manager_Interface_Info(Interface_Base):
 
         from .FileDB.db_struct import File,Space,asc_Space_NamedFile, asc_Space_NamedSpace
         
-        unheld = header_interface.diff_future(struct.get_file_datahash_list(),[])
+        unheld = header_interface.diff_future(struct.get_unique_file_datahash_list(),[])
         return unheld
 
                 
