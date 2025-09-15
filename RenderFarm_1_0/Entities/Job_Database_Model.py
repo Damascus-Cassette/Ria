@@ -190,3 +190,9 @@ def factory(tables,mixins):
     return Base
 
 Base = factory(tables,{})
+
+JobDb_c_session   = ContextVar('JobDb_c_session'  ,default = None) 
+JobDb_c_savepoint = ContextVar('JobDb_c_savepoint',default = None) 
+    
+from .DB_Interface_Common import _transaction
+transaction = partial(Base, _transaction._wrapper, FileDB_c_session, FileDB_c_savepoint)

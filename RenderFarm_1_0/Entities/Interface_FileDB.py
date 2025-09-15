@@ -14,7 +14,7 @@ from .FileDB.db_repo_V1_1              import file_utils
 from .FileDB.db_struct                 import User,Session,Import,Export,View,asc_Space_NamedSpace,asc_Space_NamedFile,Space,File
 from .FileDB.FileHashing               import uuid_utils, file_utils as _file_utils
 
-from functools  import partial
+from functools  import partial, wraps
 from typing     import TypeAlias
 
 from starlette.datastructures import UploadFile as star_Upload_File
@@ -28,101 +28,14 @@ AnyTableType : TypeAlias = User|Session|Import|Export|View|asc_Space_NamedSpace|
 from contextlib  import contextmanager
 from contextvars import ContextVar
 
-file_utils      : _file_utils = ContextVar('active_file_utilities_inst', default= None)
-Active_Session                = ContextVar('active_file_db_session',default = None) 
-    #Such a dirty hack
 
-c_savepoint = ContextVar('FileDB_c_savepoint',default = None) 
-
-@contextmanager
-def session_cm(commit = True):
-    #Note: With a continuous connection this becomes in mem only!
-    #Need to make a factory and distributed across interfaces
-
-    ongoing_session = Active_Session.get()
-
-    try:
-        if ongoing_session:
-            print('Creating New Savepoint!')
-            _savepoint = ongoing_session.begin_nested()
-            token2 = c_savepoint.set(_savepoint)
-            yield ongoing_session
-
-            if commit: 
-                _savepoint.commit()
-            else:      
-                _savepoint.rollback()
-
-        else:
-            print('Creating New Session!')
-            session = Session(bind=self.engine, expire_on_commit = False)
-            token_1 = Active_Session.set(session)
-            
-            yield session
-            
-            if commit: 
-                session.commit()
-                session.close()
-            else: 
-                session.rollback()
-                
-    except:
-        if ongoing_session:
-            _savepoint.rollback() 
-        else:
-            session.rollback()  
-            session.close()
-        raise
-
-    finally:
-        if ongoing_session:
-            c_savepoint.reset(token2)
-        else:
-            Active_Session.reset(token_1)
-            # Active_Session.set(None)
-
-class _transaction():
-    ''' Placeholder for future complex use. I dont remember exactly why I wanted this before'''
-    def __init__(self,func,filter=None):
-        self.func   = func
-        self.filter = filter
-
-    def __get__(self,inst,inst_cls):
-        if inst is None:
-            return self
-        return partial(self, inst)
+FileDB_c_Engine    = ContextVar('FileDB_c_Engine'  ,default = None) 
+FileDB_c_session   = ContextVar('FileDB_c_session'  ,default = None) 
+FileDB_c_savepoint = ContextVar('FileDB_c_savepoint',default = None) 
+file_utils         = ContextVar('FileDB_c_file_utils', default= None)
     
-    def __call__(self, inst, *args, **kwargs):
-        with session_cm():
-            return self.func(inst, Active_Session.get(), *args, **kwargs)
-
-    @classmethod
-    def _wrapper(cls, filter=None):
-        def wrapper(func):
-            return cls(func,filter=filter)
-        return wrapper
-    
-transaction = _transaction._wrapper
-
-
-    #Set by manager-enc
-
-@contextmanager
-def Active_file_utils_As(utils:_file_utils):
-    t = file_utils.set(utils)
-    yield
-    file_utils.reset(t)    
-
-@contextmanager
-def Active_Session_As(engine):
-    t = Active_Session.set(engine)
-    yield
-    Active_Session.reset(t)    
-
-@contextmanager
-def set_context(local_e):
-    with Active_Session_As(local_e.file_db_session):
-        yield
+from .DB_Interface_Common import _transaction
+transaction = partial(_transaction._wrapper, FileDB_c_Engine, FileDB_c_session, FileDB_c_savepoint)
 
 
 class _header_interface():
@@ -133,11 +46,13 @@ class _header_interface():
             else:
                 raise KeyError(f'K:V {k}:{v} IS NOT ALLOWED TO BE SET ON {table}')
 
-    def find[T:AnyTableType](self, table:T, item_id:str)->T:  #Get
-        return Active_Session.get().query(table).filter(table.id == item_id).first()
+    @transaction()
+    def find[T:AnyTableType](self,session, table:T, item_id:str)->T:  #Get
+        return session.query(table).filter(table.id == item_id).first()
 
-    def query(self,table, **defintions):  #Get
-        return Active_Session.get().query(table).all(**defintions)
+    @transaction()
+    def query(self,session, table, **defintions):  #Get
+        return session.query(table).all(**defintions)
 
     def _create_view(self, table, session_id:str, data:dict):
         target_session = self.find(Session, session_id)
@@ -391,96 +306,96 @@ class  FileDB_Interface(Interface_Base):
     # @IO.Get(router,'/{TABLENAME}/raw_table')
     # def raw_data(self, local_e, foreign_e, req_or_ws, TABLENAME, uid):  #Get
         # table=self.get_table[TABLENAME]
-    #     with set_context(local_e):
-    #         self.parent.TableType._template_id #DEFER: Links to other tables by type? Websocket stream tables?
+#         self.parent.TableType._template_id #DEFER: Links to other tables by type? Websocket stream tables?
+    #     
 
     # @IO.Get(router,'/{TABLENAME}/raw_data/{uid}')
     # def raw_data(self, local_e, foreign_e, req_or_ws, TABLENAME, uid):  #Get
         # table=self.get_table[TABLENAME]
-    #     with set_context(local_e):
-    #         return  header_interface.find(table, uid)._as_link_dict() #DEFER: Links to other tables by type?
+#         return  header_interface.find(table, uid)._as_link_dict() #DEFER: Links to other tables by type?
+    #     
 
 
     @IO.Get(router,'/{TABLENAME}/query')
     def query(self, local_e, foreign_e, req_or_ws, TABLENAME, **payload):  #Get
         table=self.get_table[TABLENAME]
-        with set_context(local_e):
-            return [x.uid for x in header_interface.query(table,**payload)]
+        return [x.uid for x in header_interface.query(table,**payload)]
+        
     
     @IO.Get(router,'/{TABLENAME}/find')
     def find(self, local_e, foreign_e, req_or_ws, TABLENAME, **payload):  #Get
         table=self.get_table[TABLENAME]
-        with set_context(local_e):
-            return header_interface.find(table, **payload).uid
+        return header_interface.find(table, **payload).uid
+        
 
     @IO.Get(router,'/{TABLENAME}/table')
     def data(self, local_e, foreign_e, req_or_ws, TABLENAME, **payload):  #Get
         table=self.get_table[TABLENAME]
-        with set_context(local_e):
-            return header_interface.data(table, **payload)
+        return header_interface.data(table, **payload)
+        
 
     @IO.Post(router,'/{TABLENAME}/table')
     def create(self, local_e, foreign_e, req_or_ws, TABLENAME, **payload): #Post
         table=self.get_table[TABLENAME]
-        with set_context(local_e):
-            return header_interface.create(table, **payload)
+        return header_interface.create(table, **payload)
+        
 
     @IO.Patch(router,'/{TABLENAME}/table')
     def update(self, local_e, foreign_e, req_or_ws, TABLENAME, **payload): #Patch
         table=self.get_table[TABLENAME]
-        with set_context(local_e):
-            return header_interface.update(table, **payload)
+        return header_interface.update(table, **payload)
+        
 
     @IO.Delete(router,'/{TABLENAME}/table')
     def delete(self, local_e, foreign_e, req_or_ws, TABLENAME, **payload): #Delete
         table=self.get_table[TABLENAME]
-        with set_context(local_e):
-            return header_interface.delete(table, **payload)
+        return header_interface.delete(table, **payload)
+        
 
     #VIEW | EXPORT | SESSION
     @IO.Post(router,'/{TABLENAME}/open')
     def open(self, local_e, foreign_e, req_or_ws, TABLENAME, **payload): #post
         table=self.get_table[TABLENAME]
-        with set_context(local_e):
-            return header_interface.open(table, **payload)
+        return header_interface.open(table, **payload)
+        
 
     @IO.Post(router,'/{TABLENAME}/close')
     def close(self, local_e, foreign_e, req_or_ws, TABLENAME, **payload): #post
         table=self.get_table[TABLENAME]
-        with set_context(local_e):
-            return header_interface.close(table, **payload)
+        return header_interface.close(table, **payload)
+        
             
     #VIEW | EXPORT | SESSION -> FILE | SPACE
     @IO.Post(router,'/{TABLENAME}/cleanup')
     def cleanup(self, local_e, foreign_e, req_or_ws, TABLENAME, **payload): #post
         table=self.get_table[TABLENAME]
-        with set_context(local_e):
-            return header_interface.cleanup(table, **payload)
+        return header_interface.cleanup(table, **payload)
+        
 
     @IO.Post(router,'/{TABLENAME}/expose')
     def expose(self, local_e, foreign_e, req_or_ws, TABLENAME, **payload): #post
         table=self.get_table[TABLENAME]
-        with set_context(local_e):
-            return header_interface.expose(table, **payload)
+        return header_interface.expose(table, **payload)
+        
 
     @IO.Get(router,'/{TABLENAME}/diff')
     def diff(self, local_e, foreign_e, req_or_ws, TABLENAME, **payload): #get
         table=self.get_table[TABLENAME]
-        with set_context(local_e):
-            return header_interface.diff(table, **payload)
+        return header_interface.diff(table, **payload)
+        
     
     @IO.Put(router,'/{TABLENAME}/upload')
     async def upload_data_indv(self, local_e, foreign_e, req_or_ws, TABLENAME, file:UploadFile, metadata:dict={}): #get
         table=self.get_table[TABLENAME]
         assert self.parent.TableType is File
-        with set_context(local_e):
-            return await header_interface.upload_file(file, metadata)
+        return await header_interface.upload_file(file, metadata)
+        
         
     @IO.Post(router,'/FILE/upload_file')
     async def upload_file(self, local_e, foreign_e, req_or_ws, file : UploadFile):        
-        with set_context(local_e):
-            # raise Exception(len(file.file.read()))
-            return (await header_interface.upload_file(file)).id
+        return (await header_interface.upload_file(file)).id
+
+        
 
     @IO.Get(router,'/FILE/upload_file_form')
     def upload_file_form(self, local_e, foreign_e, req_or_ws):        
@@ -494,8 +409,8 @@ class  FileDB_Interface(Interface_Base):
     def download(self, local_e, foreign_e, req_or_ws, TABLENAME, id): #get
         table=self.get_table[TABLENAME]
         assert table in [File,asc_Space_NamedFile]
-        with set_context(local_e):
-            res_row = header_interface.find(table, id)
+        res_row = header_interface.find(table, id)
+        
             if not res_row: return 404
 
             if isinstance(res_row, File):
@@ -512,8 +427,8 @@ class  FileDB_Interface(Interface_Base):
     # @IO.Put(router,'/{TABLENAME}/upload')
     # def upload(self, local_e, foreign_e, req_or_ws, TABLENAME, file:UploadFile, **payload): #get
     # table=self.get_table[TABLENAME]
-    #     with set_context(local_e):
-    #         return header_interface.upload(table, **payload)
+#         return header_interface.upload(table, **payload)
+    #     
 
 
 

@@ -42,6 +42,14 @@ from typing import Any
 
 Client_DB_Model = declarative_base()
 
+from .DB_Interface_Common import _transaction
+
+
+ClientDb_c_Engine    = ContextVar('ClientDb_c_Engine' , default = None) 
+ClientDb_c_session   = ContextVar('JobDb_c_session'   , default = None) 
+ClientDb_c_savepoint = ContextVar('JobDb_c_savepoint' , default = None)     
+ClientDB_Transaction = partial(_transaction._wrapper, ClientDb_c_Engine, FileDB_c_session, FileDB_c_savepoint)
+
 
 class Local_Common():
 
@@ -53,7 +61,8 @@ class Local_Common():
         return {'Role': self.Entity_Type.value, 
                 'UID' : self.uid}
 
-    async def Find_Entity_From_Req(self, request:Request):
+    @ClientDB_Transaction()
+    async def Find_Entity_From_Req(self, session, request:Request):
         ''' Ensure DB Connection, return foreign item '''
         if incoming_role:=request.headers.get('role'):
             table = ROLE_TABLE_MAPPING[incoming_role]
@@ -68,8 +77,8 @@ class Local_Common():
                 return row
             
         new_row = table.New_From_Request(self,request)
-        self.session.add(new_row)
-        self.session.commit()
+        session.add(new_row)
+        session.commit()
         return new_row
 
     async def Find_Entity_From_WsReq(self, request:WebSocket_Manager):
@@ -224,8 +233,8 @@ class Manager_Local(Local_Common,Local_Entity_Base):
         # self.file_db_session = self.Session()
         set_listeners_on_tables(list(File_DB_Model.__subclasses__()), self.events)
         File_DB_Model.metadata.create_all(self.File_DB_Engine)
+        from .Interface_FileDB import c_session
         self.file_db_session = self.File_DB_Session()        
-        from .Interface_FileDB import Active_Session
         Active_Session.set(self.file_db_session)
 
     def settup_job_db(self,):
