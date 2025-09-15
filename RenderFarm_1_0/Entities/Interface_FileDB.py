@@ -240,7 +240,7 @@ class _header_interface():
         return need_hashes
 
     # @transaction()
-    def create_named_file_from_structure(self,session,structure:dict):
+    def create_named_file_from_structure(self,session, structure:dict, pspace_id):  #requered for search.
         ''' Non-Transactional as it requires a parent '''
         if (nfile:=self.find(File, structure['full_hash'])) is not None: return nfile
         nfile = asc_Space_NamedFile()
@@ -251,13 +251,13 @@ class _header_interface():
         nfile.cFile = file
         return nfile
 
-    # @transaction()
-    def create_named_space_from_structure(self,session,structure:dict)->asc_Space_NamedSpace:
+    @transaction()
+    def create_named_space_from_structure(self,session, structure:dict, pspace_id)->asc_Space_NamedSpace:
         ''' Non-Transactional as it requires a parent '''
-        if (nspace:=self.find(structure['full_hash'])) is not None: return nspace
+        if (nspace:=self.find(asc_Space_NamedSpace, structure['full_hash'])) is not None: return nspace
         nspace = asc_Space_NamedSpace()
 
-        if (space:=self.find(structure['data_hash'])) is None:
+        if (space:=self.find(Space, structure['data_hash'])) is None:
             space = self.create_space_from_structure(structure)
         nspace.cSpace = space
         session.add(nspace)
