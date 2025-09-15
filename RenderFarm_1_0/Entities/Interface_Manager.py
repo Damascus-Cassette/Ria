@@ -101,7 +101,7 @@ class Manager_Interface_Info(Interface_Base):
     router = APIRouter()
     @IO.Get(router,'/')
     def base_page(self, this_e, other_e, req, ):
-        return this_e.fapi_templates.TemplateResponse(
+        return this_e.fapi_mg_templates.TemplateResponse(
             "/info/info1.html",
             {   'request' : req, 
                 'Manager_Name':this_e.settings.label},

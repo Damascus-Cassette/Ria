@@ -10,8 +10,11 @@ import random
 import uuid
 import shutil
 import asyncio
-
+import aiofiles
 from typing import Any
+
+from starlette.datastructures import UploadFile as Star_UploadFile
+
 
 class file_utils():
     ''' Statefull fule_utilts instancce'''
@@ -21,13 +24,27 @@ class file_utils():
         self.settings = settings_inst
 
     def file_loc(self,data_hash):
-        raise NotImplementedError()
+        root = self.settings.storage.data
+        print(root)
+        dp,fp = os.path.join(root,data_hash[:10]), f'/{data_hash}.blob'
+        os.makedirs(dp,exist_ok=True)
+        return str(dp)+fp
 
-    async def dump_bytearray(self, data:bytearray, data_hash:str=None):
+    async def dump_bytearray(self, data:bytearray, data_hash:str=None):        
         if not data_hash:
             data_hash = uuid_utils.get_bytearray_hash(data)
-        with open(self.file_loc(data_hash),'wb') as f:
-            f.write(data)
+        
+        with open(self.file_loc(data_hash), "wb") as buffer:
+            shutil.copyfileobj(data, buffer)
+
+    async def dump_UploadFile(self, data:bytearray, data_hash:str=None):        
+        if not data_hash:
+            data_hash = uuid_utils.get_bytearray_hash(data)
+        data.seek(0)
+        
+        async with aiofiles.open(self.file_loc(data_hash), 'wb') as out_file:
+                content = data.read()  
+                await out_file.write(content)
 
     def move_file(self, fp_from, fp_to, repl_symlink, do_remove):
         os.makedirs(os.path.split(fp_to)[0],exist_ok=True)

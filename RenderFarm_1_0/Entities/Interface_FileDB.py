@@ -17,10 +17,69 @@ from .FileDB.FileHashing               import uuid_utils, file_utils as _file_ut
 from functools  import partial
 from typing     import TypeAlias
 
+from starlette.datastructures import UploadFile as star_Upload_File
+
+
 import asyncio
 
-
 AnyTableType : TypeAlias = User|Session|Import|Export|View|asc_Space_NamedSpace|asc_Space_NamedFile|Space|File
+
+
+from contextlib  import contextmanager
+from contextvars import ContextVar
+
+file_utils      : _file_utils = ContextVar('active_file_utilities_inst', default= None)
+Active_Session                = ContextVar('active_file_db_session',default = None) 
+    #Such a dirty hack
+
+c_savepoint = ContextVar('FileDB_c_savepoint',default = None) 
+
+@contextmanager
+def session_cm(commit = True):
+
+    ongoing_session = Active_Session.get()
+
+    try:
+        if ongoing_session:
+            print('Creating New Savepoint!')
+            _savepoint = ongoing_session.begin_nested()
+            token2 = c_savepoint.set(_savepoint)
+            yield ongoing_session
+
+            if commit: 
+                _savepoint.commit()
+            else:      
+                _savepoint.rollback()
+
+        else:
+            print('Creating New Session!')
+            session = Session(bind=self.engine, expire_on_commit = False)
+            token_1 = Active_Session.set(session)
+            
+            yield session
+            
+            if commit: 
+                session.commit()
+                session.close()
+            else: 
+                session.rollback()
+                
+                
+            
+    except:
+        if ongoing_session:
+            _savepoint.rollback() 
+        else:
+            session.rollback()  
+            session.close()
+        raise
+
+    finally:
+        if ongoing_session:
+            c_savepoint.reset(token2)
+        else:
+            Active_Session.reset(token_1)
+            Active_Session.set(None)
 
 class _transaction():
     ''' Placeholder for future complex use. I dont remember exactly why I wanted this before'''
@@ -33,12 +92,9 @@ class _transaction():
             return self
         return partial(self, inst)
     
-    def __call__(self, inst, target_row, *args, **kwargs):
-        #Handle database commit and roleback here if not nested iirc
-        if self.filter:
-            if not self.filter(target_row.__class__):
-                raise TypeError(f'TARGET ROW DID NOT PASS {self.func.__name__} TRANSACTION FILTER: {target_row.__class__}')
-        return self.func(inst, *args, **kwargs)
+    def __call__(self, inst, *args, **kwargs):
+        with session_cm():
+            return self.func(inst, Active_Session.get(), *args, **kwargs)
 
     @classmethod
     def _wrapper(cls, filter=None):
@@ -48,11 +104,8 @@ class _transaction():
     
 transaction = _transaction._wrapper
 
-from contextlib  import contextmanager
-from contextvars import ContextVar
 
-file_utils      : _file_utils = ContextVar('active_file_utilities_inst', default= None)
-Active_Session                = ContextVar('active_file_db_session',default = None)
+    #Set by manager-enc
 
 @contextmanager
 def Active_file_utils_As(utils:_file_utils):
@@ -68,7 +121,7 @@ def Active_Session_As(engine):
 
 @contextmanager
 def set_context(local_e):
-    with Active_Session_As(local_e.get_file_db_session), Active_file_utils_As(local_e.settings.FileDBSettings.fileutils):
+    with Active_Session_As(local_e.file_db_session):
         yield
 
 
@@ -81,7 +134,7 @@ class _header_interface():
                 raise KeyError(f'K:V {k}:{v} IS NOT ALLOWED TO BE SET ON {table}')
 
     def find[T:AnyTableType](self, table:T, item_id:str)->T:  #Get
-        return Active_Session.get().query(table).first(id=item_id)
+        return Active_Session.get().query(table).filter(table.id == item_id).first()
 
     def query(self,table, **defintions):  #Get
         return Active_Session.get().query(table).all(**defintions)
@@ -120,7 +173,7 @@ class _header_interface():
     
 
     @transaction()
-    def create(self, table, **payload): #Post 
+    def create(self,session, table, **payload): #Post 
         if   table is Import:
             val = self._create_import_export(table,**payload)
         elif table is Export:
@@ -131,16 +184,16 @@ class _header_interface():
             val = self._create_session(table,**payload)
         else:
             val = self._create_generic(table,**payload)
-        Active_Session.get().append(val)
+        session.add(val)
         return val
     
     @transaction()
-    def update(self, table, target_row, **payload): #Patch
+    def update(self,session, table, target_row, **payload): #Patch
         self._update(target_row,payload)
     
     @transaction()
-    def delete(self, table, target_row, **payload): #Delete
-        Active_Session.get().remove(target_row)
+    def delete(self,session, table, target_row, **payload): #Delete
+        session.remove(target_row)
 
     def diff(self, table, mode:str, object_def:dict)->bool:
         ''' Treat {key : (_Any,(value_series,...))} as an operation to parse '''
@@ -186,29 +239,32 @@ class _header_interface():
                 need_hashes.append(elem['data_hash'])
         return need_hashes
 
-    @transaction()
-    def create_named_file_from_structure(self,structure:dict):
-        if (nspace:=self.find(File, structure['full_hash'])) is not None: return nspace
+    # @transaction()
+    def create_named_file_from_structure(self,session,structure:dict):
+        ''' Non-Transactional as it requires a parent '''
+        if (nfile:=self.find(File, structure['full_hash'])) is not None: return nfile
         nfile = asc_Space_NamedFile()
 
         if (file:=self.find(File,structure['data_hash'])) is None:
             raise Exception('FILE DOES NOT EXIST ON DB! Delayed upload not yet supported!!:',structure['data_hash'], 'of', structure)
             
-        nspace.cFile = file
-        return nspace
+        nfile.cFile = file
+        return nfile
 
-    @transaction()
-    def create_named_space_from_structure(self,structure:dict)->asc_Space_NamedSpace:
+    # @transaction()
+    def create_named_space_from_structure(self,session,structure:dict)->asc_Space_NamedSpace:
+        ''' Non-Transactional as it requires a parent '''
         if (nspace:=self.find(structure['full_hash'])) is not None: return nspace
         nspace = asc_Space_NamedSpace()
 
         if (space:=self.find(structure['data_hash'])) is None:
             space = self.create_space_from_structure(structure)
         nspace.cSpace = space
+        session.add(nspace)
         return nspace
 
     @transaction()
-    def create_space_from_structure(self, structure):
+    def create_space_from_structure(self,session, structure):
         ''' Requires that all files to already be uploaded !!! '''
         file_children  = []
         space_children = []
@@ -226,11 +282,11 @@ class _header_interface():
             else: raise Exception(f'DONT RECOGNIZE TYPE: {elem_data["_type"]}')
         
         space.id = structure['data_hash']
-        
+        session.add(space)
         return space
     
     @transaction()
-    async def upload_file(self, file:UploadFile|bytearray, metadata:dict={})->File:
+    async def upload_file(self,session, file:UploadFile|bytearray, metadata:dict={})->File:
 
         if data_hash:=metadata.get('data_hash'):
             if filerow:=self.find(File,data_hash):
@@ -239,13 +295,15 @@ class _header_interface():
                     if isinstance(file, UploadFile): await file.close()
                     return filerow
         
-        if isinstance(file, UploadFile): data_hash = uuid_utils.get_bytearray_hash(file.file)
-        else:                            data_hash = uuid_utils.get_bytearray_hash(file)
+        if isinstance(file, star_Upload_File): 
+            data_hash = uuid_utils.get_bytearray_hash(file.file)
+        else:                            
+            data_hash = uuid_utils.get_bytearray_hash(file)
         
         if _mdata_hash:= metadata.get('data_hash',None):
             if data_hash != _mdata_hash:
                 print(f'MANAGER DID NOT GET THE SAME BYTE HASH:',data_hash,  metadata['data_hash'], metadata)
-                
+
 
         if (filerow:=self.find(File,data_hash)) is None: filerow = File()
         elif fp:=file_utils.get().file_on_server(filerow): 
@@ -253,14 +311,18 @@ class _header_interface():
             print(f'WARNING! FILE WITH DATA_HASH {data_hash} ALREADY UPLOADED AND ON DISC AT {fp}, DUMPING AND RETURING ON_DISC')
             return filerow
         
-        if isinstance(file, UploadFile):
-            await file_utils.get().dump_bytearray(file.file, data_hash=data_hash)
+        if isinstance(file, star_Upload_File):
+            await file.seek(0)
+            # raise Exception(file.file.read())
+            # data.seek(0)
+        
+            await file_utils.get().dump_UploadFile(file.file,data_hash=data_hash)
             await file.close()
         else:
-            await file_utils.get().dump_bytearray(file,      data_hash=data_hash)
+            await file_utils.get().dump_bytearray(file,data_hash=data_hash)
 
         filerow.id = data_hash
-
+        session.add(filerow)
         return filerow
     
     # def upload_import_export(self, table, space_id, session_id, user_id, **container_data,):
@@ -409,30 +471,32 @@ class  FileDB_Interface(Interface_Base):
             return header_interface.diff(table, **payload)
 
     @IO.Get(router,'/{TABLENAME}/diff_future_space')
-    def diff_future_space(self, local_e, foreign_e, TABLENAME, req_or_ws, struct): #get
+    def diff_future_space(self, local_e, foreign_e, req_or_ws, TABLENAME, struct): #get
         table=self.get_table[TABLENAME]
         with set_context(local_e):
             return header_interface.diff_future_space(table, struct)
 
     
     @IO.Put(router,'/{TABLENAME}/upload')
-    def upload_file(self, local_e, foreign_e, TABLENAME, req_or_ws, file:UploadFile, metadata:dict={}): #get
+    async def upload_data_indv(self, local_e, foreign_e, req_or_ws, TABLENAME, file:UploadFile, metadata:dict={}): #get
         table=self.get_table[TABLENAME]
         assert self.parent.TableType is File
         with set_context(local_e):
-            return header_interface.upload_file( file, metadata)
-
-    @IO.Put(router,'/{TABLENAME}/upload_form')
-    def upload_file_with_form(self, local_e, TABLENAME, foreign_e, req_or_ws, file : UploadFile, filename:str = None):        
-        table=self.get_table[TABLENAME]
-        assert self.parent.TableType is File
-
-
+            return await header_interface.upload_file(file, metadata)
+        
+    @IO.Post(router,'/FILE/upload_file')
+    async def upload_file(self, local_e, foreign_e, req_or_ws, file : UploadFile):        
         with set_context(local_e):
-            if filename:
-                return header_interface.upload_file(file, {'name':filename} )
-            else:
-                return header_interface.upload_file(file )
+            # raise Exception(len(file.file.read()))
+            return (await header_interface.upload_file(file)).id
+
+    @IO.Get(router,'/FILE/upload_file_form')
+    def upload_file_form(self, local_e, foreign_e, req_or_ws):        
+        return local_e.fapi_db_templates.TemplateResponse(
+            "/upload/upload.html",
+            {   'request' : req_or_ws, 
+                'Manager_Name':local_e.settings.label},
+        )
         
     @IO.Get(router,'/{TABLENAME}/download')
     def download(self, local_e, foreign_e, req_or_ws, TABLENAME, id): #get

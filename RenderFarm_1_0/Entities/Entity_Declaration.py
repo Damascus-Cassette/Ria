@@ -109,7 +109,9 @@ class Local_Common():
 
         from fastapi.templating import Jinja2Templates
         static_path = f'{Path(__file__).parents[0]}/Manager_Statics' #HACK, rely on env vars for nuitka unpack  
-        inst.fapi_templates = Jinja2Templates(directory=static_path)
+        inst.fapi_mg_templates = Jinja2Templates(directory=static_path)
+        static_path = f'{Path(__file__).parents[0]}/FileDB_Statics' #HACK, rely on env vars for nuitka unpack  
+        inst.fapi_db_templates = Jinja2Templates(directory=static_path)
         app.mount("/static", StaticFiles(directory=static_path), name="static")
 
         @app.get("/url-list")
@@ -224,6 +226,7 @@ class Manager_Local(Local_Common,Local_Entity_Base):
         set_listeners_on_tables(list(File_DB_Model.__subclasses__()), self.events)
         File_DB_Model.metadata.create_all(self.File_DB_Engine)
         
+        self.file_db_session = self.File_DB_Session()        
 
     def settup_job_db(self,):
         ''' The local Job database-storage that handles each task and working files. '''
@@ -239,7 +242,8 @@ class Manager_Local(Local_Common,Local_Entity_Base):
         # self.file_db_session = self.Session()
         set_listeners_on_tables(list(Job_DB_Model.__subclasses__()), self.events)
         Job_DB_Model.metadata.create_all(self.Job_DB_Engine)
-
+        
+        self.job_db_session = self.Job_DB_Session()        
 
 from fastapi import FastAPI
 
