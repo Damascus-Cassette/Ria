@@ -12,6 +12,12 @@ import random
 import uuid
 import asyncio
 
+
+class _def_dict_list():
+    def __missing__(self,key):
+        self[key] = inst = []
+        return inst
+
 class uuid_utils:
 
     @classmethod
@@ -144,15 +150,29 @@ class Folder_Object():
     def calculate_file_hashes(self):
         for x in self.iter_all_unique_files():
             x.calculate_file_hashes()
+        # self.dedup_files_post_hash()
+        # self.dedup_folders_post_hash()
 
-    def get_file_datahash_list(self)->list:
-        return [x.data_hash for x in self.iter_all_unique_files()]
+    def get_unique_file_datahash_list(self)->list:
+        return list(set(x.data_hash for x in self.iter_all_unique_files()))
         
+    # def dedup_files_post_hash(self):
+    #     ''' Ensure that _data_hash is convergent in all items'''
+    #TODO: Will have to be recursive
+    #     di = _def_dict_list()
+    #     for x in self.iter_all_unique_files():
+    #         di[x.data_hash()]
 
     def iter_all_unique_files(self):
         assert hasattr(self, 'real_path_dedup') #is root object
         for x in self.real_path_dedup.values():
             if isinstance(x,File_Object):
+                yield x
+
+    def iter_all_unique_folders(self):
+        assert hasattr(self, 'real_path_dedup') #is root object
+        for x in self.real_path_dedup.values():
+            if isinstance(x,Folder_Object):
                 yield x
             
 
