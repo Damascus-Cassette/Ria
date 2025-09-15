@@ -224,8 +224,9 @@ class Manager_Local(Local_Common,Local_Entity_Base):
         # self.file_db_session = self.Session()
         set_listeners_on_tables(list(File_DB_Model.__subclasses__()), self.events)
         File_DB_Model.metadata.create_all(self.File_DB_Engine)
-        
         self.file_db_session = self.File_DB_Session()        
+        from .Interface_FileDB import Active_Session
+        Active_Session.set(self.file_db_session)
 
     def settup_job_db(self,):
         ''' The local Job database-storage that handles each task and working files. '''

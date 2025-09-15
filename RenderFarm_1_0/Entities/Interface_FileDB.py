@@ -79,7 +79,7 @@ def session_cm(commit = True):
             c_savepoint.reset(token2)
         else:
             Active_Session.reset(token_1)
-            Active_Session.set(None)
+            # Active_Session.set(None)
 
 class _transaction():
     ''' Placeholder for future complex use. I dont remember exactly why I wanted this before'''
@@ -229,14 +229,14 @@ class _header_interface():
 
     def diff_future(self, files:list[str], spaces:list[str])->list: #get
         ''' Determine elements that need to be uploaded by hash diff'''
-        elem:dict
+
         need_hashes  = []
-        for elem in files:
-            if self.find(File ,elem['data_hash']) is None:
-                need_hashes.append(elem['data_hash'])
-        for elem in spaces:
-            if self.find(Space,elem['data_hash']) is None:
-                need_hashes.append(elem['data_hash'])
+        for key in files:
+            if self.find(File , key) is None:
+                need_hashes.append( key)
+        for key in spaces:
+            if self.find(Space, key) is None:
+                need_hashes.append( key)
         return need_hashes
 
     # @transaction()

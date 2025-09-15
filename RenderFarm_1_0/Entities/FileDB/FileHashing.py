@@ -58,215 +58,218 @@ class file_utils():
         else:
             shutil.copyfile(fp_from,fp_to, follow_symlinks=True)
 
-class uuid_utils:
+from .FileHashingStruct import uuid_utils
 
-    @classmethod
-    def get_file_hash(cls,filepath):
-        ''' Return UID of file, sha256 hash. Follow symlinks and get sha256 of file'''
-        #https://docs.python.org/3/library/hashlib.html#hashlib.file_digest
-        #May want to thread curl reqs so that other files can be retrieved as required
-        fp = os.path.realpath(filepath)
-        with open(fp, 'rb', buffering=0) as f:
-            cls.get_bytearray_hash(f)
+# class uuid_utils:
 
-    def get_bytearray_hash(obj:bytearray):
-        ''' Abstraction to allow for spooled-file use'''
-        return hashlib.file_digest(obj,'sha256').hexdigest()
+#     @classmethod
+#     def get_file_hash(cls,filepath):
+#         ''' Return UID of file, sha256 hash. Follow symlinks and get sha256 of file'''
+#         #https://docs.python.org/3/library/hashlib.html#hashlib.file_digest
+#         #May want to thread curl reqs so that other files can be retrieved as required
+#         fp = os.path.realpath(filepath)
+#         with open(fp, 'rb', buffering=0) as f:
+#             cls.get_bytearray_hash(f)
 
-    @classmethod
-    def get_str_uuid(cls,keysum: str)->str:
-        r = random.Random()
-        r.seed(keysum)
-        return str(uuid.UUID(bytes = bytes(r.getrandbits(8) for _ in range(16))))
+#     def get_bytearray_hash(obj:bytearray):
+#         ''' Abstraction to allow for spooled-file use'''
+#         return hashlib.file_digest(obj,'sha256').hexdigest()
 
-    @classmethod
-    def get_dict_uuid(cls, data:dict)->str:
-        r = random.Random()
-        r.seed(str(cls.sorted_recur_dict(data)))
-        return str(uuid.UUID(bytes = bytes(r.getrandbits(8) for _ in range(16))))
+#     @classmethod
+#     def get_str_uuid(cls,keysum: str)->str:
+#         r = random.Random()
+#         r.seed(keysum)
+#         return str(uuid.UUID(bytes = bytes(r.getrandbits(8) for _ in range(16))))
 
-    @staticmethod
-    def get_file_metadata(vis_path)->dict:
-        stats = Path(vis_path).stat(follow_symlinks=True)
-        return {'name':Path(vis_path).name, 'st_size': stats.st_size}
+#     @classmethod
+#     def get_dict_uuid(cls, data:dict)->str:
+#         r = random.Random()
+#         r.seed(str(cls.sorted_recur_dict(data)))
+#         return str(uuid.UUID(bytes = bytes(r.getrandbits(8) for _ in range(16))))
 
-    @staticmethod
-    def get_folder_metadata(vis_path)->dict:
-        return {'name':Path(vis_path).name}
+#     @staticmethod
+#     def get_file_metadata(vis_path)->dict:
+#         stats = Path(vis_path).stat(follow_symlinks=True)
+#         return {'name':Path(vis_path).name, 'st_size': stats.st_size}
 
-    @classmethod
-    def sorted_recur_dict(cls,data:dict):
-        print ('WARNING: DICT SORT IS NOT IMPLAMENTED YET AND MAY CAUSE NON-DETERM') 
-        return data
+#     @staticmethod
+#     def get_folder_metadata(vis_path)->dict:
+#         return {'name':Path(vis_path).name}
+
+#     @classmethod
+#     def sorted_recur_dict(cls,data:dict):
+#         print ('WARNING: DICT SORT IS NOT IMPLAMENTED YET AND MAY CAUSE NON-DETERM') 
+#         return data
     
-    @staticmethod
-    def create_structure(path):
-        with folder_walk_session():
-            if Path(path).is_dir():
-                prim = Folder_Object(path)
-            else:
-                prim = File_Object(path)
-            asyncio.run(File_Object.run_all_in_session())
-            return prim
+#     @staticmethod
+#     def create_structure(path):
+#         with folder_walk_session():
+#             if Path(path).is_dir():
+#                 prim = Folder_Object(path)
+#             else:
+#                 prim = File_Object(path)
+#             asyncio.run(File_Object.run_all_in_session())
+#             return prim
 
-            #I Really really hate this interface now that I look at it
-
-
-folders_in_session : dict[str, 'File_Object']   = ContextVar('folders_in_session', default = None) 
-files_in_session   : dict[str, 'Folder_Object'] = ContextVar('files_in_session',   default = None)
-files_in_server    : list[str] = ContextVar('files_in_session',   default = [])
+#             #I Really really hate this interface now that I look at it
 
 
-@contextmanager
-def folder_walk_session():
-    t1 = files_in_session.set({})
-    t2 = folders_in_session.set({})
-    yield
-    files_in_session.reset(t1)
-    folders_in_session.reset(t2)
+# folders_in_session : dict[str, 'File_Object']   = ContextVar('folders_in_session', default = None) 
+# files_in_session   : dict[str, 'Folder_Object'] = ContextVar('files_in_session',   default = None)
+# files_in_server    : list[str] = ContextVar('files_in_session',   default = [])
 
-class Folder_Object():
-    children_folders : list
-    children_files   : list
 
-    data_hash : None|Self = None
+# @contextmanager
+# def folder_walk_session():
+#     t1 = files_in_session.set({})
+#     t2 = folders_in_session.set({})
+#     yield
+#     files_in_session.reset(t1)
+#     folders_in_session.reset(t2)
 
-    folder_path   : str
-    real_path     : str #Refering to post -symlink follow path
+# class Folder_Object():
+#     children_folders : list
+#     children_files   : list
 
-    def __init__(self,folder_path):
-        self.children_folders = []
-        self.children_files   = []
+#     data_hash : None|Self = None
+
+#     folder_path   : str
+#     real_path     : str #Refering to post -symlink follow path
+
+#     def __init__(self,folder_path):
+#         self.children_folders = []
+#         self.children_files   = []
         
-        real_path = str(Path(folder_path).resolve())
+#         real_path = str(Path(folder_path).resolve())
 
-        self.folder_path = folder_path
-        self.real_path   = real_path
+#         self.folder_path = folder_path
+#         self.real_path   = real_path
 
-        if existing := folders_in_session.get().get(real_path,None):
-            self.data_hash = existing
-        else: 
-            folders_in_session.get()[real_path] = self
-            self.discover_children(real_path)
+#         if existing := folders_in_session.get().get(real_path,None):
+#             self.data_hash = existing
+#         else: 
+#             folders_in_session.get()[real_path] = self
+#             self.discover_children(real_path)
 
-    def discover_children(self,real_path):
-        for path in Path(real_path).iterdir():
-            p_path = Path(path)
-            if p_path.is_dir():
-                self.children_folders.append(Folder_Object(path))
-            else:
-                self.children_files.append(File_Object(path))
+#     def discover_children(self,real_path):
+#         for path in Path(real_path).iterdir():
+#             p_path = Path(path)
+#             if p_path.is_dir():
+#                 self.children_folders.append(Folder_Object(path))
+#             else:
+#                 self.children_files.append(File_Object(path))
 
-    @property
-    def full_hash(self):
-        data_hash     = self.get_data_hash
-        metadata_hash = self.metadata_hash
-        return uuid_utils.get_str_uuid(data_hash+metadata_hash)
+#     @property
+#     def full_hash(self):
+#         data_hash     = self.get_data_hash
+#         metadata_hash = self.metadata_hash
+#         return uuid_utils.get_str_uuid(data_hash+metadata_hash)
 
-    @property
-    def get_data_hash(self):
-        ''' uuid-hash of content's full hashes '''
-        if isinstance(self.data_hash, Folder_Object): 
-            return self.data_hash.get_data_hash
+#     @property
+#     def get_data_hash(self):
+#         ''' uuid-hash of content's full hashes '''
+#         if isinstance(self.data_hash, Folder_Object): 
+#             return self.data_hash.get_data_hash
         
-        lst = []
-        for x in self.children_folders:
-            lst.append(x.full_hash)
-        for x in self.children_files:
-            lst.append(x.full_hash)
-        return uuid_utils.get_str_uuid(''.join(lst))
+#         lst = []
+#         for x in self.children_folders:
+#             lst.append(x.full_hash)
+#         for x in self.children_files:
+#             lst.append(x.full_hash)
+#         return uuid_utils.get_str_uuid(''.join(lst))
 
-    @property
-    def metadata_hash(self):
-        ''' Metadata of self.folder_path.name (view of folder) '''
-        return uuid_utils.get_dict_uuid(uuid_utils.get_folder_metadata(self.folder_path))
+#     @property
+#     def metadata_hash(self):
+#         ''' Metadata of self.folder_path.name (view of folder) '''
+#         return uuid_utils.get_dict_uuid(uuid_utils.get_folder_metadata(self.folder_path))
 
-    def _export_struct_(self, ignore_hashes=None):
-            if ignore_hashes: files_in_server.set(ignore_hashes)
-            if self.data_hash in files_in_server.get():
-                return {'_type':'NAMEDFOLDER', 'full_hash': self.full_hash, 'metadata' : self.metadata, 'datahash' : self.data_hash, 'children' : self._export_children_()}
-            else:
-                return {'_type':'NAMEDFOLDER', 'full_hash': self.full_hash, 'metadata' : self.metadata, 'datahash' : self.data_hash, 'children' : self.data_hash}
+#     def _export_struct_(self, ignore_hashes=None):
+#             if ignore_hashes: files_in_server.set(ignore_hashes)
+#             if self.data_hash in files_in_server.get():
+#                 return {'_type':'NAMEDFOLDER', 'full_hash': self.full_hash, 'metadata' : self.metadata, 'datahash' : self.data_hash, 'children' : self._export_children_()}
+#             else:
+#                 return {'_type':'NAMEDFOLDER', 'full_hash': self.full_hash, 'metadata' : self.metadata, 'datahash' : self.data_hash, 'children' : self.data_hash}
 
-    def _export_children_(self):
-        lst = []
-        for x in self.children_folders:
-            lst.append(x._export_struct_())
-        for x in self.children_files:
-            lst.append(x._export_struct_())
-        return lst
+#     def _export_children_(self):
+#         lst = []
+#         for x in self.children_folders:
+#             lst.append(x._export_struct_())
+#         for x in self.children_files:
+#             lst.append(x._export_struct_())
+#         return lst
         
 
-def find_filepath_hashes_in_multiprocess(res,filepath, metadata_path=None, ):
-    with open(filepath,'rb') as f:
-        file_hash = uuid_utils.get_bytearray_hash(f)
+# def find_filepath_hashes_in_multiprocess(res,filepath, metadata_path=None, ):
+#     with open(filepath,'rb') as f:
+#         file_hash = uuid_utils.get_bytearray_hash(f)
     
-    if metadata_path: metadata = uuid_utils.get_folder_metadata(metadata_path)
-    else:             metadata = uuid_utils.get_folder_metadata(filepath)
+#     if metadata_path: metadata = uuid_utils.get_folder_metadata(metadata_path)
+#     else:             metadata = uuid_utils.get_folder_metadata(filepath)
 
-    metadata_hash = uuid_utils.get_dict_uuid(metadata)
-    res.extend([file_hash, metadata_hash])
+#     metadata_hash = uuid_utils.get_dict_uuid(metadata)
     
-class File_Object():
-
-    _hash_calculated : bool = False
-
-    @staticmethod
-    async def run_all_in_session():
-        cotasks = []
-        print(files_in_session.get())
-        assert len(files_in_session.get())
-        for x in files_in_session.get().values():
-            cotasks.append(x.get_hashes())
-        if len(cotasks):
-            await asyncio.gather(*cotasks)
-        return
-
-    def __init__(self,file_path):
-
-        real_path = str(Path(file_path).resolve())
-
-        self.file_path = file_path
-        self.real_path = real_path
-
-        if (existing:=folders_in_session.get().get(real_path,None)) is not None:
-            self.data_hash = existing
-        else: 
-            print('ADDING',real_path)
-            files_in_session.get()[real_path] = self
-            # self.discover_children(real_path)
-
-    async def get_hashes(self):
-        if not isinstance(self.data_hash, File_Object):
-            res = []
-            p = Process(target = find_filepath_hashes_in_multiprocess, args = (res, self.real_path ))
-            p.start()
-            p.join()
-
-            self.data_hash, self.metadata_hash = res
-            self._hash_calculated = True
-        else:
-            self.metadata = uuid_utils.get_file_metadata(self.file_path)
-            self.metadata_hash = uuid_utils.get_dict_uuid(self.metadata)
-        self._hash_calculated = True
+#     res.extend([file_hash, metadata_hash])
     
-    data_hash = None
-    
-    @property
-    def get_file_hash(self,):
-        if isinstance(self.data_hash, File_Object):
-            return self.data_hash.get_file_hash
-        assert self._hash_calculated
-        return self.data_hash
+# class File_Object():
 
-    @property
-    def full_hash(self):
-        file_hash     = self.get_file_hash
-        metadata_hash = self.metadata_hash
-        return uuid_utils.get_str_uuid(file_hash+metadata_hash)
+#     _hash_calculated : bool = False
+
+#     @staticmethod
+#     async def run_all_in_session():
+#         cotasks = []
+#         print(files_in_session.get())
+#         assert len(files_in_session.get())
+#         for x in files_in_session.get().values():
+#             cotasks.append(x.get_hashes())
+#         if len(cotasks):
+#             await asyncio.gather(*cotasks)
+#         return
+
+#     def __init__(self,file_path):
+
+#         real_path = str(Path(file_path).resolve())
+
+#         self.file_path = file_path
+#         self.real_path = real_path
+
+#         if (existing:=folders_in_session.get().get(real_path,None)) is not None:
+#             self.data_hash = existing
+#         else: 
+#             print('ADDING',real_path)
+#             files_in_session.get()[real_path] = self
+#             # self.discover_children(real_path)
+
+#     async def get_hashes(self):
+#         if not isinstance(self.data_hash, File_Object):
+#             res = []
+#             p = Process(target = find_filepath_hashes_in_multiprocess, args = (res, self.real_path ))
+#             p.start()
+#             p.join()
+
+#             self.data_hash, self.metadata_hash = res
+#             self._hash_calculated = True
+#         else:
+#             self.metadata = uuid_utils.get_file_metadata(self.file_path)
+#             self.metadata_hash = uuid_utils.get_dict_uuid(self.metadata)
+#         self._hash_calculated = True
     
-    def _export_struct_(self,ignore_hashes=None):
-        if ignore_hashes: files_in_server.set(ignore_hashes)
-        return {'_type':'NAMEDFILE', 'full_hash': self.full_hash, 'metadata' : self.metadata, 'datahash' : self.file_hash}
+#     data_hash = None
+    
+#     @property
+#     def get_file_hash(self,):
+#         if isinstance(self.data_hash, File_Object):
+#             return self.data_hash.get_file_hash
+#         assert self._hash_calculated
+#         return self.data_hash
+
+#     @property
+#     def full_hash(self):
+#         file_hash     = self.get_file_hash
+#         metadata_hash = self.metadata_hash
+#         return uuid_utils.get_str_uuid(file_hash+metadata_hash)
+    
+#     def _export_struct_(self,ignore_hashes=None):
+#         if ignore_hashes: files_in_server.set(ignore_hashes)
+#         return {'_type':'NAMEDFILE', 'full_hash': self.full_hash, 'metadata' : self.metadata, 'datahash' : self.file_hash}
         
-#target structure to upload: each file, nested dict of {name:(type, metadata, key, children:[])} that culls if obj already exists on server
+# #target structure to upload: each file, nested dict of {name:(type, metadata, key, children:[])} that culls if obj already exists on server

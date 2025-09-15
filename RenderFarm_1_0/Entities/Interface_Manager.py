@@ -124,10 +124,47 @@ class Manager_Interface_Info(Interface_Base):
     @IO.Get(router,'/tests/testb')
     def test_b(self, this_e, other_e, req,):
         dp = this_e.settings._test_upload_files.data
-        from .FileDB.FileHashing import uuid_utils, folder_walk_session, File_Object
+        from .FileDB.FileHashing import uuid_utils
         
         struct = uuid_utils.create_structure(dp)
+        struct.calculate_file_hashes()
         return struct._export_struct_()
+
+    @IO.Get(router,'/tests/testc')
+    def test_c(self, this_e, other_e, req,):
+        dp = this_e.settings._test_upload_files.data
+        from .FileDB.FileHashing import uuid_utils
+        
+        struct = uuid_utils.create_structure(dp)
+        from .FileDB.db_struct import File,Space,asc_Space_NamedFile, asc_Space_NamedSpace
+        allrows = this_e.file_db_session.query
+        all_hashes = [x.id for x in [*allrows(File),*allrows(Space),*allrows(asc_Space_NamedFile),*allrows(asc_Space_NamedSpace)]]
+
+        
+        struct.calculate_file_hashes()
+        
+        ignored_fr_db    = struct._export_struct_(ignore_hashes = all_hashes)
+        ignored_fr_first = struct._export_struct_(ignore_hashes = [struct.data_hash])
+        return {
+            'ignored_fr_db' : ignored_fr_db,
+            'ignored_fr_first' : ignored_fr_first,
+        }
+
+    @IO.Get(router,'/tests/testd')
+    def test_d(self, this_e, other_e, req,):
+        dp = this_e.settings._test_upload_files.data
+        from .FileDB.FileHashing import uuid_utils
+        
+        struct = uuid_utils.create_structure(dp)        
+        struct.calculate_file_hashes()
+        from .Interface_FileDB import header_interface
+
+        from .FileDB.db_struct import File,Space,asc_Space_NamedFile, asc_Space_NamedSpace
+        
+        unheld = header_interface.diff_future(struct.get_file_datahash_list(),[])
+        return unheld
+
+                
         
     
 
