@@ -81,6 +81,9 @@ class Manager_Settings(BaseModel):
 
     worker_timeout : user_time_str = '1m' 
 
+    _test_upload_files  : user_path = './TestFiles/'
+
+
 class Manager_Reference_Settings(BaseModel):
     ''' Find Manager, timout  '''
     _io_strict_ = False
@@ -89,15 +92,17 @@ class Manager_Reference_Settings(BaseModel):
     interval : int = 2
 
 class Worker_Client_DB_Settings(BaseModel):
-    _io_strict_ = False
-    db_loc      : user_path = './worker-clients.db'
-    db_standard : str       = 'sqlite:///' #
+    _io_strict_         = False
+    db_loc              : user_path = './worker-clients.db'
+    db_standard         : str       = 'sqlite:///' #
+
 
 class Worker_Settings(BaseModel):
     ''' Settings for the Worker Entity '''
     _io_strict_ = False
     _profile_path     : str = '' #Override path to a Worker_Env_Settings
     _log_level        : int = 0
+    _test_upload_files  : user_path = './TestFiles/'
 
     client_db : Worker_Client_DB_Settings
     manager   : Manager_Reference_Settings
@@ -110,6 +115,9 @@ class Worker_Settings(BaseModel):
     port              : str  = '4001'
 
     root_dir  : user_path = './_worker'
+
+    _test_upload_files  : user_path = './TestFiles/'
+
 
     # task_tags         : list = tuple() 
     # working_dir       : user_path = './working/'

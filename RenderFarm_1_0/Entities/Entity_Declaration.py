@@ -87,12 +87,11 @@ class Local_Common():
             data = settings._export_()
             with open(settings_loc,'w') as f:
                 yaml.dump(data,f,sort_keys=False)
-            self.settings = settings
-        else:        
-            with open(settings_loc,'r') as f:
-                data = yaml.load(f, yaml.BaseLoader)
-                self.settings = self.SettingsType()
-                self.settings._import_(data)
+            
+        with open(settings_loc,'r') as f:
+            data = yaml.load(f, yaml.BaseLoader)
+            self.settings = self.SettingsType()
+            self.settings._import_(data)
 
         CURRENT_DIR.set(str(self.settings.root_dir))
         #resolves root dir if relative to current path, settins as current dict

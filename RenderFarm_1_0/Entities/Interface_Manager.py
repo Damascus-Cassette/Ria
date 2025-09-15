@@ -95,8 +95,6 @@ class Websocket_State_Info(Manager_Websocket_Wrapper_Simul_Default):
     def delete_client(self, event, event_key, container, mapper, connection):
         self.buffer.append(make_message(None, 'CRUD', 'DELETE', [container.__tablename__, self.gather_item(container, ['uid','host','port','con_state','action_state'])] ),)
     
-
-
 class Manager_Interface_Info(Interface_Base):
     router = APIRouter()
     @IO.Get(router,'/')
@@ -106,9 +104,6 @@ class Manager_Interface_Info(Interface_Base):
             {   'request' : req, 
                 'Manager_Name':this_e.settings.label},
         )
-        # return HTMLResponse(content=html_content)
-        # return 'HI!'
-        ...
 
     @IO.Websocket(router,'/state-info')
     async def state_info(self, this_e, other_e, websocket:WebSocketManager):
@@ -122,50 +117,67 @@ class Manager_Interface_Info(Interface_Base):
             await ws.close()
 
 
-class Manager_Worker_Interface(Interface_Base):
-    router = APIRouter()
-    
-    @IO.Get(router,'/test')
-    def test(self, this_e, other_e, req):
+    @IO.Get(router,'/tests/testa')
+    def test_a(self, this_e, other_e, req,):
         return True
 
-    @IO.Websocket(router,'/ws')
-    async def worker_websocket(self, this_e, other_e, websocket:WebSocketManager):
-        from starlette.websockets import WebSocketDisconnect,WebSocketClose
-        await websocket.accept()
-        await websocket.send_text('Hello')
-        await websocket.close()
-    @worker_websocket.Client()
-    async def worker_websocketclient(self,this_e:Foreign_Entity_Base, other_e:Local_Entity_Base, path, headers):
+    @IO.Get(router,'/tests/testb')
+    def test_b(self, this_e, other_e, req,):
+        dp = this_e.settings._test_upload_files.data
+        from .FileDB.FileHashing import uuid_utils, folder_walk_session, File_Object
+        
+        struct = uuid_utils.create_structure(dp)
+        return struct._export_struct_()
+        
+    
 
-        class custom_ws_class(WebSocketClient):
-            def opened(self):
-                pool = other_e.client_websocket_pool
-                pool.attach(other_e, this_e, self,self.__class__.__name__)
-                self.send('GREETINGS!')
-                # self.close()
+
+
+class Manager_Worker_Interface(Interface_Base):
+    ...
+#     router = APIRouter()
+    
+#     @IO.Get(router,'/test')
+#     def test(self, this_e, other_e, req):
+#         return True
+
+#     @IO.Websocket(router,'/ws')
+#     async def worker_websocket(self, this_e, other_e, websocket:WebSocketManager):
+#         from starlette.websockets import WebSocketDisconnect,WebSocketClose
+#         await websocket.accept()
+#         await websocket.send_text('Hello')
+#         await websocket.close()
+#     @worker_websocket.Client()
+#     async def worker_websocketclient(self,this_e:Foreign_Entity_Base, other_e:Local_Entity_Base, path, headers):
+
+#         class custom_ws_class(WebSocketClient):
+#             def opened(self):
+#                 pool = other_e.client_websocket_pool
+#                 pool.attach(other_e, this_e, self,self.__class__.__name__)
+#                 self.send('GREETINGS!')
+#                 # self.close()
                 
-            def closed(self, code, reason=None):
-                pool = other_e.client_websocket_pool
-                pool.remove(self)
-                print('WEBSOCKET CLOSED!')
+#             def closed(self, code, reason=None):
+#                 pool = other_e.client_websocket_pool
+#                 pool.remove(self)
+#                 print('WEBSOCKET CLOSED!')
             
-            def received_message(self, message):
-                print('RECEIVED MESSAGE:', message)
-                self.send('GOODBYE!')
-                self.close()
+#             def received_message(self, message):
+#                 print('RECEIVED MESSAGE:', message)
+#                 self.send('GOODBYE!')
+#                 self.close()
             
-            async def run_forever(self):
-                return super().run_forever()
+#             async def run_forever(self):
+#                 return super().run_forever()
 
-        fullpath = f'ws://{this_e.host}:{this_e.port}' + path
-        print(fullpath)
+#         fullpath = f'ws://{this_e.host}:{this_e.port}' + path
+#         print(fullpath)
 
-        ws = custom_ws_class(fullpath, headers=headers.items())
-        try:
-            ws.connect()
-            asyncio.create_task(ws.run_forever())
-            return ws
-        except Exception as e:
-            print(f'Cound not connect! Reason: {e}')
-            return None
+#         ws = custom_ws_class(fullpath, headers=headers.items())
+#         try:
+#             ws.connect()
+#             asyncio.create_task(ws.run_forever())
+#             return ws
+#         except Exception as e:
+#             print(f'Cound not connect! Reason: {e}')
+#             return None
