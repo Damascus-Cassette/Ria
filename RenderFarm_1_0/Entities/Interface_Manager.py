@@ -11,6 +11,7 @@ from enum import EnumType,Enum
 from inspect import isclass
 from copy import copy
 
+from .ClientDB_Common import ClientDB_Transaction
 
 class Websocket_State_Info(Manager_Websocket_Wrapper_Simul_Default):
     Events = Event_Router.New()
@@ -52,21 +53,22 @@ class Websocket_State_Info(Manager_Websocket_Wrapper_Simul_Default):
         val = await self.websocket.receive_json()
         print('Got Val:', val)
 
-    def start_populate_buffer(self,):
+    @ClientDB_Transaction()
+    def start_populate_buffer(self,session):
         from .Entity_Declaration import Worker_Foreign,UNDEC_Foreign,Manager_Foreign,Client_Foreign
             #bad practice, this indicates a structural issue. consider splitting Foreign to secondary file
 
         self.buffer.extend([
-            make_message(None, 'CRUD', 'BULK_CREATE', ['workers'   , self.gather_intial_send(self.local_entity.client_db_session, Worker_Foreign  , ['uid','host','port','con_state','action_state'])] ),
-            make_message(None, 'CRUD', 'BULK_CREATE', ['UNDECLARED', self.gather_intial_send(self.local_entity.client_db_session, UNDEC_Foreign   , ['uid','host','port','con_state','action_state'])] ), #|self.gather_all_clients()
-            make_message(None, 'CRUD', 'BULK_CREATE', ['managers'  , self.gather_intial_send(self.local_entity.client_db_session, Manager_Foreign , ['uid','host','port','con_state','action_state'])] ),
-            make_message(None, 'CRUD', 'BULK_CREATE', ['clients'   , self.gather_intial_send(self.local_entity.client_db_session, Client_Foreign  , ['uid','host','port','con_state','action_state'])] ), #|self.gather_all_clients()
+            make_message(None, 'CRUD', 'BULK_CREATE', ['workers'   , self.gather_intial_send(session, Worker_Foreign  , ['uid','host','port','con_state','action_state'])] ),
+            make_message(None, 'CRUD', 'BULK_CREATE', ['UNDECLARED', self.gather_intial_send(session, UNDEC_Foreign   , ['uid','host','port','con_state','action_state'])] ), #|self.gather_all_clients()
+            make_message(None, 'CRUD', 'BULK_CREATE', ['managers'  , self.gather_intial_send(session, Manager_Foreign , ['uid','host','port','con_state','action_state'])] ),
+            make_message(None, 'CRUD', 'BULK_CREATE', ['clients'   , self.gather_intial_send(session, Client_Foreign  , ['uid','host','port','con_state','action_state'])] ), #|self.gather_all_clients()
             # ('BULK_CREATE','jobs',    self.gather_all_jobs( this_e.))
         ])
 
         print(self.buffer)
 
-
+    
     def gather_intial_send(self, session, table, attrs):
         res = []
         for row in session.query(table).all():
@@ -97,8 +99,10 @@ class Websocket_State_Info(Manager_Websocket_Wrapper_Simul_Default):
     
 class Manager_Interface_Info(Interface_Base):
     router = APIRouter()
+
     @IO.Get(router,'/')
     def base_page(self, this_e, other_e, req, ):
+        # raise Exception('')
         return this_e.fapi_mg_templates.TemplateResponse(
             "/info/info1.html",
             {   'request' : req, 

@@ -60,25 +60,29 @@ class Local_Common():
         return {'Role': self.Entity_Type.value, 
                 'UID' : self.uid}
 
-    @ClientDB_Transaction()
-    async def Find_Entity_From_Req(self, session, request:Request):
+    # @ClientDB_Transaction()
+    async def Find_Entity_From_Req(self, request:Request):
         ''' Ensure DB Connection, return foreign item '''
         if incoming_role:=request.headers.get('role'):
             table = ROLE_TABLE_MAPPING[incoming_role]
             print('GOT ROLE:', incoming_role)
         else:
             table = UNDEC_Foreign
-        rows = session.query(table).all()
-        for row in rows:
-            if row.matches_request(request, request.headers):
-                row.intake_request(request, request.headers)
-                session.commit()
-                return row
-            
-        new_row = table.New_From_Request(self,request)
-        session.add(new_row)
-        session.commit()
-        return new_row
+
+        # session = ClientDb_c_session.get()
+        with ClientDB_Session_CM() as session:
+
+            rows = session.query(table).all()
+            for row in rows:
+                if row.matches_request( request, request.headers):
+                    row.intake_request(request, request.headers)
+                    session.commit()
+                    return row
+                
+            new_row = table.New_From_Request(self,request)
+            session.add(new_row)
+            # session.commit()
+            return new_row
 
     async def Find_Entity_From_WsReq(self, request:WebSocket_Manager):
         ''' Ensure DB Connection in websocket context, return foreign item '''
@@ -117,9 +121,11 @@ class Local_Common():
         from fastapi.templating import Jinja2Templates
         static_path = f'{Path(__file__).parents[0]}/Manager_Statics' #HACK, rely on env vars for nuitka unpack  
         inst.fapi_mg_templates = Jinja2Templates(directory=static_path)
+        app.mount("/mg_static", StaticFiles(directory=static_path), name="static")
+        
         static_path = f'{Path(__file__).parents[0]}/FileDB_Statics' #HACK, rely on env vars for nuitka unpack  
         inst.fapi_db_templates = Jinja2Templates(directory=static_path)
-        app.mount("/static", StaticFiles(directory=static_path), name="static")
+        app.mount("/filedb_static", StaticFiles(directory=static_path), name="static")
 
         @app.get("/url-list")
         def get_all_urls():
@@ -206,6 +212,7 @@ class Manager_Local(Local_Common,Local_Entity_Base):
         db_url = settings.db_standard + settings.db_loc._swapped_slash_dir
         settings.db_loc.ensure_dir()
         ClientDb_c_Engine.set(create_engine(db_url))
+        
         set_listeners_on_tables(list(Client_DB_Model.__subclasses__()), self.events)
         Client_DB_Model.metadata.create_all(ClientDb_c_Engine.get())
 

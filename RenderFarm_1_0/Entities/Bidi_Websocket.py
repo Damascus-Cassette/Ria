@@ -74,7 +74,7 @@ class message_websocket_common():
             self.local_entity.bidi_commands.OBSERVE_Entity_Con_State(self.foreign_entity,Connection_States.ERROR)
         else:
             self.local_entity.bidi_commands.OBSERVE_Entity_Con_State(self.foreign_entity,Connection_States.CLOSED)
-        session.commit()
+        # session.commit()
 
     def attach_message(self,*args,**kwargs):
         self.buffer.attach(make_message(*args,**kwargs))
@@ -106,9 +106,10 @@ class message_commands_common():
 
     @ClientDB_Transaction()
     def OBSERVE_Entity_Con_State(self,session, other_e, value):
+        # raise Exception('Got here')
         assert isinstance(value, Connection_States)
         other_e.con_state = value
-        session.commit()
+        # session.commit()
 
 class Message_Commands_Manager(message_commands_common):...
 class Message_Commands_Client(message_commands_common ):...

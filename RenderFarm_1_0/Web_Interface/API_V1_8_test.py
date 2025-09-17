@@ -82,7 +82,7 @@ class UNDEC_Foreign(Foreign_Entity_Base,DB_Base):
     _interactive  = False
     Entity_Type   = Entity_Types.UNDEC
 
-    def __init__(self,host,port):
+    def __init__(self,id,host,port):
         self.host = host
         self.port = port
         # self.id  = host + ':' +port
